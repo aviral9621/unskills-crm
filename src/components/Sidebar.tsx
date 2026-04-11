@@ -149,9 +149,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       >
         {/* Logo */}
         <div className="flex h-16 items-center justify-between px-5 border-b border-border-default shrink-0">
-          <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="UnSkills" className="h-8 w-8 object-contain" />
-            <span className="font-heading text-base font-bold text-text-primary">
+          <div className="flex items-center gap-2.5">
+            <img src="/logo.png" alt="UnSkills" className="h-9 w-auto object-contain" />
+            <span className="font-heading text-[15px] font-bold text-text-primary leading-tight">
               UnSkills CRM
             </span>
           </div>
