@@ -18,25 +18,22 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-// Profile cache to avoid refetching on every auth event
-let profileCache: { id: string; profile: Profile | null } | null = null
+// Profile cache — avoids refetch on every auth event
+let profileCache: { id: string; data: Profile | null } | null = null
 
-async function fetchProfile(userId: string): Promise<Profile | null> {
-  // Return cached if same user
-  if (profileCache?.id === userId) return profileCache.profile
+async function fetchProfileWithTimeout(userId: string): Promise<Profile | null> {
+  if (profileCache?.id === userId) return profileCache.data
 
   try {
-    const { data, error } = await supabase
-      .from('uce_profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    if (error) {
-      console.warn('Profile fetch failed:', error.message)
-      return null
-    }
-    const profile = data as Profile
-    profileCache = { id: userId, profile }
+    // Race between profile fetch and a 4s timeout
+    const result = await Promise.race([
+      supabase.from('uce_profiles').select('*').eq('id', userId).single(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+    ])
+
+    if (result.error) return null
+    const profile = result.data as Profile
+    profileCache = { id: userId, data: profile }
     return profile
   } catch {
     return null
@@ -53,92 +50,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (!state.user) return
-    profileCache = null // bust cache
-    const profile = await fetchProfile(state.user.id)
+    profileCache = null
+    const profile = await fetchProfileWithTimeout(state.user.id)
     setState(prev => ({ ...prev, profile }))
   }, [state.user])
 
   useEffect(() => {
     let mounted = true
+    let gotInitialSession = false
 
-    // 1. Check localStorage synchronously first — if no token stored, skip network call
-    const storageKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
-    const hasStoredSession = !!storageKey && !!localStorage.getItem(storageKey)
-
-    if (!hasStoredSession) {
-      // No stored session — show login immediately, no network call needed
-      setState({ session: null, user: null, profile: null, loading: false })
-      // Still set up the listener for future sign-ins
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          if (!mounted) return
-          if (!session || event === 'SIGNED_OUT') {
-            profileCache = null
-            setState({ session: null, user: null, profile: null, loading: false })
-            return
-          }
-          const profile = await fetchProfile(session.user.id)
-          if (mounted) {
-            setState({ session, user: session.user, profile, loading: false })
-          }
-        }
-      )
-      return () => { mounted = false; subscription.unsubscribe() }
-    }
-
-    // 2. Has stored session — validate it with Supabase (with timeout)
-    const timeout = setTimeout(() => {
-      if (mounted) {
-        console.warn('Auth timed out — clearing stale session')
-        localStorage.removeItem(storageKey!)
-        profileCache = null
+    // Safety net: if INITIAL_SESSION never fires within 3s, force loading off
+    const safetyTimeout = setTimeout(() => {
+      if (mounted && !gotInitialSession) {
+        console.warn('Auth: INITIAL_SESSION never fired, forcing loading off')
         setState({ session: null, user: null, profile: null, loading: false })
       }
-    }, 5000)
+    }, 3000)
 
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      clearTimeout(timeout)
-      if (!mounted) return
-
-      if (error || !session) {
-        if (storageKey) localStorage.removeItem(storageKey)
-        profileCache = null
-        setState({ session: null, user: null, profile: null, loading: false })
-        return
-      }
-
-      const profile = await fetchProfile(session.user.id)
-      if (mounted) {
-        setState({ session, user: session.user, profile, loading: false })
-      }
-    }).catch(() => {
-      clearTimeout(timeout)
-      if (mounted) {
-        if (storageKey) localStorage.removeItem(storageKey)
-        profileCache = null
-        setState({ session: null, user: null, profile: null, loading: false })
-      }
-    })
-
-    // 3. Listen for auth changes
+    // SINGLE source of truth: onAuthStateChange handles ALL auth events
+    // - INITIAL_SESSION: fires immediately with stored session (no network call)
+    // - SIGNED_IN: fires after successful login
+    // - TOKEN_REFRESHED: fires after background token refresh
+    // - SIGNED_OUT: fires after logout or token refresh failure
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return
-        if (!session || event === 'SIGNED_OUT') {
+
+        // Mark that we received the initial session event
+        if (event === 'INITIAL_SESSION') {
+          gotInitialSession = true
+          clearTimeout(safetyTimeout)
+        }
+
+        // No session = clear everything, show login
+        if (!session) {
           profileCache = null
           setState({ session: null, user: null, profile: null, loading: false })
           return
         }
-        const profile = await fetchProfile(session.user.id)
+
+        // We have a session — set it immediately to stop the loading spinner
+        // Then fetch profile in the background
+        setState(prev => ({
+          session,
+          user: session.user,
+          profile: prev.profile, // keep existing profile while fetching new one
+          loading: false,
+        }))
+
+        // Fetch profile (uses cache, so instant on subsequent calls)
+        const profile = await fetchProfileWithTimeout(session.user.id)
         if (mounted) {
-          setState({ session, user: session.user, profile, loading: false })
+          setState(prev => ({
+            ...prev,
+            session,
+            user: session.user,
+            profile,
+          }))
         }
       }
     )
 
     return () => {
       mounted = false
-      clearTimeout(timeout)
+      clearTimeout(safetyTimeout)
       subscription.unsubscribe()
     }
   }, [])
@@ -151,8 +126,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     profileCache = null
+    // Clear state immediately — don't wait for API
     setState({ session: null, user: null, profile: null, loading: false })
-    try { await supabase.auth.signOut() } catch { /* force-cleared above */ }
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // State already cleared above
+    }
   }
 
   return (
