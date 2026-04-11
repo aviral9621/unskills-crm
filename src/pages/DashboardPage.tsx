@@ -214,7 +214,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* ─── Stats Cards ─── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {isSuperAdmin ? (
           <>
             <StatsCard label="Total Students" value={stats.totalStudents} icon={GraduationCap} iconColor="text-blue-600" iconBg="bg-blue-50" trend={{ value: 12, label: 'vs last month' }} loading={loading} />
