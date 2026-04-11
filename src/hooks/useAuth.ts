@@ -1,2 +1,2 @@
-// useAuth hook — will be implemented in Phase 2
-export {}
+// Re-export from AuthContext for convenience
+export { useAuth } from '../contexts/AuthContext'

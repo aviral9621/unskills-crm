@@ -1,25 +1,26 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Background Colors ── */
-  --color-bg-primary: #0A0A0A;
-  --color-bg-card: #171717;
-  --color-bg-card-hover: #1E1E1E;
-  --color-bg-input: #1A1A1A;
-  --color-bg-sidebar: #000000;
-  --color-bg-topbar: #0F0F0F;
+  /* ── Background Colors (LIGHT MODE) ── */
+  --color-bg-primary: #F3F4F6;
+  --color-bg-card: #FFFFFF;
+  --color-bg-card-hover: #F9FAFB;
+  --color-bg-input: #FFFFFF;
+  --color-bg-sidebar: #FAFAFA;
+  --color-bg-topbar: #FFFFFF;
+  --color-bg-page: #F3F4F6;
 
   /* ── Border Colors ── */
-  --color-border-default: #2A2A2A;
-  --color-border-subtle: #333333;
-  --color-border-input: #404040;
+  --color-border-default: #E5E7EB;
+  --color-border-subtle: #F3F4F6;
+  --color-border-input: #D1D5DB;
   --color-border-focus: #DC2626;
 
   /* ── Text Colors ── */
-  --color-text-primary: #FFFFFF;
-  --color-text-secondary: #A3A3A3;
-  --color-text-muted: #737373;
-  --color-text-placeholder: #525252;
+  --color-text-primary: #111827;
+  --color-text-secondary: #6B7280;
+  --color-text-muted: #9CA3AF;
+  --color-text-placeholder: #9CA3AF;
 
   /* ── Brand Red Scale ── */
   --color-red-500: #EF4444;
@@ -27,7 +28,6 @@
   --color-red-700: #B91C1C;
   --color-red-800: #991B1B;
   --color-red-900: #7F1D1D;
-  --color-red-glow: rgba(220, 38, 38, 0.15);
 
   /* ── Status Colors ── */
   --color-green-500: #22C55E;
@@ -35,11 +35,11 @@
   --color-blue-500: #3B82F6;
   --color-purple-500: #A855F7;
 
-  /* ── Shadows ── */
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-dropdown: 0 10px 40px rgba(0, 0, 0, 0.5);
-  --shadow-modal: 0 25px 60px rgba(0, 0, 0, 0.6);
-  --shadow-button-primary: 0 2px 8px rgba(220, 38, 38, 0.3);
+  /* ── Shadows (LIGHT MODE) ── */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-dropdown: 0 10px 25px rgba(0, 0, 0, 0.1);
+  --shadow-modal: 0 25px 50px rgba(0, 0, 0, 0.15);
+  --shadow-button-primary: 0 1px 3px rgba(220, 38, 38, 0.3);
 
   /* ── Font Families ── */
   --font-heading: "Outfit", sans-serif;
@@ -73,25 +73,14 @@
 }
 
 @keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-/* ── Base Styles ── */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 html {
   font-family: var(--font-body);
   color: var(--color-text-primary);
-  background-color: var(--color-bg-primary);
+  background-color: var(--color-bg-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -100,34 +89,25 @@ body {
   min-height: 100vh;
 }
 
-/* ── Scrollbar Styling ── */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+#root {
+  min-height: 100vh;
 }
 
-::-webkit-scrollbar-track {
-  background: var(--color-bg-primary);
-}
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #F3F4F6; }
+::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
 
-::-webkit-scrollbar-thumb {
-  background: var(--color-border-subtle);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-input);
-}
-
-/* ── Skeleton Shimmer Utility ── */
+/* ── Skeleton Shimmer ── */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    #1E1E1E 25%,
-    #2A2A2A 50%,
-    #1E1E1E 75%
-  );
+  background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);
   background-size: 200% 100%;
   animation: var(--animate-shimmer);
   border-radius: 8px;
+}
+
+/* ── Custom checkbox styling ── */
+input[type="checkbox"] {
+  accent-color: #DC2626;
 }
