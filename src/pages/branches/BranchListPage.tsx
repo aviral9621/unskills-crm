@@ -2,20 +2,20 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
-  Building2, Plus, Search, MoreHorizontal,
+  Building2, Plus, Search, MoreVertical,
   Pencil, Wallet, PlusCircle, Power, X,
+  MapPin, Phone, ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { formatINR } from '../../lib/utils'
+import { formatINR, cn } from '../../lib/utils'
 import type { Branch, BranchCategory } from '../../types'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
 import ConfirmDialog from '../../components/ConfirmDialog'
 
 const colHelper = createColumnHelper<Branch>()
-
 type StatusFilter = 'all' | 'active' | 'inactive'
 type CategoryFilter = 'all' | BranchCategory
 
@@ -30,299 +30,290 @@ export default function BranchListPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
 
-  // Dropdown menu — portal approach
+  // Portal dropdown
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
   const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
 
   // Toggle confirm
   const [toggleTarget, setToggleTarget] = useState<Branch | null>(null)
   const [toggling, setToggling] = useState(false)
 
+  useEffect(() => { fetchBranches() }, [])
   useEffect(() => {
-    fetchBranches()
-  }, [])
-
-  // Close menu on scroll
-  useEffect(() => {
-    function handleScroll() { setMenuOpen(null) }
-    window.addEventListener('scroll', handleScroll, true)
-    return () => window.removeEventListener('scroll', handleScroll, true)
+    const h = () => setMenuOpen(null)
+    window.addEventListener('scroll', h, true)
+    return () => window.removeEventListener('scroll', h, true)
   }, [])
 
   async function fetchBranches() {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('uce_branches')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data, error } = await supabase.from('uce_branches').select('*').order('created_at', { ascending: false })
       if (error) throw error
       setBranches(data ?? [])
-    } catch (err) {
-      console.error(err)
-      toast.error('Failed to load branches')
-    } finally {
-      setLoading(false)
-    }
+    } catch { toast.error('Failed to load branches') }
+    finally { setLoading(false) }
   }
 
   const openMenu = useCallback((branchId: string) => {
     const btn = menuBtnRefs.current.get(branchId)
     if (!btn) return
     const rect = btn.getBoundingClientRect()
-    setMenuPos({ top: rect.bottom + 4, left: rect.right - 176 }) // 176 = w-44
+    const menuW = 176
+    const left = Math.min(rect.right - menuW, window.innerWidth - menuW - 8)
+    setMenuPos({ top: rect.bottom + 4, left: Math.max(8, left) })
     setMenuOpen(branchId)
   }, [])
 
   const menuBranch = useMemo(() => branches.find(b => b.id === menuOpen), [branches, menuOpen])
 
-  /* ─── Toggle Active ─── */
   async function handleToggle() {
     if (!toggleTarget) return
     setToggling(true)
     try {
-      const newStatus = !toggleTarget.is_active
-      const { error } = await supabase
-        .from('uce_branches')
-        .update({ is_active: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', toggleTarget.id)
+      const ns = !toggleTarget.is_active
+      const { error } = await supabase.from('uce_branches').update({ is_active: ns, updated_at: new Date().toISOString() }).eq('id', toggleTarget.id)
       if (error) throw error
-      toast.success(`Branch ${toggleTarget.name} ${newStatus ? 'activated' : 'deactivated'}`)
-      setBranches((prev) =>
-        prev.map((b) => b.id === toggleTarget.id ? { ...b, is_active: newStatus } : b)
-      )
-    } catch (err) {
-      console.error(err)
-      toast.error('Failed to update branch status')
-    } finally {
-      setToggling(false)
-      setToggleTarget(null)
-    }
+      toast.success(`Branch ${toggleTarget.name} ${ns ? 'activated' : 'deactivated'}`)
+      setBranches(p => p.map(b => b.id === toggleTarget.id ? { ...b, is_active: ns } : b))
+    } catch { toast.error('Failed to update status') }
+    finally { setToggling(false); setToggleTarget(null) }
   }
 
-  /* ─── Filtered data ─── */
+  /* ─── Filtered + searched ─── */
   const filteredData = useMemo(() => {
-    let result = branches
-    if (statusFilter === 'active') result = result.filter((b) => b.is_active)
-    else if (statusFilter === 'inactive') result = result.filter((b) => !b.is_active)
-    if (categoryFilter !== 'all') result = result.filter((b) => b.category === categoryFilter)
-    return result
-  }, [branches, statusFilter, categoryFilter])
+    let r = branches
+    if (statusFilter === 'active') r = r.filter(b => b.is_active)
+    else if (statusFilter === 'inactive') r = r.filter(b => !b.is_active)
+    if (categoryFilter !== 'all') r = r.filter(b => b.category === categoryFilter)
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      r = r.filter(b => b.name.toLowerCase().includes(q) || b.code.toLowerCase().includes(q))
+    }
+    return r
+  }, [branches, statusFilter, categoryFilter, search])
 
-  /* ─── Table Columns ─── */
-  const columns = useMemo(
-    () => [
-      colHelper.accessor('code', {
-        header: 'Code',
-        cell: (info) => (
-          <span className="text-xs font-mono font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">
-            {info.getValue()}
-          </span>
-        ),
-      }),
-      colHelper.accessor('name', {
-        header: 'Branch Name',
-        cell: (info) => (
-          <div className="flex items-center gap-2.5 min-w-[160px]">
-            {info.row.original.center_logo_url ? (
-              <img src={info.row.original.center_logo_url} alt="" className="h-8 w-8 rounded-lg object-cover border border-gray-200" />
+  /* ─── Desktop Table Columns ─── */
+  const columns = useMemo(() => [
+    colHelper.accessor('code', {
+      header: 'Code',
+      cell: (info) => <span className="text-xs font-mono font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">{info.getValue()}</span>,
+    }),
+    colHelper.accessor('name', {
+      header: 'Branch Name',
+      cell: (info) => (
+        <div className="flex items-center gap-2.5 min-w-[160px]">
+          {info.row.original.center_logo_url ? (
+            <img src={info.row.original.center_logo_url} alt="" className="h-8 w-8 rounded-lg object-cover border border-gray-200" />
+          ) : (
+            <div className="h-8 w-8 rounded-lg bg-red-50 flex items-center justify-center shrink-0"><Building2 size={16} className="text-red-500" /></div>
+          )}
+          <span className="text-sm font-medium text-gray-900">{info.getValue()}</span>
+        </div>
+      ),
+    }),
+    colHelper.accessor('director_name', {
+      header: 'Director',
+      cell: (info) => (
+        <div><p className="text-sm text-gray-900">{info.getValue()}</p><p className="text-xs text-gray-400">{info.row.original.director_phone}</p></div>
+      ),
+    }),
+    colHelper.accessor('district', { header: 'District', cell: (info) => <span className="text-sm text-gray-600">{info.getValue()}</span> }),
+    colHelper.accessor('state', { header: 'State', cell: (info) => <span className="text-sm text-gray-600">{info.getValue()}</span> }),
+    colHelper.accessor('category', {
+      header: 'Category',
+      cell: (info) => {
+        const v = info.getValue()
+        const m: Record<string, 'info' | 'success' | 'warning'> = { computer: 'info', beautician: 'warning', both: 'success' }
+        return <StatusBadge label={v.charAt(0).toUpperCase() + v.slice(1)} variant={m[v] ?? 'neutral'} />
+      },
+    }),
+    colHelper.accessor('wallet_balance', {
+      header: 'Wallet',
+      cell: (info) => {
+        const b = info.getValue()
+        return <span className={`text-sm font-semibold ${b > 1000 ? 'text-green-600' : b > 0 ? 'text-amber-600' : 'text-red-600'}`}>{formatINR(b)}</span>
+      },
+    }),
+    colHelper.accessor('is_active', {
+      header: 'Status',
+      cell: (info) => <StatusBadge label={info.getValue() ? 'Active' : 'Inactive'} variant={info.getValue() ? 'success' : 'error'} />,
+    }),
+    colHelper.display({
+      id: 'actions', header: '', enableSorting: false,
+      cell: (info) => (
+        <button
+          ref={el => { if (el) menuBtnRefs.current.set(info.row.original.id, el) }}
+          onClick={e => { e.stopPropagation(); openMenu(info.row.original.id) }}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+        ><MoreVertical size={16} /></button>
+      ),
+    }),
+  ], [openMenu])
+
+  /* ─── Mobile Card ─── */
+  function BranchCard({ branch }: { branch: Branch }) {
+    const bal = branch.wallet_balance
+    const catMap: Record<string, 'info' | 'success' | 'warning'> = { computer: 'info', beautician: 'warning', both: 'success' }
+    return (
+      <div className={cn('bg-white rounded-xl border border-gray-200 p-4 transition-all', !branch.is_active && 'opacity-60')}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {branch.center_logo_url ? (
+              <img src={branch.center_logo_url} alt="" className="h-10 w-10 rounded-lg object-cover border border-gray-200 shrink-0" />
             ) : (
-              <div className="h-8 w-8 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
-                <Building2 size={16} className="text-red-500" />
-              </div>
+              <div className="h-10 w-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0"><Building2 size={18} className="text-red-500" /></div>
             )}
-            <span className="text-sm font-medium text-gray-900">{info.getValue()}</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{branch.name}</p>
+              <p className="text-xs font-mono text-gray-400">{branch.code}</p>
+            </div>
           </div>
-        ),
-      }),
-      colHelper.accessor('director_name', {
-        header: 'Director',
-        cell: (info) => (
-          <div>
-            <p className="text-sm text-gray-900">{info.getValue()}</p>
-            <p className="text-xs text-gray-400">{info.row.original.director_phone}</p>
-          </div>
-        ),
-      }),
-      colHelper.accessor('district', {
-        header: 'District',
-        cell: (info) => <span className="text-sm text-gray-600">{info.getValue()}</span>,
-      }),
-      colHelper.accessor('state', {
-        header: 'State',
-        cell: (info) => <span className="text-sm text-gray-600">{info.getValue()}</span>,
-      }),
-      colHelper.accessor('category', {
-        header: 'Category',
-        cell: (info) => {
-          const v = info.getValue()
-          const map: Record<string, 'info' | 'success' | 'warning'> = {
-            computer: 'info', beautician: 'warning', both: 'success',
-          }
-          return <StatusBadge label={v.charAt(0).toUpperCase() + v.slice(1)} variant={map[v] ?? 'neutral'} />
-        },
-      }),
-      colHelper.accessor('wallet_balance', {
-        header: 'Wallet',
-        cell: (info) => {
-          const bal = info.getValue()
-          const color = bal > 1000 ? 'text-green-600' : bal > 0 ? 'text-amber-600' : 'text-red-600'
-          return <span className={`text-sm font-semibold ${color}`}>{formatINR(bal)}</span>
-        },
-      }),
-      colHelper.accessor('is_active', {
-        header: 'Status',
-        cell: (info) => (
-          <StatusBadge
-            label={info.getValue() ? 'Active' : 'Inactive'}
-            variant={info.getValue() ? 'success' : 'error'}
-          />
-        ),
-      }),
-      colHelper.display({
-        id: 'actions',
-        header: '',
-        enableSorting: false,
-        cell: (info) => {
-          const branch = info.row.original
-          return (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <StatusBadge label={branch.is_active ? 'Active' : 'Inactive'} variant={branch.is_active ? 'success' : 'error'} />
             <button
-              ref={(el) => { if (el) menuBtnRefs.current.set(branch.id, el) }}
-              onClick={(e) => { e.stopPropagation(); openMenu(branch.id) }}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-          )
-        },
-      }),
-    ],
-    [openMenu]
-  )
+              ref={el => { if (el) menuBtnRefs.current.set(branch.id, el) }}
+              onClick={e => { e.stopPropagation(); openMenu(branch.id) }}
+              className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            ><MoreVertical size={16} /></button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Phone size={12} className="shrink-0" />
+            <span className="truncate">{branch.director_name}</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <MapPin size={12} className="shrink-0" />
+            <span className="truncate">{branch.district}, {branch.state}</span>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between pt-3 border-t border-gray-100">
+          <div className="flex items-center gap-2">
+            <StatusBadge label={branch.category.charAt(0).toUpperCase() + branch.category.slice(1)} variant={catMap[branch.category] ?? 'neutral'} />
+            <span className={`text-sm font-bold ${bal > 1000 ? 'text-green-600' : bal > 0 ? 'text-amber-600' : 'text-red-600'}`}>
+              {formatINR(bal)}
+            </span>
+          </div>
+          <button onClick={() => navigate(`/admin/branches/${branch.id}/wallet`)} className="text-xs text-red-600 font-medium flex items-center gap-0.5">
+            Wallet <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  /* ─── Skeleton Cards ─── */
+  function SkeletonCards() {
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="skeleton h-10 w-10 rounded-lg" />
+              <div className="flex-1 space-y-2"><div className="skeleton h-4 w-3/4 rounded" /><div className="skeleton h-3 w-1/3 rounded" /></div>
+            </div>
+            <div className="skeleton h-3 w-full rounded" />
+            <div className="skeleton h-8 w-full rounded" />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-4">
+      {/* ─── Header ─── */}
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-heading">Manage Branches</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{branches.length} total branches</p>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Manage Branches</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{branches.length} total branches</p>
         </div>
         {isSuperAdmin && (
           <button
             onClick={() => navigate('/admin/branches/new')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors shadow-sm"
+            className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 transition-colors shadow-sm shrink-0"
           >
-            <Plus size={16} /> Add New Branch
+            <Plus size={16} /> <span className="hidden sm:inline">Add New</span> Branch
           </button>
         )}
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+      {/* ─── Filters ─── */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-4">
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
-              type="text"
-              placeholder="Search by name or code..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 text-sm placeholder:text-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none transition-colors"
+              type="text" placeholder="Search by name or code..." value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-sm placeholder:text-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none"
             />
-            {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X size={14} />
-              </button>
-            )}
+            {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X size={14} /></button>}
           </div>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
-            className="px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none bg-white"
-          >
-            <option value="all">All Categories</option>
-            <option value="computer">Computer</option>
-            <option value="beautician">Beautician</option>
-            <option value="both">Both</option>
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            className="px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none bg-white"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
+            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value as CategoryFilter)}
+              className="px-3 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none bg-white">
+              <option value="all">All Categories</option>
+              <option value="computer">Computer</option>
+              <option value="beautician">Beautician</option>
+              <option value="both">Both</option>
+            </select>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+              className="px-3 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none bg-white">
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-5">
-        <DataTable
-          data={filteredData}
-          columns={columns}
-          loading={loading}
-          searchValue={search}
-          emptyIcon={<Building2 size={36} className="text-gray-300" />}
-          emptyMessage="No branches found"
-        />
+      {/* ─── Mobile Card List (< md) ─── */}
+      <div className="md:hidden">
+        {loading ? <SkeletonCards /> : filteredData.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+            <Building2 size={36} className="mx-auto text-gray-300 mb-2" />
+            <p className="text-sm text-gray-400">No branches found</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredData.map(b => <BranchCard key={b.id} branch={b} />)}
+          </div>
+        )}
       </div>
 
-      {/* ═══ Portal Dropdown Menu ═══ */}
+      {/* ─── Desktop Table (md+) ─── */}
+      <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm p-4 lg:p-5">
+        <DataTable data={filteredData} columns={columns} loading={loading} searchValue="" emptyIcon={<Building2 size={36} className="text-gray-300" />} emptyMessage="No branches found" />
+      </div>
+
+      {/* ─── Portal Dropdown ─── */}
       {menuOpen && menuBranch && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(null)} />
-          <div
-            className="fixed z-50 w-44 bg-white border border-gray-200 rounded-xl shadow-xl py-1 animate-in fade-in zoom-in-95 duration-150"
-            style={{ top: menuPos.top, left: menuPos.left }}
-          >
-            <button
-              onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/edit`) }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <Pencil size={14} /> Edit Branch
-            </button>
-            <button
-              onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet`) }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <Wallet size={14} /> View Wallet
-            </button>
-            <button
-              onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet?add=true`) }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <PlusCircle size={14} /> Add Balance
-            </button>
+          <div className="fixed z-50 w-44 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, left: menuPos.left }}>
+            <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/edit`) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Pencil size={14} /> Edit Branch</button>
+            <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet`) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Wallet size={14} /> View Wallet</button>
+            <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet?add=true`) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><PlusCircle size={14} /> Add Balance</button>
             <div className="border-t border-gray-100 my-1" />
-            <button
-              onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
-              className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors ${menuBranch.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}
-            >
+            <button onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
+              className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm ${menuBranch.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}>
               <Power size={14} /> {menuBranch.is_active ? 'Deactivate' : 'Activate'}
             </button>
           </div>
         </>
       )}
 
-      {/* Toggle Confirm */}
-      <ConfirmDialog
-        open={!!toggleTarget}
-        onClose={() => setToggleTarget(null)}
-        onConfirm={handleToggle}
+      <ConfirmDialog open={!!toggleTarget} onClose={() => setToggleTarget(null)} onConfirm={handleToggle}
         title={toggleTarget?.is_active ? 'Deactivate Branch?' : 'Activate Branch?'}
-        message={
-          toggleTarget?.is_active
-            ? `This will deactivate "${toggleTarget?.name}". Branch users will lose access.`
-            : `This will activate "${toggleTarget?.name}". Branch users will regain access.`
-        }
-        confirmText={toggleTarget?.is_active ? 'Deactivate' : 'Activate'}
-        variant={toggleTarget?.is_active ? 'danger' : 'info'}
-        loading={toggling}
-      />
+        message={toggleTarget?.is_active ? `This will deactivate "${toggleTarget?.name}". Branch users will lose access.` : `This will activate "${toggleTarget?.name}". Branch users will regain access.`}
+        confirmText={toggleTarget?.is_active ? 'Deactivate' : 'Activate'} variant={toggleTarget?.is_active ? 'danger' : 'info'} loading={toggling} />
     </div>
   )
 }

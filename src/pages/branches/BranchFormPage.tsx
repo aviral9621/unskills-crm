@@ -301,71 +301,77 @@ export default function BranchFormPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6">
       {/* ═══ Header ═══ */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/admin/branches')} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-          <ArrowLeft size={20} className="text-gray-600" />
+      <div className="flex items-center gap-2 sm:gap-3">
+        <button onClick={() => navigate('/admin/branches')} className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0">
+          <ArrowLeft size={18} className="text-gray-600" />
         </button>
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-heading">
+        <div className="min-w-0">
+          <h1 className="text-base sm:text-2xl font-bold text-gray-900 font-heading truncate">
             {isEdit ? 'Edit Branch' : 'Add New Branch'}
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {isEdit ? `Editing ${existing?.name || ''}` : 'Step-by-step branch registration'}
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5 truncate">
+            {isEdit ? `Editing ${existing?.name || ''}` : 'Step-by-step registration'}
           </p>
         </div>
       </div>
 
       {/* ═══ Progress Bar ═══ */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-5">
-        <div className="flex items-center justify-between">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-5">
+        {/* Mobile: compact pill bar */}
+        <div className="sm:hidden">
+          <div className="flex items-center gap-1 mb-2">
+            {STEPS.map((s) => {
+              const isActive = step === s.id
+              const isDone = step > s.id
+              return (
+                <div key={s.id} className="flex-1">
+                  <div className={cn(
+                    'h-1.5 rounded-full transition-all duration-300',
+                    isDone ? 'bg-green-500' : isActive ? 'bg-red-500' : 'bg-gray-200'
+                  )} />
+                </div>
+              )
+            })}
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900">
+              Step {step} of {STEPS.length}
+            </p>
+            <p className="text-sm font-medium text-red-600">{STEPS[step - 1].label}</p>
+          </div>
+        </div>
+
+        {/* Desktop: full stepper */}
+        <div className="hidden sm:flex items-center justify-between">
           {STEPS.map((s, i) => {
             const Icon = s.icon
             const isActive = step === s.id
             const isDone = step > s.id
             return (
               <div key={s.id} className="flex items-center flex-1">
-                {/* Step circle */}
                 <button
                   onClick={() => { if (isDone) setStep(s.id) }}
-                  className={cn(
-                    'flex items-center gap-2 shrink-0 transition-all',
-                    isDone && 'cursor-pointer',
-                    !isDone && !isActive && 'cursor-default'
-                  )}
+                  className={cn('flex items-center gap-2 shrink-0 transition-all', isDone && 'cursor-pointer', !isDone && !isActive && 'cursor-default')}
                 >
                   <div className={cn(
-                    'h-9 w-9 sm:h-10 sm:w-10 rounded-full flex items-center justify-center transition-all shrink-0',
+                    'h-10 w-10 rounded-full flex items-center justify-center transition-all shrink-0',
                     isActive && 'bg-red-600 text-white shadow-md shadow-red-200',
                     isDone && 'bg-green-500 text-white',
                     !isActive && !isDone && 'bg-gray-100 text-gray-400',
                   )}>
                     {isDone ? <Check size={18} /> : <Icon size={18} />}
                   </div>
-                  <div className="hidden sm:block text-left">
-                    <p className={cn(
-                      'text-xs font-medium',
-                      isActive ? 'text-red-600' : isDone ? 'text-green-600' : 'text-gray-400'
-                    )}>
-                      Step {s.id}
-                    </p>
-                    <p className={cn(
-                      'text-sm font-semibold',
-                      isActive ? 'text-gray-900' : isDone ? 'text-gray-700' : 'text-gray-400'
-                    )}>
-                      {s.label}
-                    </p>
+                  <div className="text-left">
+                    <p className={cn('text-xs font-medium', isActive ? 'text-red-600' : isDone ? 'text-green-600' : 'text-gray-400')}>Step {s.id}</p>
+                    <p className={cn('text-sm font-semibold', isActive ? 'text-gray-900' : isDone ? 'text-gray-700' : 'text-gray-400')}>{s.label}</p>
                   </div>
                 </button>
-                {/* Connector line */}
                 {i < STEPS.length - 1 && (
-                  <div className="flex-1 mx-2 sm:mx-4">
+                  <div className="flex-1 mx-4">
                     <div className="h-0.5 rounded-full bg-gray-200 relative">
-                      <div
-                        className="absolute inset-y-0 left-0 bg-green-500 rounded-full transition-all duration-300"
-                        style={{ width: isDone ? '100%' : '0%' }}
-                      />
+                      <div className="absolute inset-y-0 left-0 bg-green-500 rounded-full transition-all duration-300" style={{ width: isDone ? '100%' : '0%' }} />
                     </div>
                   </div>
                 )}
@@ -373,15 +379,11 @@ export default function BranchFormPage() {
             )
           })}
         </div>
-        {/* Mobile step label */}
-        <p className="sm:hidden text-center text-sm font-medium text-gray-600 mt-3">
-          Step {step}: {STEPS[step - 1].label}
-        </p>
       </div>
 
       {/* ═══ Form Card ═══ */}
       <form onSubmit={handleSubmit(onSubmit)}>
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 sm:p-6 space-y-5 min-h-[320px]">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-5 min-h-[280px]">
           {/* ─── Step 1: Center Information ─── */}
           {step === 1 && (
             <>
@@ -554,32 +556,23 @@ export default function BranchFormPage() {
         </div>
 
         {/* ═══ Navigation Buttons ═══ */}
-        <div className="flex items-center justify-between mt-5 pb-6">
-          <button
-            type="button"
-            onClick={step === 1 ? () => navigate('/admin/branches') : goPrev}
-            className="px-5 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
-          >
+        <div className="flex items-center justify-between mt-4 sm:mt-5 pb-4 sm:pb-6 gap-3">
+          <button type="button" onClick={step === 1 ? () => navigate('/admin/branches') : goPrev}
+            className="px-3 sm:px-5 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1.5 sm:gap-2">
             <ArrowLeft size={16} />
-            {step === 1 ? 'Cancel' : 'Previous'}
+            <span className="hidden sm:inline">{step === 1 ? 'Cancel' : 'Previous'}</span>
+            <span className="sm:hidden">{step === 1 ? 'Cancel' : 'Back'}</span>
           </button>
-
           {step < 4 ? (
-            <button
-              type="button"
-              onClick={goNext}
-              className="px-6 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors flex items-center gap-2 shadow-sm"
-            >
+            <button type="button" onClick={goNext}
+              className="px-4 sm:px-6 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors flex items-center gap-1.5 sm:gap-2 shadow-sm">
               Next <ArrowRight size={16} />
             </button>
           ) : (
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm"
-            >
+            <button type="submit" disabled={saving}
+              className="px-4 sm:px-6 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 sm:gap-2 shadow-sm">
               {saving && <Loader2 size={16} className="animate-spin" />}
-              {saving ? 'Saving...' : isEdit ? 'Update Branch' : 'Create Branch'}
+              {saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}
             </button>
           )}
         </div>
