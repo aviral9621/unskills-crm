@@ -272,6 +272,65 @@ export interface InquiryNote {
   created_at: string
 }
 
+// ── Study Material & Online Classes Types ──
+export type ClassPlatform = 'youtube' | 'zoom' | 'google_meet'
+
+export interface StudyMaterial {
+  id: string
+  program_id: string | null
+  course_id: string
+  subject_id: string | null
+  title: string
+  description: string | null
+  file_url: string
+  file_name: string | null
+  file_size: number | null
+  uploaded_by: string | null
+  is_active: boolean
+  created_at: string
+  // Joined
+  course?: { name: string } | null
+  subject?: { name: string } | null
+  program?: { name: string } | null
+}
+
+export interface Syllabus {
+  id: string
+  course_id: string
+  subject_id: string | null
+  title: string
+  description: string | null
+  file_url: string | null
+  file_name: string | null
+  is_active: boolean
+  created_at: string
+  // Joined
+  course?: { name: string } | null
+  subject?: { name: string } | null
+}
+
+export interface OnlineClass {
+  id: string
+  program_id: string | null
+  course_id: string
+  subject_id: string | null
+  platform: ClassPlatform
+  class_name: string
+  class_code: string | null
+  link: string
+  meeting_id: string | null
+  meeting_password: string | null
+  schedule_date: string | null
+  schedule_time: string | null
+  end_time: string | null
+  is_active: boolean
+  created_by: string | null
+  created_at: string
+  // Joined
+  course?: { name: string } | null
+  subject?: { name: string } | null
+}
+
 // ── Permission Types ──
 export interface Permission {
   id: string
