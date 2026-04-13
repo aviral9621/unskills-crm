@@ -229,11 +229,47 @@ export interface Inquiry {
   email: string | null
   phone: string
   message: string | null
+  // Franchise-specific
+  qualification: string | null
+  occupation: string | null
+  experience: string | null
+  space_available: string | null
+  investment_range: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  district: string | null
+  pincode: string | null
+  preferred_location: string | null
+  why_franchise: string | null
+  how_heard: string | null
+  alt_phone: string | null
+  gender: string | null
+  // Student registration-specific
+  father_name: string | null
+  mother_name: string | null
+  dob: string | null
+  course_interest: string | null
+  branch_preference: string | null
+  // Contact-specific
+  subject: string | null
+  // Tracking
   status: InquiryStatus
   notes: string | null
+  responded_by: string | null
+  responded_at: string | null
   source: string
   created_at: string
   updated_at: string
+}
+
+export interface InquiryNote {
+  id: string
+  inquiry_id: string
+  note: string
+  added_by: string | null
+  added_by_name: string | null
+  created_at: string
 }
 
 // ── Permission Types ──
