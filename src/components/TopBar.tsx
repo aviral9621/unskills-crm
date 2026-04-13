@@ -18,36 +18,37 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
         : ''
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border-default bg-bg-topbar pl-4 pr-6 lg:pl-6">
-      {/* Left */}
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-30 flex h-14 sm:h-16 items-center justify-between border-b border-border-default bg-bg-topbar px-3 sm:pl-4 sm:pr-6 lg:pl-6">
+      {/* Left — hamburger only on mobile, title only on desktop */}
+      <div className="flex items-center gap-2 sm:gap-3">
         <button
           onClick={onMenuClick}
-          className="lg:hidden rounded-lg p-2 text-text-muted hover:bg-bg-card-hover hover:text-text-primary transition-colors"
+          className="lg:hidden rounded-lg p-1.5 sm:p-2 text-text-muted hover:bg-bg-card-hover hover:text-text-primary transition-colors"
         >
           <Menu size={20} />
         </button>
-        <h1 className="font-heading text-xl font-bold text-text-primary">
+        {/* Hide title on mobile — pages have their own titles */}
+        <h1 className="hidden sm:block font-heading text-lg font-bold text-text-primary truncate max-w-[300px]">
           {title}
         </h1>
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-2">
-        <button className="h-10 w-10 flex items-center justify-center rounded-full text-text-muted hover:bg-bg-card-hover hover:text-text-primary transition-colors">
-          <Search size={20} />
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        <button className="h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center rounded-full text-text-muted hover:bg-bg-card-hover hover:text-text-primary transition-colors">
+          <Search size={18} />
         </button>
-        <button className="relative h-10 w-10 flex items-center justify-center rounded-full text-text-muted hover:bg-bg-card-hover hover:text-text-primary transition-colors">
-          <Bell size={20} />
+        <button className="relative h-9 w-9 sm:h-10 sm:w-10 flex items-center justify-center rounded-full text-text-muted hover:bg-bg-card-hover hover:text-text-primary transition-colors">
+          <Bell size={18} />
           <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-600 ring-2 ring-white" />
         </button>
-        <div className="ml-2 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-red-600 flex items-center justify-center shrink-0">
-            <span className="text-sm font-semibold text-white">
+        <div className="ml-1 sm:ml-2 flex items-center gap-2 sm:gap-3">
+          <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-red-600 flex items-center justify-center shrink-0">
+            <span className="text-xs sm:text-sm font-semibold text-white">
               {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'U'}
             </span>
           </div>
-          <div className="hidden sm:block">
+          <div className="hidden md:block">
             <p className="text-sm font-medium text-text-primary leading-tight">
               {profile?.full_name ?? 'User'}
             </p>

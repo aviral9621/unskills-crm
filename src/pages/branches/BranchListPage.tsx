@@ -290,11 +290,32 @@ export default function BranchListPage() {
         <DataTable data={filteredData} columns={columns} loading={loading} searchValue="" emptyIcon={<Building2 size={36} className="text-gray-300" />} emptyMessage="No branches found" />
       </div>
 
-      {/* ─── Portal Dropdown ─── */}
+      {/* ─── Action Menu ─── */}
       {menuOpen && menuBranch && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(null)} />
-          <div className="fixed z-50 w-44 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, left: menuPos.left }}>
+          <div className="fixed inset-0 z-40 bg-black/20 md:bg-transparent" onClick={() => setMenuOpen(null)} />
+
+          {/* Mobile: bottom sheet */}
+          <div className="md:hidden fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl shadow-2xl p-4 pb-6 safe-bottom animate-in slide-in-from-bottom duration-200">
+            <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto mb-4" />
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 px-1">{menuBranch.name}</p>
+            <div className="space-y-1">
+              <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/edit`) }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"><Pencil size={16} /> Edit Branch</button>
+              <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet`) }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"><Wallet size={16} /> View Wallet</button>
+              <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet?add=true`) }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"><PlusCircle size={16} /> Add Balance</button>
+              <div className="border-t border-gray-100 my-1" />
+              <button onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium ${menuBranch.is_active ? 'text-red-600 hover:bg-red-50 active:bg-red-100' : 'text-green-600 hover:bg-green-50 active:bg-green-100'}`}>
+                <Power size={16} /> {menuBranch.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
+          </div>
+
+          {/* Desktop: floating dropdown */}
+          <div className="hidden md:block fixed z-50 w-44 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, left: menuPos.left }}>
             <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/edit`) }}
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Pencil size={14} /> Edit Branch</button>
             <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet`) }}
