@@ -86,30 +86,28 @@ export default function UserFormPage() {
         if (error) throw error
         toast.success('User updated successfully')
       } else {
-        // Create auth user
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: form.email,
-          password: form.password!,
-          options: { data: { role: form.role, branch_id: form.branch_id } },
+        // Create user via Edge Function (uses admin API with service role key)
+        const { data: { session } } = await supabase.auth.getSession()
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            email: form.email,
+            password: form.password,
+            full_name: form.full_name,
+            phone: form.phone || null,
+            role: form.role,
+            branch_id: form.branch_id,
+          }),
         })
-        if (authError) {
-          if (authError.message?.includes('already registered')) toast.error('This email is already registered')
-          else throw authError
+        const result = await res.json()
+        if (!res.ok) {
+          toast.error(result.error || 'Failed to create user')
           return
         }
-        if (!authData.user) { toast.error('Failed to create auth account'); return }
-
-        // Create profile
-        const { error: profileError } = await supabase.from('uce_profiles').insert({
-          id: authData.user.id,
-          full_name: form.full_name,
-          email: form.email,
-          phone: form.phone || null,
-          role: form.role,
-          branch_id: form.branch_id,
-          is_active: true,
-        })
-        if (profileError) throw profileError
         toast.success('User created successfully')
       }
       navigate('/admin/users')
