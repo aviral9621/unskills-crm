@@ -51,6 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const explicitSignOut = useRef(false)
   // Track if we've ever had a valid session — prevents clearing on transient events
   const hadSession = useRef(false)
+  // Track if initial session has been resolved
+  const initialResolved = useRef(false)
 
   const refreshProfile = useCallback(async () => {
     if (!state.user) return
@@ -61,35 +63,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true
-    let gotInitialSession = false
 
-    const safetyTimeout = setTimeout(() => {
-      if (mounted && !gotInitialSession) {
+    // 1. Resolve stored session immediately (reads localStorage, no network)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted || initialResolved.current) return
+      initialResolved.current = true
+
+      if (session) {
+        hadSession.current = true
+        // Show the page instantly with session — profile loads in background
+        setState(prev => ({
+          session,
+          user: session.user,
+          profile: prev.profile,
+          loading: false,
+        }))
+        const profile = await fetchProfileWithTimeout(session.user.id)
+        if (mounted) {
+          setState(prev => ({ ...prev, profile }))
+        }
+      } else {
         setState({ session: null, user: null, profile: null, loading: false })
       }
-    }, 3000)
+    })
 
+    // 2. Listen for ongoing auth changes (token refresh, sign-in, sign-out)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return
 
-        if (event === 'INITIAL_SESSION') {
-          gotInitialSession = true
-          clearTimeout(safetyTimeout)
-        }
+        // Skip INITIAL_SESSION — already handled by getSession() above
+        if (event === 'INITIAL_SESSION') return
 
-        // Only clear state on explicit sign out, NOT on transient null sessions
         if (!session) {
-          if (event === 'SIGNED_OUT' || explicitSignOut.current || !hadSession.current) {
+          // Only clear state on EXPLICIT sign-out by the user.
+          // Ignore transient null sessions from token refresh failures —
+          // Supabase SDK will auto-retry, and we don't want a login flash.
+          if (explicitSignOut.current) {
             profileCache = null
             hadSession.current = false
             setState({ session: null, user: null, profile: null, loading: false })
           }
-          // Otherwise ignore transient null (token refresh in progress)
           return
         }
 
-        // We have a valid session
+        // Valid session update (TOKEN_REFRESHED, SIGNED_IN, etc.)
         hadSession.current = true
         explicitSignOut.current = false
 
@@ -111,7 +129,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false
-      clearTimeout(safetyTimeout)
       subscription.unsubscribe()
     }
   }, [])
