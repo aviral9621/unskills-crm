@@ -87,25 +87,22 @@ export default function UserFormPage() {
         toast.success('User updated successfully')
       } else {
         // Create user via Edge Function (uses admin API with service role key)
-        const { data: { session } } = await supabase.auth.getSession()
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token}`,
-          },
-          body: JSON.stringify({
+        const { data, error: fnError } = await supabase.functions.invoke('admin-create-user', {
+          body: {
             email: form.email,
             password: form.password,
             full_name: form.full_name,
             phone: form.phone || null,
             role: form.role,
             branch_id: form.branch_id,
-          }),
+          },
         })
-        const result = await res.json()
-        if (!res.ok) {
-          toast.error(result.error || 'Failed to create user')
+        if (fnError) {
+          toast.error('Failed to create user')
+          return
+        }
+        if (data?.error) {
+          toast.error(data.error)
           return
         }
         toast.success('User created successfully')
