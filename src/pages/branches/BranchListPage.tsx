@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
@@ -30,8 +30,10 @@ export default function BranchListPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
 
-  // Action menu
+  // Dropdown menu — portal approach
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
 
   // Toggle confirm
   const [toggleTarget, setToggleTarget] = useState<Branch | null>(null)
@@ -39,6 +41,13 @@ export default function BranchListPage() {
 
   useEffect(() => {
     fetchBranches()
+  }, [])
+
+  // Close menu on scroll
+  useEffect(() => {
+    function handleScroll() { setMenuOpen(null) }
+    window.addEventListener('scroll', handleScroll, true)
+    return () => window.removeEventListener('scroll', handleScroll, true)
   }, [])
 
   async function fetchBranches() {
@@ -57,6 +66,16 @@ export default function BranchListPage() {
       setLoading(false)
     }
   }
+
+  const openMenu = useCallback((branchId: string) => {
+    const btn = menuBtnRefs.current.get(branchId)
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    setMenuPos({ top: rect.bottom + 4, left: rect.right - 176 }) // 176 = w-44
+    setMenuOpen(branchId)
+  }, [])
+
+  const menuBranch = useMemo(() => branches.find(b => b.id === menuOpen), [branches, menuOpen])
 
   /* ─── Toggle Active ─── */
   async function handleToggle() {
@@ -139,9 +158,7 @@ export default function BranchListPage() {
         cell: (info) => {
           const v = info.getValue()
           const map: Record<string, 'info' | 'success' | 'warning'> = {
-            computer: 'info',
-            beautician: 'warning',
-            both: 'success',
+            computer: 'info', beautician: 'warning', both: 'success',
           }
           return <StatusBadge label={v.charAt(0).toUpperCase() + v.slice(1)} variant={map[v] ?? 'neutral'} />
         },
@@ -169,53 +186,19 @@ export default function BranchListPage() {
         enableSorting: false,
         cell: (info) => {
           const branch = info.row.original
-          const isOpen = menuOpen === branch.id
           return (
-            <div className="relative">
-              <button
-                onClick={(e) => { e.stopPropagation(); setMenuOpen(isOpen ? null : branch.id) }}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-              >
-                <MoreHorizontal size={16} />
-              </button>
-              {isOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(null)} />
-                  <div className="absolute right-0 top-8 z-20 w-44 bg-white border border-gray-200 rounded-xl shadow-lg py-1">
-                    <button
-                      onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${branch.id}/edit`) }}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      <Pencil size={14} /> Edit Branch
-                    </button>
-                    <button
-                      onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${branch.id}/wallet`) }}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      <Wallet size={14} /> View Wallet
-                    </button>
-                    <button
-                      onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${branch.id}/wallet?add=true`) }}
-                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                    >
-                      <PlusCircle size={14} /> Add Balance
-                    </button>
-                    <div className="border-t border-gray-100 my-1" />
-                    <button
-                      onClick={() => { setMenuOpen(null); setToggleTarget(branch) }}
-                      className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-sm ${branch.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}
-                    >
-                      <Power size={14} /> {branch.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            <button
+              ref={(el) => { if (el) menuBtnRefs.current.set(branch.id, el) }}
+              onClick={(e) => { e.stopPropagation(); openMenu(branch.id) }}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              <MoreHorizontal size={16} />
+            </button>
           )
         },
       }),
     ],
-    [menuOpen, navigate]
+    [openMenu]
   )
 
   return (
@@ -239,7 +222,6 @@ export default function BranchListPage() {
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          {/* Search */}
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -255,8 +237,6 @@ export default function BranchListPage() {
               </button>
             )}
           </div>
-
-          {/* Category */}
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
@@ -267,8 +247,6 @@ export default function BranchListPage() {
             <option value="beautician">Beautician</option>
             <option value="both">Both</option>
           </select>
-
-          {/* Status */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -292,6 +270,43 @@ export default function BranchListPage() {
           emptyMessage="No branches found"
         />
       </div>
+
+      {/* ═══ Portal Dropdown Menu ═══ */}
+      {menuOpen && menuBranch && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(null)} />
+          <div
+            className="fixed z-50 w-44 bg-white border border-gray-200 rounded-xl shadow-xl py-1 animate-in fade-in zoom-in-95 duration-150"
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
+            <button
+              onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/edit`) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <Pencil size={14} /> Edit Branch
+            </button>
+            <button
+              onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet`) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <Wallet size={14} /> View Wallet
+            </button>
+            <button
+              onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet?add=true`) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <PlusCircle size={14} /> Add Balance
+            </button>
+            <div className="border-t border-gray-100 my-1" />
+            <button
+              onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
+              className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors ${menuBranch.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}
+            >
+              <Power size={14} /> {menuBranch.is_active ? 'Deactivate' : 'Activate'}
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Toggle Confirm */}
       <ConfirmDialog
