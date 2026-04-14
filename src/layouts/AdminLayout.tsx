@@ -11,6 +11,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/admin/students': 'Students',
   '/admin/students/register': 'Register Student',
   '/admin/students/id-card': 'Student ID Card',
+  '/admin/students/id-card-settings': 'ID Card Settings',
   '/admin/students/admit-card': 'Admit Card',
   '/admin/courses/programs': 'Programs',
   '/admin/courses': 'Manage Courses',

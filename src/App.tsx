@@ -14,6 +14,7 @@ import InquiryPage from './pages/inquiries/InquiryPage'
 import StudentListPage from './pages/students/StudentListPage'
 import StudentRegisterPage from './pages/students/StudentRegisterPage'
 import StudentIdCardPage from './pages/students/StudentIdCardPage'
+import IdCardSettingsPage from './pages/students/IdCardSettingsPage'
 import AdmitCardPage from './pages/students/AdmitCardPage'
 import ProgramListPage from './pages/courses/ProgramListPage'
 import CourseListPage from './pages/courses/CourseListPage'
@@ -115,6 +116,7 @@ function AppRoutes() {
         <Route path="students" element={<StudentListPage />} />
         <Route path="students/register" element={<StudentRegisterPage />} />
         <Route path="students/id-card" element={<StudentIdCardPage />} />
+        <Route path="students/id-card-settings" element={<IdCardSettingsPage />} />
         <Route path="students/admit-card" element={<AdmitCardPage />} />
 
         {/* Courses */}
