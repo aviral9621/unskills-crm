@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle, Building2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { INDIAN_STATES, formatINR, cn } from '../../lib/utils'
@@ -56,6 +56,7 @@ export default function StudentRegisterPage() {
   const editId = searchParams.get('edit')
   const isEdit = !!editId
   const { user, profile } = useAuth()
+  const isSuperAdmin = profile?.role === 'super_admin'
 
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -64,7 +65,9 @@ export default function StudentRegisterPage() {
 
   const [courses, setCourses] = useState<Course[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
-  const [branch, setBranch] = useState<Branch | null>(null)
+  const [branch, setBranch] = useState<Branch | null>(null)        // selected (or only) branch used for wallet
+  const [branchesList, setBranchesList] = useState<Branch[]>([])   // all branches (super_admin picker)
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('')
   const [certFee, setCertFee] = useState(0)
 
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -87,18 +90,39 @@ export default function StudentRegisterPage() {
   async function fetchInitial() {
     setLoading(true)
     try {
-      const [cRes, bRes] = await Promise.all([
+      const [cRes, branchRes] = await Promise.all([
         supabase.from('uce_courses').select('*').eq('is_active', true).order('name'),
-        profile?.branch_id ? supabase.from('uce_branches').select('*').eq('id', profile.branch_id).single() : Promise.resolve({ data: null, error: null }),
+        // Super admin sees ALL active branches; branch user only their own
+        isSuperAdmin
+          ? supabase.from('uce_branches').select('*').eq('is_active', true).order('name')
+          : profile?.branch_id
+            ? supabase.from('uce_branches').select('*').eq('id', profile.branch_id)
+            : Promise.resolve({ data: [], error: null }),
       ])
       setCourses(cRes.data ?? [])
-      if (bRes.data) setBranch(bRes.data as Branch)
+      const list = (branchRes.data ?? []) as Branch[]
+      setBranchesList(list)
+      if (!isSuperAdmin && list.length === 1) {
+        setBranch(list[0])
+        setSelectedBranchId(list[0].id)
+      } else if (isSuperAdmin && list.length === 1) {
+        // only one branch exists — pre-select for convenience
+        setBranch(list[0])
+        setSelectedBranchId(list[0].id)
+      }
 
       if (!isEdit) await generateRegNo()
       else await loadStudent()
     } catch { toast.error('Failed to load data') }
     finally { setLoading(false) }
   }
+
+  // Whenever super_admin changes the branch dropdown, keep `branch` (for wallet) in sync
+  useEffect(() => {
+    if (!selectedBranchId) { setBranch(null); return }
+    const b = branchesList.find(x => x.id === selectedBranchId) || null
+    setBranch(b)
+  }, [selectedBranchId, branchesList])
 
   async function generateRegNo() {
     try {
@@ -118,6 +142,7 @@ export default function StudentRegisterPage() {
       if (error || !data) { toast.error('Student not found'); navigate('/admin/students'); return }
       setRegNo(data.registration_no)
       setPhotoUrl(data.photo_url)
+      setSelectedBranchId(data.branch_id || '')
       reset({
         name: data.name, father_name: data.father_name, mother_name: data.mother_name || '',
         dob: data.dob || '', gender: data.gender || '', aadhar_number: data.aadhar_number || '',
@@ -155,7 +180,18 @@ export default function StudentRegisterPage() {
     const parsed = schema.safeParse(form)
     if (!parsed.success) { toast.error(parsed.error.issues[0].message); return }
 
-    // Wallet check (only for branch users on create)
+    // Resolve branch_id: super_admin picks from dropdown, branch user uses their own
+    const effectiveBranchId = isSuperAdmin
+      ? selectedBranchId
+      : (profile?.branch_id || selectedBranchId)
+
+    if (!effectiveBranchId) {
+      toast.error(isSuperAdmin ? 'Please select a branch' : 'Your account is not attached to a branch — contact super admin')
+      if (isSuperAdmin) setStep(4)
+      return
+    }
+
+    // Wallet check (only when we have a branch and cert fee applies, on create)
     if (!isEdit && branch && certFee > 0) {
       if ((branch.wallet_balance || 0) < certFee) {
         setWalletError(true); return
@@ -173,7 +209,7 @@ export default function StudentRegisterPage() {
       }
 
       const payload = {
-        registration_no: regNo, branch_id: profile?.branch_id || profile?.id,
+        registration_no: regNo, branch_id: effectiveBranchId,
         name: form.name, father_name: form.father_name, mother_name: form.mother_name || null,
         dob: form.dob || null, gender: form.gender || null, aadhar_number: form.aadhar_number || null,
         photo_url: photoFinalUrl, phone: form.phone, alt_phone: form.alt_phone || null,
@@ -309,6 +345,20 @@ export default function StudentRegisterPage() {
 
           {step === 4 && (<>
             <h2 className="text-sm font-semibold text-gray-900 font-heading flex items-center gap-2"><BookOpen size={16} className="text-red-500" /> Course & Fee</h2>
+
+            {isSuperAdmin && (
+              <FormField label="Branch" required hint="Pick the branch this student belongs to">
+                <div className="relative">
+                  <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <select value={selectedBranchId} onChange={e => setSelectedBranchId(e.target.value)}
+                    className={`${selectClass} pl-9`}>
+                    <option value="">Select branch</option>
+                    {branchesList.map(b => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
+                  </select>
+                </div>
+              </FormField>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Course" required error={errors.course_id?.message}>
                 <select {...register('course_id')} className={selectClass}><option value="">Select course</option>{courses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}</select>
