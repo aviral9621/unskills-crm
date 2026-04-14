@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, CreditCard, Download, Loader2, Printer, Settings, X, User } from 'lucide-react'
 import { toast } from 'sonner'
@@ -33,10 +33,17 @@ export default function StudentIdCardPage() {
   const [settings, setSettings] = useState<CardSettings | null>(null)
   const [selected, setSelected] = useState<StudentRow | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
+  const [photoDataUrl, setPhotoDataUrl] = useState<string>('')
+  const [logoDataUrl, setLogoDataUrl] = useState<string>('')
   const [generating, setGenerating] = useState(false)
-  const printRef = useRef<HTMLDivElement>(null)
+  const [printing, setPrinting] = useState(false)
 
   useEffect(() => { fetchAll() }, [])
+
+  // preload logo once as data URL so PDF + preview both use the embedded copy
+  useEffect(() => {
+    toDataUrl('/MAIN LOGO FOR ALL CARDS.png').then(setLogoDataUrl).catch(() => setLogoDataUrl(''))
+  }, [])
 
   // Handle deep link ?student=<id>
   useEffect(() => {
@@ -47,13 +54,19 @@ export default function StudentIdCardPage() {
     }
   }, [searchParams, students])
 
-  // Generate QR whenever selected / settings change
+  // Generate QR and re-fetch photo-as-data-URL whenever selection or settings change
   useEffect(() => {
-    if (!selected || !settings) { setQrDataUrl(''); return }
+    if (!selected || !settings) { setQrDataUrl(''); setPhotoDataUrl(''); return }
     const url = idCardVerifyUrl(settings.verify_base_url, selected.registration_no)
     QRCode.toDataURL(url, { margin: 1, width: 320, color: { dark: '#111827', light: '#ffffff' } })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(''))
+
+    if (selected.photo_url && !selected.photo_url.startsWith('blob:')) {
+      toDataUrl(selected.photo_url).then(setPhotoDataUrl).catch(() => setPhotoDataUrl(''))
+    } else {
+      setPhotoDataUrl('')
+    }
   }, [selected, settings])
 
   async function fetchAll() {
@@ -91,136 +104,154 @@ export default function StudentIdCardPage() {
     setSearchParams({ student: s.id }, { replace: true })
   }
 
-  /** Print only the card element (CSS print isolation happens in index.css) */
-  function handlePrint() {
-    if (!selected) return
-    document.body.classList.add('printing-id-card')
-    // next tick so the class is applied
-    setTimeout(() => {
-      window.print()
-      // cleanup after print dialog closes
-      setTimeout(() => document.body.classList.remove('printing-id-card'), 200)
-    }, 50)
-  }
+  /** Build the ID-card PDF blob. Shared by download + print. */
+  async function buildPdfBlob(): Promise<Blob | null> {
+    if (!selected || !settings) return null
+    const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
 
-  async function handleDownloadPdf() {
-    if (!selected || !settings) return
-    setGenerating(true)
-    try {
-      const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
+    // Portrait card: 240x380 pt (≈ 85mm × 134mm)
+    const W = 240, H = 380
 
-      // ID card portrait — 85.6mm x 135mm (custom taller ID) at 72dpi ≈ 243 x 383 pt
-      // We use 240 x 380 for clean numbers
-      const W = 240, H = 380
-      const course = (selected.course as { name: string } | null)?.name || '—'
+    const course = (selected.course as { name: string } | null)?.name || '—'
 
-      // Embed logo as base64 data URL for @react-pdf reliability
-      const logoUrl = await toDataUrl('/MAIN LOGO FOR ALL CARDS.png').catch(() => null)
+    const s = StyleSheet.create({
+      page:        { width: W, height: H, fontFamily: 'Helvetica', backgroundColor: '#FFFFFF' },
 
-      const styles = StyleSheet.create({
-        page:       { width: W, height: H, fontFamily: 'Helvetica' },
-        // Header black band with red overlay (we fake the angle using two stacked rects)
-        headerWrap: { position: 'relative', height: 62, backgroundColor: '#111111' },
-        headerRed:  { position: 'absolute', top: 0, left: 0, right: 52, bottom: 0, backgroundColor: '#B91C1C' },
-        headerInner:{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
-        headerText: { flex: 1, paddingRight: 6 },
-        headerTitle:{ color: '#FFFFFF', fontSize: 11, fontWeight: 'bold', letterSpacing: 0.2 },
-        headerSub:  { color: '#FFFFFF', fontSize: 5.5, marginTop: 2, lineHeight: 1.35 },
-        logo:       { width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF', padding: 2 },
+      header:      { height: 66, backgroundColor: '#111111', flexDirection: 'row', alignItems: 'stretch' },
+      headerRed:   { flex: 1, backgroundColor: '#B91C1C', padding: 6, justifyContent: 'center' },
+      headerTitle: { color: '#FFFFFF', fontSize: 9.5, fontWeight: 'bold', letterSpacing: 0.2 },
+      headerSub:   { color: '#FFFFFF', fontSize: 5, marginTop: 2, lineHeight: 1.3 },
+      headerLogo:  { width: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111111' },
+      logoImg:     { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', padding: 2 },
 
-        body:       { flex: 1, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10 },
-        photoWrap:  { alignItems: 'center', marginTop: 4, marginBottom: 8 },
-        photo:      { width: 96, height: 96, objectFit: 'cover', borderRadius: 6, border: '2px solid #E5E7EB' },
-        photoPh:    { width: 96, height: 96, borderRadius: 6, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
-        nameRow:    { alignItems: 'center', marginBottom: 10 },
-        name:       { color: '#B91C1C', fontSize: 16, fontWeight: 'bold', letterSpacing: 0.3 },
+      body:        { flex: 1, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8 },
+      photoWrap:   { alignItems: 'center', marginBottom: 6 },
+      photo:       { width: 84, height: 84, objectFit: 'cover', borderRadius: 4, border: '1.5px solid #E5E7EB' },
+      photoPh:     { width: 84, height: 84, borderRadius: 4, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
 
-        infoRow:    { flexDirection: 'row', marginBottom: 5 },
-        infoLabel:  { width: 78, fontSize: 8.5, color: '#111827' },
-        infoSep:    { width: 8, fontSize: 8.5, color: '#111827' },
-        infoValue:  { flex: 1, fontSize: 8.5, color: '#111827', fontWeight: 'bold' },
+      name:        { color: '#B91C1C', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginBottom: 8, letterSpacing: 0.3 },
 
-        qrWrap:     { position: 'absolute', left: 14, bottom: 74, width: 62, height: 62 },
-        qr:         { width: 62, height: 62 },
+      infoRow:     { flexDirection: 'row', marginBottom: 4 },
+      infoLabel:   { width: 74, fontSize: 8, color: '#111827' },
+      infoSep:     { width: 6, fontSize: 8, color: '#111827' },
+      infoValue:   { flex: 1, fontSize: 8, color: '#111827', fontWeight: 'bold' },
 
-        footerWrap: { backgroundColor: '#111111', paddingHorizontal: 10, paddingVertical: 7 },
-        footerRed:  { position: 'absolute', top: -6, left: 0, right: 0, height: 6, backgroundColor: '#B91C1C' },
-        ftLine:     { color: '#FFFFFF', fontSize: 6.5, textAlign: 'center', marginBottom: 1.5, lineHeight: 1.35 },
-        ftBold:     { fontWeight: 'bold' },
-      })
+      qrWrap:      { marginTop: 6 },
+      qr:          { width: 56, height: 56 },
 
-      const IdDoc = (
-        <Document>
-          <Page size={[W, H]} style={styles.page}>
-            <View style={styles.headerWrap}>
-              <View style={styles.headerRed} />
-              <View style={styles.headerInner}>
-                <View style={styles.headerText}>
-                  <Text style={styles.headerTitle}>{settings.header_title}</Text>
-                  <Text style={styles.headerSub}>{settings.header_subtitle}</Text>
-                </View>
-                {logoUrl && <PdfImage src={logoUrl} style={styles.logo} />}
-              </View>
+      footerRed:   { height: 4, backgroundColor: '#B91C1C' },
+      footer:      { backgroundColor: '#111111', paddingHorizontal: 8, paddingVertical: 6 },
+      ftLine:      { color: '#FFFFFF', fontSize: 6, textAlign: 'center', marginBottom: 1.5, lineHeight: 1.35 },
+      ftBold:      { fontWeight: 'bold' },
+    })
+
+    const Doc = (
+      <Document>
+        <Page size={[W, H]} style={s.page}>
+          {/* Header */}
+          <View style={s.header}>
+            <View style={s.headerRed}>
+              <Text style={s.headerTitle}>{settings.header_title}</Text>
+              <Text style={s.headerSub}>{settings.header_subtitle}</Text>
+            </View>
+            <View style={s.headerLogo}>
+              {logoDataUrl ? <PdfImage src={logoDataUrl} style={s.logoImg} /> : null}
+            </View>
+          </View>
+
+          {/* Body */}
+          <View style={s.body}>
+            <View style={s.photoWrap}>
+              {photoDataUrl
+                ? <PdfImage src={photoDataUrl} style={s.photo} />
+                : <View style={s.photoPh}><Text style={{ fontSize: 28, color: '#9CA3AF' }}>{selected.name.charAt(0).toUpperCase()}</Text></View>}
             </View>
 
-            <View style={styles.body}>
-              <View style={styles.photoWrap}>
-                {selected.photo_url
-                  ? <PdfImage src={selected.photo_url} style={styles.photo} />
-                  : <View style={styles.photoPh}><Text style={{ fontSize: 32, color: '#9CA3AF' }}>{selected.name.charAt(0).toUpperCase()}</Text></View>
-                }
-              </View>
+            <Text style={s.name}>{selected.name.toUpperCase()}</Text>
 
-              <View style={styles.nameRow}>
-                <Text style={styles.name}>{selected.name.toUpperCase()}</Text>
-              </View>
-
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Registration No.</Text>
-                <Text style={styles.infoSep}>:</Text>
-                <Text style={styles.infoValue}>{selected.registration_no}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Father&apos;s Name</Text>
-                <Text style={styles.infoSep}>:</Text>
-                <Text style={styles.infoValue}>{(selected.father_name || '—').toUpperCase()}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>D.O.B.</Text>
-                <Text style={styles.infoSep}>:</Text>
-                <Text style={styles.infoValue}>{selected.dob ? formatDate(selected.dob) : '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Course</Text>
-                <Text style={styles.infoSep}>:</Text>
-                <Text style={styles.infoValue}>{course}</Text>
-              </View>
+            <View style={s.infoRow}>
+              <Text style={s.infoLabel}>Registration No.</Text>
+              <Text style={s.infoSep}>:</Text>
+              <Text style={s.infoValue}>{selected.registration_no}</Text>
+            </View>
+            <View style={s.infoRow}>
+              <Text style={s.infoLabel}>Father&apos;s Name</Text>
+              <Text style={s.infoSep}>:</Text>
+              <Text style={s.infoValue}>{(selected.father_name || '—').toUpperCase()}</Text>
+            </View>
+            <View style={s.infoRow}>
+              <Text style={s.infoLabel}>D.O.B.</Text>
+              <Text style={s.infoSep}>:</Text>
+              <Text style={s.infoValue}>{selected.dob ? formatDate(selected.dob) : '—'}</Text>
+            </View>
+            <View style={s.infoRow}>
+              <Text style={s.infoLabel}>Course</Text>
+              <Text style={s.infoSep}>:</Text>
+              <Text style={s.infoValue}>{course}</Text>
             </View>
 
             {qrDataUrl && (
-              <View style={styles.qrWrap}>
-                <PdfImage src={qrDataUrl} style={styles.qr} />
+              <View style={s.qrWrap}>
+                <PdfImage src={qrDataUrl} style={s.qr} />
               </View>
             )}
+          </View>
 
-            <View style={styles.footerWrap}>
-              <View style={styles.footerRed} />
-              <Text style={styles.ftLine}><Text style={styles.ftBold}>Director</Text> – {settings.director_name}</Text>
-              <Text style={styles.ftLine}><Text style={styles.ftBold}>Address</Text> – {settings.address}</Text>
-              <Text style={styles.ftLine}><Text style={styles.ftBold}>Phone:</Text> {settings.phone}</Text>
-              <Text style={styles.ftLine}><Text style={styles.ftBold}>Website:</Text> {settings.website}</Text>
-            </View>
-          </Page>
-        </Document>
-      )
+          {/* Footer */}
+          <View style={s.footerRed} />
+          <View style={s.footer}>
+            <Text style={s.ftLine}><Text style={s.ftBold}>Director</Text> – {settings.director_name}</Text>
+            <Text style={s.ftLine}><Text style={s.ftBold}>Address</Text> – {settings.address}</Text>
+            <Text style={s.ftLine}><Text style={s.ftBold}>Phone:</Text> {settings.phone}</Text>
+            <Text style={s.ftLine}><Text style={s.ftBold}>Website:</Text> {settings.website}</Text>
+          </View>
+        </Page>
+      </Document>
+    )
+    return await pdf(Doc).toBlob()
+  }
 
-      const blob = await pdf(IdDoc).toBlob()
+  async function handleDownloadPdf() {
+    if (!selected) return
+    setGenerating(true)
+    try {
+      const blob = await buildPdfBlob()
+      if (!blob) return
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = `ID-Card-${selected.registration_no.replace(/\//g, '-')}.pdf`; a.click()
       URL.revokeObjectURL(url)
       toast.success('ID Card downloaded')
     } catch (e) { console.error(e); toast.error('Failed to generate PDF') }
     finally { setGenerating(false) }
+  }
+
+  /**
+   * Print uses the same PDF — open it in a hidden iframe and call
+   * `print()` on its contentWindow. This is the ONLY reliable way to
+   * print an ID card at exactly its printed size across browsers.
+   */
+  async function handlePrint() {
+    if (!selected) return
+    setPrinting(true)
+    try {
+      const blob = await buildPdfBlob()
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const iframe = document.createElement('iframe')
+      iframe.style.position = 'fixed'
+      iframe.style.right = '0'; iframe.style.bottom = '0'
+      iframe.style.width = '0'; iframe.style.height = '0'
+      iframe.style.border = '0'
+      iframe.src = url
+      document.body.appendChild(iframe)
+      iframe.onload = () => {
+        try { iframe.contentWindow?.focus(); iframe.contentWindow?.print() }
+        catch { window.open(url, '_blank') }
+        // Clean up after a delay (print dialog is modal)
+        setTimeout(() => { document.body.removeChild(iframe); URL.revokeObjectURL(url) }, 60_000)
+      }
+    } catch (e) { console.error(e); toast.error('Failed to print') }
+    finally { setPrinting(false) }
   }
 
   return (
@@ -259,7 +290,7 @@ export default function StudentIdCardPage() {
                 <button key={s.id} onClick={() => pickStudent(s)}
                   className={cn('w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left hover:bg-gray-50',
                     selected?.id === s.id && 'bg-red-50 ring-1 ring-red-200')}>
-                  {s.photo_url
+                  {s.photo_url && !s.photo_url.startsWith('blob:')
                     ? <img src={s.photo_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
                     : <div className="h-9 w-9 rounded-full bg-red-50 flex items-center justify-center shrink-0"><span className="text-sm font-bold text-red-600">{s.name.charAt(0).toUpperCase()}</span></div>
                   }
@@ -283,14 +314,14 @@ export default function StudentIdCardPage() {
             </div>
           ) : !settings ? null : (
             <>
-              <div ref={printRef} id="id-card-print-area" className="mx-auto">
-                <IdCardPreview student={selected} settings={settings} qrDataUrl={qrDataUrl} />
+              <div className="mx-auto">
+                <IdCardPreview student={selected} settings={settings} qrDataUrl={qrDataUrl} photoUrl={photoDataUrl || selected.photo_url} logoUrl={logoDataUrl || '/MAIN LOGO FOR ALL CARDS.png'} />
               </div>
 
-              <div className="grid grid-cols-2 gap-2 no-print">
-                <button onClick={handlePrint}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                  <Printer size={16} /> Print
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={handlePrint} disabled={printing}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                  {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {printing ? 'Preparing…' : 'Print'}
                 </button>
                 <button onClick={handleDownloadPdf} disabled={generating}
                   className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
@@ -305,52 +336,60 @@ export default function StudentIdCardPage() {
   )
 }
 
-/* ─── On-screen card preview (and the same element is what prints) ─── */
-function IdCardPreview({ student, settings, qrDataUrl }: { student: StudentRow; settings: CardSettings; qrDataUrl: string }) {
+/* ─── On-screen card preview (visual match of the PDF) ─── */
+function IdCardPreview({
+  student, settings, qrDataUrl, photoUrl, logoUrl,
+}: {
+  student: StudentRow
+  settings: CardSettings
+  qrDataUrl: string
+  photoUrl: string | null
+  logoUrl: string
+}) {
   const course = (student.course as { name: string } | null)?.name || '—'
+  const safePhoto = photoUrl && !photoUrl.startsWith('blob:') ? photoUrl : ''
   return (
-    <div className="id-card-root bg-white mx-auto rounded-xl overflow-hidden shadow-lg"
-      style={{ width: 340, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
-      {/* Header */}
-      <div className="relative bg-black" style={{ height: 88 }}>
-        <div className="absolute inset-y-0 left-0 right-[72px] bg-[#B91C1C]" style={{ clipPath: 'polygon(0 0, 100% 0, calc(100% - 18px) 100%, 0 100%)' }} />
-        <div className="relative h-full flex items-center px-3 gap-2">
-          <div className="flex-1 pr-1">
-            <p className="text-white text-[15px] font-bold leading-tight">{settings.header_title}</p>
-            <p className="text-white/90 text-[8px] leading-snug mt-1">{settings.header_subtitle}</p>
-          </div>
-          <img src="/MAIN LOGO FOR ALL CARDS.png" alt="" className="h-12 w-12 rounded-full bg-white object-contain p-0.5 shrink-0" />
+    <div className="bg-white mx-auto rounded-xl overflow-hidden shadow-lg"
+      style={{ width: 320, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
+      {/* Header — two columns: red (title) + black (logo) */}
+      <div className="flex items-stretch bg-black" style={{ height: 86 }}>
+        <div className="flex-1 bg-[#B91C1C] px-3 flex flex-col justify-center">
+          <p className="text-white text-[13px] font-bold leading-tight">{settings.header_title}</p>
+          <p className="text-white/90 text-[8px] leading-snug mt-1">{settings.header_subtitle}</p>
+        </div>
+        <div className="w-[70px] flex items-center justify-center">
+          <img src={logoUrl} alt="" className="w-12 h-12 rounded-full bg-white object-contain p-0.5" />
         </div>
       </div>
 
       {/* Body */}
-      <div className="px-5 pt-4 pb-3 relative">
-        <div className="flex justify-center mb-3">
-          {student.photo_url
-            ? <img src={student.photo_url} alt="" className="w-[120px] h-[120px] rounded-md object-cover border-2 border-gray-200" />
-            : <div className="w-[120px] h-[120px] rounded-md bg-gray-100 flex items-center justify-center"><User size={56} className="text-gray-400" /></div>
+      <div className="px-5 pt-3 pb-3">
+        <div className="flex justify-center mb-2">
+          {safePhoto
+            ? <img src={safePhoto} alt="" className="w-[110px] h-[110px] rounded-md object-cover border-2 border-gray-200" />
+            : <div className="w-[110px] h-[110px] rounded-md bg-gray-100 flex items-center justify-center"><User size={50} className="text-gray-400" /></div>
           }
         </div>
 
-        <p className="text-center text-[22px] font-extrabold text-[#B91C1C] tracking-wide mb-3">{student.name.toUpperCase()}</p>
+        <p className="text-center text-[20px] font-extrabold text-[#B91C1C] tracking-wide mb-3">{student.name.toUpperCase()}</p>
 
-        <div className="space-y-1.5 text-[12.5px] text-gray-900">
+        <div className="space-y-1.5 text-[12px] text-gray-900 mb-3">
           <CardRow label="Registration No." value={student.registration_no} />
           <CardRow label="Father's Name" value={(student.father_name || '—').toUpperCase()} />
           <CardRow label="D.O.B." value={student.dob ? formatDate(student.dob) : '—'} />
           <CardRow label="Course" value={course} />
         </div>
 
-        <div className="mt-3 mb-1">
+        <div>
           {qrDataUrl
-            ? <img src={qrDataUrl} alt="QR" className="w-[78px] h-[78px]" />
-            : <div className="w-[78px] h-[78px] bg-gray-100 rounded" />}
+            ? <img src={qrDataUrl} alt="QR" className="w-[74px] h-[74px]" />
+            : <div className="w-[74px] h-[74px] bg-gray-100 rounded" />}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="relative bg-black text-white text-center px-3 py-2.5" style={{ fontSize: 9.5, lineHeight: 1.45 }}>
-        <div className="absolute -top-1 inset-x-0 h-1 bg-[#B91C1C]" />
+      <div className="h-1 bg-[#B91C1C]" />
+      <div className="bg-black text-white text-center px-3 py-2.5" style={{ fontSize: 9, lineHeight: 1.45 }}>
         <p><span className="font-bold">Director</span> – {settings.director_name}</p>
         <p><span className="font-bold">Address</span> – {settings.address}</p>
         <p><span className="font-bold">Phone:</span> {settings.phone}</p>
@@ -363,16 +402,17 @@ function IdCardPreview({ student, settings, qrDataUrl }: { student: StudentRow; 
 function CardRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex">
-      <span className="w-[110px] shrink-0">{label}</span>
+      <span className="w-[110px] shrink-0 text-gray-900">{label}</span>
       <span className="w-2 shrink-0">:</span>
       <span className="font-bold flex-1 break-words">{value}</span>
     </div>
   )
 }
 
-/** Convert a same-origin image URL to a data URL for @react-pdf embedding. */
+/** Convert a URL (same-origin public or supabase public) to a data URL for @react-pdf. */
 async function toDataUrl(url: string): Promise<string> {
-  const res = await fetch(url)
+  const res = await fetch(url, { mode: 'cors' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const blob = await res.blob()
   return await new Promise((resolve, reject) => {
     const r = new FileReader()
