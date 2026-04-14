@@ -8,6 +8,7 @@ import {
   Building2, User, MapPin, Palette,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { uploadPublicFile, STORAGE_BUCKETS } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
 import { INDIAN_STATES, cn } from '../../lib/utils'
 import FormField, { inputClass, selectClass } from '../../components/FormField'
@@ -187,12 +188,9 @@ export default function BranchFormPage() {
     if (step > 1) setStep(step - 1)
   }
 
-  /* ─── Upload helper ─── */
+  /* ─── Upload helper (thin wrapper for backwards-compat) ─── */
   async function uploadFile(file: File, bucket: string, path: string): Promise<string> {
-    const { data, error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true })
-    if (error) throw error
-    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path)
-    return urlData.publicUrl
+    return uploadPublicFile(bucket, path, file)
   }
 
   /* ─── Submit (final step) ─── */
@@ -212,12 +210,12 @@ export default function BranchFormPage() {
       if (directorPhotoFile) {
         const ext = directorPhotoFile.name.split('.').pop()
         const path = `director-photos/${id || 'new'}/${Date.now()}.${ext}`
-        dirImageUrl = await uploadFile(directorPhotoFile, 'uce-avatars', path)
+        dirImageUrl = await uploadFile(directorPhotoFile, STORAGE_BUCKETS.avatars, path)
       }
       if (logoFile) {
         const ext = logoFile.name.split('.').pop()
         const path = `logos/${id || 'new'}/${Date.now()}.${ext}`
-        centerLogoUrl = await uploadFile(logoFile, 'uce-branch-logos', path)
+        centerLogoUrl = await uploadFile(logoFile, STORAGE_BUCKETS.branchAssets, path)
       }
 
       const branchPayload = {
@@ -266,13 +264,13 @@ export default function BranchFormPage() {
         if (directorPhotoFile && newBranch) {
           const ext = directorPhotoFile.name.split('.').pop()
           const path = `director-photos/${newBranch.id}/${Date.now()}.${ext}`
-          const url = await uploadFile(directorPhotoFile, 'uce-avatars', path)
+          const url = await uploadFile(directorPhotoFile, STORAGE_BUCKETS.avatars, path)
           await supabase.from('uce_branches').update({ director_image_url: url }).eq('id', newBranch.id)
         }
         if (logoFile && newBranch) {
           const ext = logoFile.name.split('.').pop()
           const path = `logos/${newBranch.id}/${Date.now()}.${ext}`
-          const url = await uploadFile(logoFile, 'uce-branch-logos', path)
+          const url = await uploadFile(logoFile, STORAGE_BUCKETS.branchAssets, path)
           await supabase.from('uce_branches').update({ center_logo_url: url }).eq('id', newBranch.id)
         }
 

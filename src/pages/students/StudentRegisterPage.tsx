@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle, Building2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { uploadPublicFile, isBlobUrl, STORAGE_BUCKETS } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
 import { INDIAN_STATES, formatINR, cn } from '../../lib/utils'
 import FormField, { inputClass, selectClass } from '../../components/FormField'
@@ -200,12 +201,18 @@ export default function StudentRegisterPage() {
 
     setSaving(true)
     try {
-      let photoFinalUrl = photoUrl
+      // Start from the persisted URL only (never a blob: preview).
+      // If the caller has an un-saved blob URL in `photoUrl` but no
+      // `photoFile`, there's nothing to upload — keep null.
+      let photoFinalUrl: string | null = isBlobUrl(photoUrl) ? null : photoUrl
       if (photoFile) {
-        const ext = photoFile.name.split('.').pop()
-        const path = `student-photos/${editId || 'new'}/${Date.now()}.${ext}`
-        const { data: upData, error: upErr } = await supabase.storage.from('uce-student-photos').upload(path, photoFile, { upsert: true })
-        if (!upErr && upData) { const { data: urlD } = supabase.storage.from('uce-student-photos').getPublicUrl(upData.path); photoFinalUrl = urlD.publicUrl }
+        const ext = (photoFile.name.split('.').pop() || 'jpg').toLowerCase()
+        const path = `${editId || 'new'}/${Date.now()}.${ext}`
+        try {
+          photoFinalUrl = await uploadPublicFile(STORAGE_BUCKETS.studentPhotos, path, photoFile)
+        } catch (e) {
+          console.error(e); toast.error('Failed to upload photo'); setSaving(false); return
+        }
       }
 
       const payload = {

@@ -39,7 +39,6 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
           { label: 'All Students', path: '/admin/students', permission: 'student.view' },
           { label: 'Register Student', path: '/admin/students/register', permission: 'student.register' },
           { label: 'ID Card', path: '/admin/students/id-card', permission: 'student.idcard' },
-          { label: 'ID Card Settings', path: '/admin/students/id-card-settings', permission: 'student.idcard' },
           { label: 'Admit Card', path: '/admin/students/admit-card', permission: 'admitcard.view' },
         ],
       },

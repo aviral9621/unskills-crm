@@ -112,22 +112,3 @@ input[type="checkbox"] {
   accent-color: #DC2626;
 }
 
-/* ── ID Card print isolation ──
-   When body.printing-id-card is set, hide everything except the card and
-   size the page so only the card prints. */
-@media print {
-  body.printing-id-card * { visibility: hidden !important; }
-  body.printing-id-card #id-card-print-area,
-  body.printing-id-card #id-card-print-area * { visibility: visible !important; }
-  body.printing-id-card #id-card-print-area {
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    width: auto !important;
-  }
-  body.printing-id-card .id-card-root { box-shadow: none !important; border-radius: 0 !important; }
-  @page { margin: 8mm; }
-  .no-print { display: none !important; }
-}
