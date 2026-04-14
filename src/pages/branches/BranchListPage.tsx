@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
   Building2, Plus, Search, MoreVertical,
-  Pencil, Wallet, PlusCircle, Power, X,
+  Pencil, Wallet, PlusCircle, Power, X, Trash2, Loader2, AlertTriangle,
   MapPin, Phone, ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -39,6 +39,12 @@ export default function BranchListPage() {
   const [toggleTarget, setToggleTarget] = useState<Branch | null>(null)
   const [toggling, setToggling] = useState(false)
 
+  // Delete confirm (super admin only)
+  const [deleteTarget, setDeleteTarget] = useState<Branch | null>(null)
+  const [deleteCounts, setDeleteCounts] = useState<{ users: number; students: number; employees: number; expenses: number; wallet: number } | null>(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
   useEffect(() => { fetchBranches() }, [])
   useEffect(() => {
     const h = () => setMenuOpen(null)
@@ -67,6 +73,57 @@ export default function BranchListPage() {
   }, [])
 
   const menuBranch = useMemo(() => branches.find(b => b.id === menuOpen), [branches, menuOpen])
+
+  async function openDeleteFlow(branch: Branch) {
+    setDeleteTarget(branch)
+    setDeleteConfirmText('')
+    setDeleteCounts(null)
+    // Fetch counts in parallel
+    const [u, s, e, ex, w] = await Promise.all([
+      supabase.from('uce_profiles').select('id', { count: 'exact', head: true }).eq('branch_id', branch.id),
+      supabase.from('uce_students').select('id', { count: 'exact', head: true }).eq('branch_id', branch.id),
+      supabase.from('uce_employees').select('id', { count: 'exact', head: true }).eq('branch_id', branch.id),
+      supabase.from('uce_expenses').select('id', { count: 'exact', head: true }).eq('branch_id', branch.id),
+      supabase.from('uce_branch_wallet_transactions').select('id', { count: 'exact', head: true }).eq('branch_id', branch.id),
+    ])
+    setDeleteCounts({
+      users: u.count ?? 0,
+      students: s.count ?? 0,
+      employees: e.count ?? 0,
+      expenses: ex.count ?? 0,
+      wallet: w.count ?? 0,
+    })
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    if (deleteConfirmText.trim() !== deleteTarget.name) {
+      toast.error('Branch name does not match')
+      return
+    }
+    setDeleting(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { toast.error('Session expired'); return }
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-delete-branch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ branch_id: deleteTarget.id }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Failed to delete')
+      toast.success(`Branch "${deleteTarget.name}" and ${json.users_deleted ?? 0} users deleted`)
+      setBranches(prev => prev.filter(b => b.id !== deleteTarget.id))
+      setDeleteTarget(null)
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to delete branch')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   async function handleToggle() {
     if (!toggleTarget) return
@@ -308,14 +365,20 @@ export default function BranchListPage() {
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"><PlusCircle size={16} /> Add Balance</button>
               <div className="border-t border-gray-100 my-1" />
               <button onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium ${menuBranch.is_active ? 'text-red-600 hover:bg-red-50 active:bg-red-100' : 'text-green-600 hover:bg-green-50 active:bg-green-100'}`}>
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium ${menuBranch.is_active ? 'text-amber-600 hover:bg-amber-50 active:bg-amber-100' : 'text-green-600 hover:bg-green-50 active:bg-green-100'}`}>
                 <Power size={16} /> {menuBranch.is_active ? 'Deactivate' : 'Activate'}
               </button>
+              {isSuperAdmin && (
+                <button onClick={() => { setMenuOpen(null); openDeleteFlow(menuBranch) }}
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 active:bg-red-100">
+                  <Trash2 size={16} /> Delete Permanently
+                </button>
+              )}
             </div>
           </div>
 
           {/* Desktop: floating dropdown */}
-          <div className="hidden md:block fixed z-50 w-44 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, left: menuPos.left }}>
+          <div className="hidden md:block fixed z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, left: menuPos.left }}>
             <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/edit`) }}
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Pencil size={14} /> Edit Branch</button>
             <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet`) }}
@@ -324,9 +387,78 @@ export default function BranchListPage() {
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><PlusCircle size={14} /> Add Balance</button>
             <div className="border-t border-gray-100 my-1" />
             <button onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
-              className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm ${menuBranch.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}>
+              className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm ${menuBranch.is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-green-600 hover:bg-green-50'}`}>
               <Power size={14} /> {menuBranch.is_active ? 'Deactivate' : 'Activate'}
             </button>
+            {isSuperAdmin && (
+              <button onClick={() => { setMenuOpen(null); openDeleteFlow(menuBranch) }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                <Trash2 size={14} /> Delete Permanently
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ─── Delete Branch Modal (Super Admin) ─── */}
+      {deleteTarget && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={() => !deleting && setDeleteTarget(null)}>
+            <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-5 border-b border-gray-100 flex items-start gap-3">
+                <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={20} className="text-red-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-base font-semibold text-gray-900">Delete Branch Permanently?</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone.</p>
+                </div>
+                <button onClick={() => setDeleteTarget(null)} disabled={deleting} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100"><X size={18} /></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-800">
+                  <p className="font-semibold mb-1.5">The following will be permanently deleted:</p>
+                  {deleteCounts ? (
+                    <ul className="space-y-1">
+                      <li>• Branch <b>{deleteTarget.name}</b> ({deleteTarget.code})</li>
+                      <li>• <b>{deleteCounts.users}</b> user{deleteCounts.users !== 1 ? 's' : ''} (login accounts)</li>
+                      <li>• <b>{deleteCounts.students}</b> student record{deleteCounts.students !== 1 ? 's' : ''}</li>
+                      <li>• <b>{deleteCounts.employees}</b> employee record{deleteCounts.employees !== 1 ? 's' : ''}</li>
+                      <li>• <b>{deleteCounts.expenses}</b> expense record{deleteCounts.expenses !== 1 ? 's' : ''}</li>
+                      <li>• <b>{deleteCounts.wallet}</b> wallet transaction{deleteCounts.wallet !== 1 ? 's' : ''}</li>
+                      <li>• All linked marksheets, certificates, attendance, salary slips, etc.</li>
+                    </ul>
+                  ) : (
+                    <div className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading impact…</div>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700">
+                    Type <span className="font-mono font-bold text-red-600">{deleteTarget.name}</span> to confirm:
+                  </label>
+                  <input
+                    value={deleteConfirmText}
+                    onChange={e => setDeleteConfirmText(e.target.value)}
+                    placeholder="Branch name"
+                    disabled={deleting}
+                    className="mt-1.5 w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none"
+                  />
+                </div>
+                <div className="flex gap-3 pt-1">
+                  <button onClick={() => setDeleteTarget(null)} disabled={deleting} className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting || !deleteCounts || deleteConfirmText.trim() !== deleteTarget.name}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {deleting && <Loader2 size={16} className="animate-spin" />}
+                    {deleting ? 'Deleting…' : 'Delete Forever'}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </>
       )}

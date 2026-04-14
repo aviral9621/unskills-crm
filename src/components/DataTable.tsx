@@ -21,7 +21,11 @@ interface DataTableProps<T> {
   pageSize?: number
   emptyIcon?: React.ReactNode
   emptyMessage?: string
+  onRowClick?: (row: T) => void
+  showPageSizeSelector?: boolean
 }
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200, 500]
 
 function SkeletonRows({ cols, rows = 5 }: { cols: number; rows?: number }) {
   return (
@@ -44,11 +48,15 @@ export default function DataTable<T>({
   columns,
   loading = false,
   searchValue = '',
-  pageSize = 10,
+  pageSize: initialPageSize = 10,
   emptyIcon,
   emptyMessage = 'No data found',
+  onRowClick,
+  showPageSizeSelector = true,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
+  const [pageSize, setPageSize] = useState<number | 'all'>(initialPageSize)
+  const effectivePageSize = pageSize === 'all' ? Math.max(data.length, 1) : pageSize
 
   const table = useReactTable({
     data,
@@ -59,8 +67,13 @@ export default function DataTable<T>({
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    initialState: { pagination: { pageSize } },
+    initialState: { pagination: { pageSize: effectivePageSize } },
   })
+
+  // Keep table's pageSize state in sync with local selector
+  if (table.getState().pagination.pageSize !== effectivePageSize) {
+    table.setPageSize(effectivePageSize)
+  }
 
   const pageIndex = table.getState().pagination.pageIndex
   const totalPages = table.getPageCount()
@@ -115,7 +128,14 @@ export default function DataTable<T>({
               </tr>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
+                <tr
+                  key={row.id}
+                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  className={cn(
+                    'border-b border-gray-100 transition-colors',
+                    onRowClick ? 'cursor-pointer hover:bg-red-50/40' : 'hover:bg-gray-50/60'
+                  )}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="px-4 py-3 whitespace-nowrap">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -128,47 +148,70 @@ export default function DataTable<T>({
         </table>
       </div>
 
-      {!loading && totalPages > 1 && (
+      {!loading && totalRows > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 px-1">
-          <p className="text-xs text-gray-500">
-            Showing {pageIndex * pageSize + 1}–{Math.min((pageIndex + 1) * pageSize, totalRows)} of {totalRows}
-          </p>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
-              className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            {Array.from({ length: Math.min(totalPages, 7) }).map((_, i) => {
-              let pageNum = i
-              if (totalPages > 7) {
-                if (pageIndex < 4) pageNum = i
-                else if (pageIndex > totalPages - 5) pageNum = totalPages - 7 + i
-                else pageNum = pageIndex - 3 + i
-              }
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => table.setPageIndex(pageNum)}
-                  className={cn(
-                    'h-8 w-8 rounded-lg text-xs font-medium transition-colors',
-                    pageNum === pageIndex ? 'bg-red-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-                  )}
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            {showPageSizeSelector && (
+              <div className="flex items-center gap-1.5">
+                <span>Show</span>
+                <select
+                  value={pageSize === 'all' ? 'all' : String(pageSize)}
+                  onChange={(e) => setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                  className="px-2 py-1 rounded-md border border-gray-300 text-xs text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none"
                 >
-                  {pageNum + 1}
-                </button>
-              )
-            })}
-            <button
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
-              className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight size={16} />
-            </button>
+                  {PAGE_SIZE_OPTIONS.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                  <option value="all">All</option>
+                </select>
+              </div>
+            )}
+            <span>
+              {pageSize === 'all' ? (
+                <>Showing all <b>{totalRows}</b></>
+              ) : (
+                <>Showing <b>{pageIndex * effectivePageSize + 1}</b>–<b>{Math.min((pageIndex + 1) * effectivePageSize, totalRows)}</b> of <b>{totalRows}</b></>
+              )}
+            </span>
           </div>
+          {pageSize !== 'all' && totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+                className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              {Array.from({ length: Math.min(totalPages, 7) }).map((_, i) => {
+                let pageNum = i
+                if (totalPages > 7) {
+                  if (pageIndex < 4) pageNum = i
+                  else if (pageIndex > totalPages - 5) pageNum = totalPages - 7 + i
+                  else pageNum = pageIndex - 3 + i
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => table.setPageIndex(pageNum)}
+                    className={cn(
+                      'h-8 w-8 rounded-lg text-xs font-medium transition-colors',
+                      pageNum === pageIndex ? 'bg-red-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                    )}
+                  >
+                    {pageNum + 1}
+                  </button>
+                )
+              })}
+              <button
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+                className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
