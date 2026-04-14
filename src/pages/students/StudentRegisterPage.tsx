@@ -349,13 +349,16 @@ export default function StudentRegisterPage() {
             {isSuperAdmin && (
               <FormField label="Branch" required hint="Pick the branch this student belongs to">
                 <div className="relative">
-                  <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10" />
                   <select value={selectedBranchId} onChange={e => setSelectedBranchId(e.target.value)}
-                    className={`${selectClass} pl-9`}>
-                    <option value="">Select branch</option>
+                    className={`${selectClass} pl-9`} disabled={branchesList.length === 0}>
+                    <option value="">{branchesList.length === 0 ? 'No branches available' : 'Select branch'}</option>
                     {branchesList.map(b => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
                   </select>
                 </div>
+                {branchesList.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-600">No active branches found. Create a branch first, then come back here.</p>
+                )}
               </FormField>
             )}
 
