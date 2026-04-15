@@ -55,7 +55,7 @@ export default function BranchListPage() {
   async function fetchBranches() {
     setLoading(true)
     try {
-      const { data, error } = await supabase.from('uce_branches').select('*').order('created_at', { ascending: false })
+      const { data, error } = await supabase.from('uce_branches').select('*').order('code', { ascending: true })
       if (error) throw error
       setBranches(data ?? [])
     } catch { toast.error('Failed to load branches') }
