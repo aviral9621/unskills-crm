@@ -113,23 +113,20 @@ export default function BranchListPage() {
     }
     setDeleting(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { toast.error('Session expired'); return }
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-delete-branch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ branch_id: deleteTarget.id }),
+      // Use supabase.functions.invoke() so the apikey header is injected
+      // automatically — a raw fetch() without it returns 401 at the gateway.
+      const { data: json, error: fnErr } = await supabase.functions.invoke<{
+        ok?: boolean; users_deleted?: number; error?: string
+      }>('admin-delete-branch', {
+        body: { branch_id: deleteTarget.id },
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Failed to delete')
+      if (fnErr) throw new Error(json?.error || fnErr.message || 'Failed to delete')
+      if (json?.error) throw new Error(json.error)
       // Resequence all remaining branch codes so there are no gaps
       // (UCE-BR-001, 002, ... by creation order).
       const { error: resErr } = await supabase.rpc('resequence_branch_codes')
       if (resErr) console.warn('resequence failed', resErr)
-      toast.success(`Branch "${deleteTarget.name}" and ${json.users_deleted ?? 0} users deleted`)
+      toast.success(`Branch "${deleteTarget.name}" and ${json?.users_deleted ?? 0} users deleted`)
       setDeleteTarget(null)
       // Refetch so the UI reflects the new codes
       await fetchBranches()
