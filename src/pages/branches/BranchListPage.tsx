@@ -66,9 +66,19 @@ export default function BranchListPage() {
     const btn = menuBtnRefs.current.get(branchId)
     if (!btn) return
     const rect = btn.getBoundingClientRect()
-    const menuW = 176
-    const left = Math.min(rect.right - menuW, window.innerWidth - menuW - 8)
-    setMenuPos({ top: rect.bottom + 4, left: Math.max(8, left) })
+    const menuW = 192      // w-48
+    const menuH = 244      // ~5 items + divider; flips up if not enough room below
+    const vh = window.innerHeight
+    const vw = window.innerWidth
+    // Vertical: prefer below, flip above if it would overflow
+    const spaceBelow = vh - rect.bottom
+    const top = spaceBelow >= menuH + 8
+      ? rect.bottom + 4
+      : Math.max(8, rect.top - menuH - 4)
+    // Horizontal: right-align to button, clamp inside viewport
+    const rawLeft = rect.right - menuW
+    const left = Math.max(8, Math.min(rawLeft, vw - menuW - 8))
+    setMenuPos({ top, left })
     setMenuOpen(branchId)
   }, [])
 
@@ -115,9 +125,14 @@ export default function BranchListPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to delete')
+      // Resequence all remaining branch codes so there are no gaps
+      // (UCE-BR-001, 002, ... by creation order).
+      const { error: resErr } = await supabase.rpc('resequence_branch_codes')
+      if (resErr) console.warn('resequence failed', resErr)
       toast.success(`Branch "${deleteTarget.name}" and ${json.users_deleted ?? 0} users deleted`)
-      setBranches(prev => prev.filter(b => b.id !== deleteTarget.id))
       setDeleteTarget(null)
+      // Refetch so the UI reflects the new codes
+      await fetchBranches()
     } catch (err) {
       toast.error((err as Error).message || 'Failed to delete branch')
     } finally {
