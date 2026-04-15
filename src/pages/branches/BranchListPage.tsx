@@ -113,12 +113,16 @@ export default function BranchListPage() {
     }
     setDeleting(true)
     try {
-      // Use supabase.functions.invoke() so the apikey header is injected
-      // automatically — a raw fetch() without it returns 401 at the gateway.
+      // Explicitly attach the user's access token as Bearer Authorization.
+      // invoke() injects the apikey (required by the gateway); we override
+      // Authorization so the edge function can resolve the caller to a user.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { toast.error('Session expired — please log in again'); return }
       const { data: json, error: fnErr } = await supabase.functions.invoke<{
         ok?: boolean; users_deleted?: number; error?: string
       }>('admin-delete-branch', {
         body: { branch_id: deleteTarget.id },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       })
       if (fnErr) throw new Error(json?.error || fnErr.message || 'Failed to delete')
       if (json?.error) throw new Error(json.error)
