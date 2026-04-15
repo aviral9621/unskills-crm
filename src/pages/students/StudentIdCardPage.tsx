@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, CreditCard, Download, Loader2, Printer, Settings, X, User } from 'lucide-react'
+import { Search, CreditCard, Download, Loader2, Settings, X, User } from 'lucide-react'
 import { toast } from 'sonner'
 import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase'
@@ -36,7 +36,6 @@ export default function StudentIdCardPage() {
   const [photoDataUrl, setPhotoDataUrl] = useState<string>('')
   const [logoDataUrl, setLogoDataUrl] = useState<string>('')
   const [generating, setGenerating] = useState(false)
-  const [printing, setPrinting] = useState(false)
 
   useEffect(() => { fetchAll() }, [])
 
@@ -104,50 +103,61 @@ export default function StudentIdCardPage() {
     setSearchParams({ student: s.id }, { replace: true })
   }
 
-  /** Build the ID-card PDF blob. Shared by download + print. */
+  /** Build the ID-card PDF blob. Single page, DM Sans. */
   async function buildPdfBlob(): Promise<Blob | null> {
     if (!selected || !settings) return null
-    const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
+    const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet, Font } = await import('@react-pdf/renderer')
 
-    // Portrait card: 240x380 pt (≈ 85mm × 134mm)
+    // Register DM Sans once (idempotent — re-calls are no-ops).
+    try {
+      Font.register({
+        family: 'DM Sans',
+        fonts: [
+          { src: 'https://fonts.gstatic.com/s/dmsans/v15/rP2Hp2ywxg089UriCZ2IHTWEBlwu8Q.ttf' },
+          { src: 'https://fonts.gstatic.com/s/dmsans/v15/rP2Cp2ywxg089UriCZaw-zUKjh0BkYE.ttf', fontWeight: 'bold' },
+        ],
+      })
+    } catch { /* already registered */ }
+
+    // Portrait card: 240x380 pt. We force single-page output with wrap={false}.
     const W = 240, H = 380
 
     const course = (selected.course as { name: string } | null)?.name || '—'
 
     const s = StyleSheet.create({
-      page:        { width: W, height: H, fontFamily: 'Helvetica', backgroundColor: '#FFFFFF' },
+      page:        { width: W, height: H, fontFamily: 'DM Sans', backgroundColor: '#FFFFFF' },
 
-      header:      { height: 66, backgroundColor: '#111111', flexDirection: 'row', alignItems: 'stretch' },
+      header:      { height: 62, backgroundColor: '#111111', flexDirection: 'row', alignItems: 'stretch' },
       headerRed:   { flex: 1, backgroundColor: '#B91C1C', padding: 6, justifyContent: 'center' },
       headerTitle: { color: '#FFFFFF', fontSize: 9.5, fontWeight: 'bold', letterSpacing: 0.2 },
       headerSub:   { color: '#FFFFFF', fontSize: 5, marginTop: 2, lineHeight: 1.3 },
-      headerLogo:  { width: 54, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111111' },
-      logoImg:     { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', padding: 2 },
+      headerLogo:  { width: 52, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111111' },
+      logoImg:     { width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF', padding: 2 },
 
-      body:        { flex: 1, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8 },
-      photoWrap:   { alignItems: 'center', marginBottom: 6 },
-      photo:       { width: 84, height: 84, objectFit: 'cover', borderRadius: 4, border: '1.5px solid #E5E7EB' },
-      photoPh:     { width: 84, height: 84, borderRadius: 4, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+      body:        { flex: 1, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6 },
+      photoWrap:   { alignItems: 'center', marginBottom: 5 },
+      photo:       { width: 78, height: 78, objectFit: 'cover', borderRadius: 4, border: '1.5px solid #E5E7EB' },
+      photoPh:     { width: 78, height: 78, borderRadius: 4, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
 
-      name:        { color: '#B91C1C', fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginBottom: 8, letterSpacing: 0.3 },
+      name:        { color: '#B91C1C', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginBottom: 6, letterSpacing: 0.3 },
 
-      infoRow:     { flexDirection: 'row', marginBottom: 4 },
+      infoRow:     { flexDirection: 'row', marginBottom: 3 },
       infoLabel:   { width: 74, fontSize: 8, color: '#111827' },
       infoSep:     { width: 6, fontSize: 8, color: '#111827' },
       infoValue:   { flex: 1, fontSize: 8, color: '#111827', fontWeight: 'bold' },
 
-      qrWrap:      { marginTop: 6 },
-      qr:          { width: 56, height: 56 },
+      qrWrap:      { marginTop: 4 },
+      qr:          { width: 50, height: 50 },
 
-      footerRed:   { height: 4, backgroundColor: '#B91C1C' },
-      footer:      { backgroundColor: '#111111', paddingHorizontal: 8, paddingVertical: 6 },
-      ftLine:      { color: '#FFFFFF', fontSize: 6, textAlign: 'center', marginBottom: 1.5, lineHeight: 1.35 },
+      footerRed:   { height: 3, backgroundColor: '#B91C1C' },
+      footer:      { backgroundColor: '#111111', paddingHorizontal: 8, paddingVertical: 5 },
+      ftLine:      { color: '#FFFFFF', fontSize: 6, textAlign: 'center', marginBottom: 1.2, lineHeight: 1.3 },
       ftBold:      { fontWeight: 'bold' },
     })
 
     const Doc = (
       <Document>
-        <Page size={[W, H]} style={s.page}>
+        <Page size={[W, H]} wrap={false} style={s.page}>
           {/* Header */}
           <View style={s.header}>
             <View style={s.headerRed}>
@@ -225,34 +235,6 @@ export default function StudentIdCardPage() {
     finally { setGenerating(false) }
   }
 
-  /**
-   * Print uses the same PDF — open it in a hidden iframe and call
-   * `print()` on its contentWindow. This is the ONLY reliable way to
-   * print an ID card at exactly its printed size across browsers.
-   */
-  async function handlePrint() {
-    if (!selected) return
-    setPrinting(true)
-    try {
-      const blob = await buildPdfBlob()
-      if (!blob) return
-      const url = URL.createObjectURL(blob)
-      const iframe = document.createElement('iframe')
-      iframe.style.position = 'fixed'
-      iframe.style.right = '0'; iframe.style.bottom = '0'
-      iframe.style.width = '0'; iframe.style.height = '0'
-      iframe.style.border = '0'
-      iframe.src = url
-      document.body.appendChild(iframe)
-      iframe.onload = () => {
-        try { iframe.contentWindow?.focus(); iframe.contentWindow?.print() }
-        catch { window.open(url, '_blank') }
-        // Clean up after a delay (print dialog is modal)
-        setTimeout(() => { document.body.removeChild(iframe); URL.revokeObjectURL(url) }, 60_000)
-      }
-    } catch (e) { console.error(e); toast.error('Failed to print') }
-    finally { setPrinting(false) }
-  }
 
   return (
     <div className="space-y-4">
@@ -318,16 +300,10 @@ export default function StudentIdCardPage() {
                 <IdCardPreview student={selected} settings={settings} qrDataUrl={qrDataUrl} photoUrl={photoDataUrl || selected.photo_url} logoUrl={logoDataUrl || '/MAIN LOGO FOR ALL CARDS.png'} />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={handlePrint} disabled={printing}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                  {printing ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} {printing ? 'Preparing…' : 'Print'}
-                </button>
-                <button onClick={handleDownloadPdf} disabled={generating}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
-                  {generating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} {generating ? 'Generating…' : 'Download PDF'}
-                </button>
-              </div>
+              <button onClick={handleDownloadPdf} disabled={generating}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                {generating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} {generating ? 'Generating…' : 'Download PDF'}
+              </button>
             </>
           )}
         </div>
@@ -350,7 +326,7 @@ function IdCardPreview({
   const safePhoto = photoUrl && !photoUrl.startsWith('blob:') ? photoUrl : ''
   return (
     <div className="bg-white mx-auto rounded-xl overflow-hidden shadow-lg"
-      style={{ width: 320, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
+      style={{ width: 320, fontFamily: '"DM Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
       {/* Header — two columns: red (title) + black (logo) */}
       <div className="flex items-stretch bg-black" style={{ height: 86 }}>
         <div className="flex-1 bg-[#B91C1C] px-3 flex flex-col justify-center">

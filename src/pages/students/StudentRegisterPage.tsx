@@ -3,14 +3,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle, Building2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { uploadPublicFile, isBlobUrl, STORAGE_BUCKETS } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
 import { INDIAN_STATES, formatINR, cn } from '../../lib/utils'
-import FormField, { inputClass, selectClass } from '../../components/FormField'
+import FormField, { inputClass } from '../../components/FormField'
 import FileUpload from '../../components/FileUpload'
 import Modal from '../../components/Modal'
+import Select from '../../components/Select'
 import type { Course, Batch, Branch } from '../../types'
 
 const STEPS = [
@@ -34,7 +35,7 @@ const schema = z.object({
   mother_name: z.string().optional(),
   dob: z.string().optional(),
   gender: z.string().optional(),
-  aadhar_number: z.string().regex(/^(\d{12})?$/, 'Must be 12 digits').optional().or(z.literal('')),
+  aadhar_number: z.string().regex(/^(\d{12})?$/, 'Aadhaar must be exactly 12 digits (or leave blank)').optional().or(z.literal('')),
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Valid 10-digit mobile required'),
   alt_phone: z.string().regex(/^([6-9]\d{9})?$/, 'Valid 10-digit mobile').optional().or(z.literal('')),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
@@ -81,8 +82,22 @@ export default function StudentRegisterPage() {
 
   const [walletError, setWalletError] = useState(false)
 
+  const currentAcademicYear = (() => {
+    const cy = new Date().getFullYear()
+    return `${cy}-${cy + 1}`
+  })()
+  const currentSession = (() => {
+    const cy = new Date().getFullYear()
+    return `${cy}-${String((cy + 1) % 100).padStart(2, '0')}`
+  })()
+
   const { register, handleSubmit, watch, reset, trigger, setValue, formState: { errors } } = useForm<FormData>({
-    defaultValues: { state: 'Uttar Pradesh', session: '2025-26', admission_year: '2025-2026', total_fee: 0, discount: 0, registration_fee: 0 },
+    defaultValues: {
+      state: 'Uttar Pradesh',
+      session: currentSession,
+      admission_year: currentAcademicYear,
+      total_fee: 0, discount: 0, registration_fee: 0,
+    },
   })
 
   const courseId = watch('course_id')
@@ -170,21 +185,57 @@ export default function StudentRegisterPage() {
   }
 
   const stepFields: Record<number, (keyof FormData)[]> = {
-    1: ['name', 'father_name'],
-    2: ['phone'],
-    3: ['district', 'state'],
+    // Aadhaar is optional but, when present, must be 12 digits — so validate it here.
+    1: ['name', 'father_name', 'aadhar_number'],
+    2: ['phone', 'alt_phone', 'email'],
+    3: ['district', 'state', 'pincode'],
     4: ['course_id', 'session', 'admission_year'],
+  }
+
+  // Human-readable field names, so toast/error messages can say *where* the problem is.
+  const fieldStepMap: Partial<Record<keyof FormData, { step: number; label: string }>> = {
+    name: { step: 1, label: 'Student Name (Step 1)' },
+    father_name: { step: 1, label: "Father's Name (Step 1)" },
+    aadhar_number: { step: 1, label: 'Aadhar Number (Step 1)' },
+    phone: { step: 2, label: 'Phone Number (Step 2)' },
+    alt_phone: { step: 2, label: 'Alternate Phone (Step 2)' },
+    email: { step: 2, label: 'Email (Step 2)' },
+    district: { step: 3, label: 'District (Step 3)' },
+    state: { step: 3, label: 'State (Step 3)' },
+    pincode: { step: 3, label: 'Pincode (Step 3)' },
+    course_id: { step: 4, label: 'Course (Step 4)' },
+    session: { step: 4, label: 'Session (Step 4)' },
+    admission_year: { step: 4, label: 'Admission Year (Step 4)' },
   }
 
   async function goNext() {
     const fields = stepFields[step]
-    if (fields) { const ok = await trigger(fields); if (!ok) return }
+    if (fields) {
+      const ok = await trigger(fields)
+      if (!ok) {
+        // react-hook-form's `errors` is already populated; surface the first one.
+        const firstErrField = fields.find(f => errors[f])
+        if (firstErrField) {
+          const meta = fieldStepMap[firstErrField]
+          const msg = errors[firstErrField]?.message as string | undefined
+          toast.error(meta ? `${meta.label}: ${msg || 'is invalid'}` : (msg || 'Invalid field'))
+        }
+        return
+      }
+    }
     if (step < 4) setStep(step + 1)
   }
 
   async function onSubmit(form: FormData) {
     const parsed = schema.safeParse(form)
-    if (!parsed.success) { toast.error(parsed.error.issues[0].message); return }
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]
+      const key = issue.path[0] as keyof FormData
+      const meta = fieldStepMap[key]
+      toast.error(meta ? `${meta.label}: ${issue.message}` : issue.message)
+      if (meta) setStep(meta.step)
+      return
+    }
 
     // Resolve branch_id: super_admin picks from dropdown, branch user uses their own
     const effectiveBranchId = isSuperAdmin
@@ -326,8 +377,29 @@ export default function StudentRegisterPage() {
               <FormField label="Date of Birth"><input type="date" {...register('dob')} className={inputClass} /></FormField>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Gender"><select {...register('gender')} className={selectClass}><option value="">Select</option>{GENDERS.map(g => <option key={g} value={g}>{g.charAt(0).toUpperCase() + g.slice(1)}</option>)}</select></FormField>
-              <FormField label="Aadhar Number" error={errors.aadhar_number?.message}><input {...register('aadhar_number')} className={inputClass} placeholder="12-digit Aadhar" maxLength={12} /></FormField>
+              <FormField label="Gender">
+                <Select
+                  value={watch('gender') || ''}
+                  onChange={v => setValue('gender', v, { shouldValidate: true })}
+                  options={GENDERS.map(g => ({ value: g, label: g.charAt(0).toUpperCase() + g.slice(1) }))}
+                  placeholder="Select gender"
+                />
+              </FormField>
+              <FormField label="Aadhar Number" hint="Leave blank if unknown — but if you enter it, it must be all 12 digits." error={errors.aadhar_number?.message}>
+                <input
+                  {...register('aadhar_number')}
+                  inputMode="numeric"
+                  className={inputClass}
+                  placeholder="12-digit Aadhar"
+                  maxLength={12}
+                  onInput={e => {
+                    // Strip non-digits so the regex only needs to enforce length.
+                    const el = e.currentTarget
+                    const cleaned = el.value.replace(/\D/g, '')
+                    if (cleaned !== el.value) el.value = cleaned
+                  }}
+                />
+              </FormField>
             </div>
           </>)}
 
@@ -352,7 +424,15 @@ export default function StudentRegisterPage() {
               <FormField label="District" required error={errors.district?.message}><input {...register('district')} className={inputClass} /></FormField>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="State" required error={errors.state?.message}><select {...register('state')} className={selectClass}><option value="">Select</option>{INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}</select></FormField>
+              <FormField label="State" required error={errors.state?.message}>
+                <Select
+                  value={watch('state') || ''}
+                  onChange={v => setValue('state', v, { shouldValidate: true })}
+                  options={INDIAN_STATES.map(s => ({ value: s, label: s }))}
+                  placeholder="Select state"
+                  error={!!errors.state}
+                />
+              </FormField>
               <FormField label="Pincode" error={errors.pincode?.message}><input {...register('pincode')} className={inputClass} placeholder="6-digit" maxLength={6} /></FormField>
             </div>
           </>)}
@@ -362,14 +442,13 @@ export default function StudentRegisterPage() {
 
             {isSuperAdmin && (
               <FormField label="Branch" required hint="Pick the branch this student belongs to">
-                <div className="relative">
-                  <Building2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10" />
-                  <select value={selectedBranchId} onChange={e => setSelectedBranchId(e.target.value)}
-                    className={`${selectClass} pl-9`} disabled={branchesList.length === 0}>
-                    <option value="">{branchesList.length === 0 ? 'No branches available' : 'Select branch'}</option>
-                    {branchesList.map(b => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
-                  </select>
-                </div>
+                <Select
+                  value={selectedBranchId}
+                  onChange={v => setSelectedBranchId(v)}
+                  options={branchesList.map(b => ({ value: b.id, label: `${b.name} (${b.code})` }))}
+                  placeholder={branchesList.length === 0 ? 'No branches available' : 'Select branch'}
+                  disabled={branchesList.length === 0}
+                />
                 {branchesList.length === 0 && (
                   <p className="mt-1 text-xs text-amber-600">No active branches found. Create a branch first, then come back here.</p>
                 )}
@@ -378,15 +457,35 @@ export default function StudentRegisterPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Course" required error={errors.course_id?.message}>
-                <select {...register('course_id')} className={selectClass}><option value="">Select course</option>{courses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}</select>
+                <Select
+                  value={watch('course_id') || ''}
+                  onChange={v => setValue('course_id', v, { shouldValidate: true })}
+                  options={courses.map(c => ({ value: c.id, label: `${c.name} (${c.code})` }))}
+                  placeholder="Select course"
+                  error={!!errors.course_id}
+                />
               </FormField>
               <FormField label="Batch">
-                <select {...register('batch_id')} className={selectClass}><option value="">Select batch</option>{batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+                <Select
+                  value={watch('batch_id') || ''}
+                  onChange={v => setValue('batch_id', v, { shouldValidate: true })}
+                  options={batches.map(b => ({ value: b.id, label: b.name }))}
+                  placeholder={batches.length === 0 ? 'No batches for this course' : 'Select batch'}
+                  disabled={batches.length === 0}
+                />
               </FormField>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Session" required><input {...register('session')} className={inputClass} placeholder="2025-26" /></FormField>
-              <FormField label="Admission Year" required><select {...register('admission_year')} className={selectClass}>{ADMISSION_YEARS.map(y => <option key={y} value={y}>{y}</option>)}</select></FormField>
+              <FormField label="Session" required><input {...register('session')} className={inputClass} placeholder={currentSession} /></FormField>
+              <FormField label="Admission Year" required error={errors.admission_year?.message}>
+                <Select
+                  value={watch('admission_year') || ''}
+                  onChange={v => setValue('admission_year', v, { shouldValidate: true })}
+                  options={ADMISSION_YEARS.map(y => ({ value: y, label: y }))}
+                  placeholder="Select year"
+                  error={!!errors.admission_year}
+                />
+              </FormField>
             </div>
 
             {/* Fee breakdown */}
