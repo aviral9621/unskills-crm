@@ -21,7 +21,12 @@ const STEPS = [
 ] as const
 
 const GENDERS = ['male', 'female', 'other'] as const
-const ADMISSION_YEARS = Array.from({ length: 17 }, (_, i) => { const y = 2010 + i; return `${y}-${y + 1}` })
+// Admission years: current session + next 2 upcoming sessions only.
+// Past years are not shown — no student registers with a historical admission year.
+const ADMISSION_YEARS = (() => {
+  const cy = new Date().getFullYear()
+  return [0, 1, 2].map(i => `${cy + i}-${cy + i + 1}`)
+})()
 
 const schema = z.object({
   name: z.string().min(2, 'Student name required'),
@@ -192,8 +197,10 @@ export default function StudentRegisterPage() {
       return
     }
 
-    // Wallet check (only when we have a branch and cert fee applies, on create)
-    if (!isEdit && branch && certFee > 0) {
+    // Wallet check (only when we have a branch and cert fee applies, on create).
+    // Super admins bypass the wallet — UnSkills (UCE-BR-001) is the main owner
+    // branch, not a franchise, so the owner company shouldn't be charged.
+    if (!isEdit && branch && certFee > 0 && !isSuperAdmin) {
       if ((branch.wallet_balance || 0) < certFee) {
         setWalletError(true); return
       }
@@ -237,8 +244,8 @@ export default function StudentRegisterPage() {
         const { data: newStudent, error } = await supabase.from('uce_students').insert({ ...payload, is_active: true }).select().single()
         if (error) { if (error.message?.includes('duplicate')) toast.error('Registration number already exists'); else throw error; return }
 
-        // Wallet deduction
-        if (branch && certFee > 0 && newStudent) {
+        // Wallet deduction — skip for super_admin (owner company is not billed)
+        if (branch && certFee > 0 && newStudent && !isSuperAdmin) {
           const newBal = (branch.wallet_balance || 0) - certFee
           await supabase.from('uce_branches').update({ wallet_balance: newBal }).eq('id', branch.id)
           await supabase.from('uce_branch_wallet_transactions').insert({
@@ -395,7 +402,7 @@ export default function StudentRegisterPage() {
               <FormField label="Registration Fee (₹)" hint="First payment now">
                 <div className="relative"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span><input type="number" {...register('registration_fee')} className={`${inputClass} pl-8`} min={0} /></div>
               </FormField>
-              {!isEdit && certFee > 0 && (
+              {!isEdit && certFee > 0 && !isSuperAdmin && (
                 <div className={`rounded-lg p-3 border ${(branch?.wallet_balance || 0) >= certFee ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-600">Certification Fee:</span>
@@ -405,6 +412,11 @@ export default function StudentRegisterPage() {
                     <span className="text-xs text-gray-600">Branch Wallet:</span>
                     <span className={`text-sm font-bold ${(branch?.wallet_balance || 0) >= certFee ? 'text-green-600' : 'text-red-600'}`}>{formatINR(branch?.wallet_balance || 0)}</span>
                   </div>
+                </div>
+              )}
+              {!isEdit && certFee > 0 && isSuperAdmin && (
+                <div className="rounded-lg p-3 border bg-blue-50 border-blue-200 text-xs text-blue-800">
+                  Super admin — certification fee (<b>{formatINR(certFee)}</b>) is not billed to the branch wallet.
                 </div>
               )}
             </div>
