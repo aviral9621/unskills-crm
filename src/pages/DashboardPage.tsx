@@ -404,27 +404,33 @@ export default function DashboardPage() {
 
   async function fetchMonthlyData() {
     const now = new Date()
-    const months: MonthlyDataPoint[] = []
-
-    for (let i = 5; i >= 0; i--) {
+    // Build the 6 month ranges first, then fire ALL queries in parallel —
+    // previously this looped sequentially (6 × ~220ms = ~1.3s dashboard lag).
+    const ranges = Array.from({ length: 6 }, (_, idx) => {
+      const i = 5 - idx
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const start = d.toISOString()
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString()
-      const monthName = d.toLocaleString('en-IN', { month: 'short' })
+      return {
+        name: d.toLocaleString('en-IN', { month: 'short' }),
+        start: d.toISOString(),
+        end: new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString(),
+      }
+    })
 
-      const [payRes, expRes, admRes] = await Promise.all([
-        supabase.from('uce_student_fee_payments').select('amount').gte('created_at', start).lte('created_at', end),
-        supabase.from('uce_expenses').select('amount').gte('created_at', start).lte('created_at', end),
-        supabase.from('uce_students').select('id', { count: 'exact', head: true }).gte('created_at', start).lte('created_at', end),
-      ])
+    const results = await Promise.all(ranges.map(r => Promise.all([
+      supabase.from('uce_student_fee_payments').select('amount').gte('created_at', r.start).lte('created_at', r.end),
+      supabase.from('uce_expenses').select('amount').gte('created_at', r.start).lte('created_at', r.end),
+      supabase.from('uce_students').select('id', { count: 'exact', head: true }).gte('created_at', r.start).lte('created_at', r.end),
+    ])))
 
-      months.push({
-        name: monthName,
+    const months: MonthlyDataPoint[] = ranges.map((r, idx) => {
+      const [payRes, expRes, admRes] = results[idx]
+      return {
+        name: r.name,
         revenue: (payRes.data ?? []).reduce((s, p) => s + (p.amount || 0), 0),
         expenses: (expRes.data ?? []).reduce((s, e) => s + (e.amount || 0), 0),
         admissions: admRes.count ?? 0,
-      })
-    }
+      }
+    })
     setMonthlyData(months)
   }
 

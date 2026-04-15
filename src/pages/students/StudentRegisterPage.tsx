@@ -446,10 +446,10 @@ export default function StudentRegisterPage() {
                   value={selectedBranchId}
                   onChange={v => setSelectedBranchId(v)}
                   options={branchesList.map(b => ({ value: b.id, label: `${b.name} (${b.code})` }))}
-                  placeholder={branchesList.length === 0 ? 'No branches available' : 'Select branch'}
-                  disabled={branchesList.length === 0}
+                  placeholder={loading ? 'Loading branches…' : branchesList.length === 0 ? 'No branches available' : 'Select branch'}
+                  disabled={loading || branchesList.length === 0}
                 />
-                {branchesList.length === 0 && (
+                {!loading && branchesList.length === 0 && (
                   <p className="mt-1 text-xs text-amber-600">No active branches found. Create a branch first, then come back here.</p>
                 )}
               </FormField>

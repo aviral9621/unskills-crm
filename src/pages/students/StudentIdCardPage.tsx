@@ -103,29 +103,23 @@ export default function StudentIdCardPage() {
     setSearchParams({ student: s.id }, { replace: true })
   }
 
-  /** Build the ID-card PDF blob. Single page, DM Sans. */
+  /** Build the ID-card PDF blob. Single page, Helvetica (built-in, no Buffer polyfill needed). */
   async function buildPdfBlob(): Promise<Blob | null> {
     if (!selected || !settings) return null
-    const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet, Font } = await import('@react-pdf/renderer')
+    const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
 
-    // Register DM Sans once (idempotent — re-calls are no-ops).
-    try {
-      Font.register({
-        family: 'DM Sans',
-        fonts: [
-          { src: 'https://fonts.gstatic.com/s/dmsans/v15/rP2Hp2ywxg089UriCZ2IHTWEBlwu8Q.ttf' },
-          { src: 'https://fonts.gstatic.com/s/dmsans/v15/rP2Cp2ywxg089UriCZaw-zUKjh0BkYE.ttf', fontWeight: 'bold' },
-        ],
-      })
-    } catch { /* already registered */ }
-
-    // Portrait card: 240x380 pt. We force single-page output with wrap={false}.
+    // Portrait card: 240x380 pt. Single-page output guaranteed via wrap={false}.
+    // We use Helvetica (react-pdf built-in). Registering an external TTF font
+    // (DM Sans) triggers a pdfkit code path that needs a browser Buffer
+    // polyfill — without it the PDF fails with "Buffer is not defined". If
+    // you ever need a custom font, add the `buffer` npm package and
+    // polyfill globalThis.Buffer in main.tsx first.
     const W = 240, H = 380
 
     const course = (selected.course as { name: string } | null)?.name || '—'
 
     const s = StyleSheet.create({
-      page:        { width: W, height: H, fontFamily: 'DM Sans', backgroundColor: '#FFFFFF' },
+      page:        { width: W, height: H, fontFamily: 'Helvetica', backgroundColor: '#FFFFFF' },
 
       header:      { height: 62, backgroundColor: '#111111', flexDirection: 'row', alignItems: 'stretch' },
       headerRed:   { flex: 1, backgroundColor: '#B91C1C', padding: 6, justifyContent: 'center' },
