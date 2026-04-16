@@ -139,6 +139,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       })
   }, [profile?.id, profile?.role])
 
+  // Admins (super_admin / branch_admin) see everything — no need to wait on perms query
+  const showFullMenu = profile && !isStaff
+  // Staff must wait for perms query to know what they can access
+  const showStaffMenu = profile && isStaff && permsLoaded
+
   // Check if staff user has any permission matching a prefix
   function hasAccess(permissionPrefix?: string): boolean {
     if (!isStaff) return true // super_admin & branch_admin see everything
@@ -174,8 +179,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     return item.children?.some(c => isActive(c.path)) ?? false
   }
 
-  // Don't render menu until permissions are loaded (prevents flash)
-  if (!permsLoaded) return null
+  // Render the sidebar shell immediately (logo + footer + section headers).
+  // Menu items are gated below based on role/perms.
+  const renderMenu = showFullMenu || showStaffMenu
 
   return (
     <>
@@ -210,7 +216,15 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
         {/* Menu */}
         <nav className="flex-1 overflow-y-auto py-2 px-4">
-          {MENU_SECTIONS.map((section, sIdx) => {
+          {!renderMenu && (
+            // Skeleton placeholders while profile / perms load
+            <div className="space-y-2 p-2">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <div key={i} className="skeleton h-9 rounded-lg" />
+              ))}
+            </div>
+          )}
+          {renderMenu && MENU_SECTIONS.map((section, sIdx) => {
             // Filter items this user can access
             const visibleItems = section.items.filter(item => hasAccess(item.permission))
             if (visibleItems.length === 0) return null

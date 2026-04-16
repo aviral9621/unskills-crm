@@ -18,24 +18,48 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-// Profile cache — avoids refetch on every auth event
+// Profile cache — avoids refetch on every auth event.
+// Persisted to localStorage so page refreshes render sidebar/menus instantly.
+const PROFILE_CACHE_KEY = 'uce_profile_cache'
+
 let profileCache: { id: string; data: Profile | null } | null = null
 
-async function fetchProfileWithTimeout(userId: string): Promise<Profile | null> {
-  if (profileCache?.id === userId) return profileCache.data
+// Hydrate in-memory cache from localStorage on module load
+try {
+  const raw = localStorage.getItem(PROFILE_CACHE_KEY)
+  if (raw) {
+    const parsed = JSON.parse(raw) as { id: string; data: Profile | null }
+    if (parsed?.id) profileCache = parsed
+  }
+} catch { /* ignore malformed cache */ }
 
+function setProfileCache(cache: { id: string; data: Profile | null } | null) {
+  profileCache = cache
+  try {
+    if (cache) localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cache))
+    else localStorage.removeItem(PROFILE_CACHE_KEY)
+  } catch { /* quota/serialization — ignore */ }
+}
+
+function getCachedProfile(userId: string): Profile | null {
+  if (profileCache?.id === userId) return profileCache.data
+  return null
+}
+
+async function fetchProfileWithTimeout(userId: string): Promise<Profile | null> {
   try {
     const result = await Promise.race([
       supabase.from('uce_profiles').select('*').eq('id', userId).single(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
     ])
 
     if (result.error) return null
     const profile = result.data as Profile
-    profileCache = { id: userId, data: profile }
+    setProfileCache({ id: userId, data: profile })
     return profile
   } catch {
-    return null
+    // On timeout/network error, keep returning whatever we have cached (if any)
+    return getCachedProfile(userId)
   }
 }
 
@@ -56,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (!state.user) return
-    profileCache = null
+    setProfileCache(null)
     const profile = await fetchProfileWithTimeout(state.user.id)
     setState(prev => ({ ...prev, profile }))
   }, [state.user])
@@ -71,15 +95,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (session) {
         hadSession.current = true
-        // Show the page instantly with session — profile loads in background
-        setState(prev => ({
+        // Hydrate with cached profile immediately (stale-while-revalidate).
+        // This is what makes sidebar render instantly on refresh — the cached
+        // profile is enough for role-based menu rendering.
+        const cached = getCachedProfile(session.user.id)
+        setState({
           session,
           user: session.user,
-          profile: prev.profile,
+          profile: cached,
           loading: false,
-        }))
+        })
+        // Revalidate in background — updates state only if it changed
         const profile = await fetchProfileWithTimeout(session.user.id)
-        if (mounted) {
+        if (mounted && profile) {
           setState(prev => ({ ...prev, profile }))
         }
       } else {
@@ -100,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Ignore transient null sessions from token refresh failures —
           // Supabase SDK will auto-retry, and we don't want a login flash.
           if (explicitSignOut.current) {
-            profileCache = null
+            setProfileCache(null)
             hadSession.current = false
             setState({ session: null, user: null, profile: null, loading: false })
           }
@@ -111,17 +139,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         hadSession.current = true
         explicitSignOut.current = false
 
-        // Set session immediately — keep existing profile to avoid flash
+        // Set session immediately — keep existing profile (or hydrate from cache)
+        const cached = getCachedProfile(session.user.id)
         setState(prev => ({
           session,
           user: session.user,
-          profile: prev.profile,
+          profile: prev.profile ?? cached,
           loading: false,
         }))
 
         // Fetch profile in background (cached = instant)
         const profile = await fetchProfileWithTimeout(session.user.id)
-        if (mounted) {
+        if (mounted && profile) {
           setState(prev => ({ ...prev, session, user: session.user, profile }))
         }
       }
@@ -141,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    profileCache = null
+    setProfileCache(null)
     explicitSignOut.current = true
     hadSession.current = false
     setState({ session: null, user: null, profile: null, loading: false })

@@ -98,17 +98,15 @@ export default function UserFormPage() {
           },
         })
         if (fnError) {
-          // Try to extract the error message from the response
+          // In supabase-js v2, FunctionsHttpError carries the Response in `.context`.
           let msg = 'Failed to create user'
           try {
-            const errBody = typeof fnError === 'object' && 'context' in fnError
-              ? fnError.context
-              : null
-            if (errBody?.body) {
-              const parsed = JSON.parse(await new Response(errBody.body).text())
+            const ctx = (fnError as { context?: Response }).context
+            if (ctx && typeof ctx.json === 'function') {
+              const parsed = await ctx.json()
               if (parsed?.error) msg = parsed.error
             }
-          } catch { /* use default msg */ }
+          } catch { /* keep default msg */ }
           toast.error(msg)
           return
         }
