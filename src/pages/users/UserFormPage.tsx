@@ -98,7 +98,18 @@ export default function UserFormPage() {
           },
         })
         if (fnError) {
-          toast.error('Failed to create user')
+          // Try to extract the error message from the response
+          let msg = 'Failed to create user'
+          try {
+            const errBody = typeof fnError === 'object' && 'context' in fnError
+              ? fnError.context
+              : null
+            if (errBody?.body) {
+              const parsed = JSON.parse(await new Response(errBody.body).text())
+              if (parsed?.error) msg = parsed.error
+            }
+          } catch { /* use default msg */ }
+          toast.error(msg)
           return
         }
         if (data?.error) {

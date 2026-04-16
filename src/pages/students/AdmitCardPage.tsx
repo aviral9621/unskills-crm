@@ -36,11 +36,35 @@ export default function AdmitCardPage() {
     if (!query.trim()) return
     setLoading(true); setStudent(null); setSubjects([])
     try {
-      let q = supabase.from('uce_students').select('id, registration_no, name, father_name, dob, gender, photo_url, address, district, state, course_id, session, enrollment_date, course:uce_courses(name, code), branch:uce_branches(name, address_line1, district, state, pincode, director_phone)')
-      if (query.includes('-') || query.length > 10) q = q.eq('id', query)
-      else q = q.ilike('registration_no', `%${query}%`)
-      const { data, error } = await q.limit(1).single()
-      if (error || !data) { toast.error('Student not found'); return }
+      const selectFields = 'id, registration_no, name, father_name, dob, gender, photo_url, address, district, state, course_id, session, enrollment_date, course:uce_courses(name, code), branch:uce_branches(name, address_line1, district, state, pincode, director_phone)'
+      const trimmed = query.trim()
+
+      // Try UUID match first
+      let data: Record<string, unknown> | null = null
+      if (trimmed.includes('-') && trimmed.length > 20) {
+        const { data: d } = await supabase.from('uce_students').select(selectFields).eq('id', trimmed).limit(1).maybeSingle()
+        data = d
+      }
+
+      // Try exact registration_no match
+      if (!data) {
+        const { data: d } = await supabase.from('uce_students').select(selectFields).ilike('registration_no', trimmed).limit(1).maybeSingle()
+        data = d
+      }
+
+      // Try partial registration_no match
+      if (!data) {
+        const { data: d } = await supabase.from('uce_students').select(selectFields).ilike('registration_no', `%${trimmed}%`).limit(1).maybeSingle()
+        data = d
+      }
+
+      // Try name search as last resort
+      if (!data) {
+        const { data: d } = await supabase.from('uce_students').select(selectFields).ilike('name', `%${trimmed}%`).limit(1).maybeSingle()
+        data = d
+      }
+
+      if (!data) { toast.error('Student not found. Try registration number or name.'); return }
       const s = data as unknown as StudentData
       setStudent(s)
 
@@ -181,9 +205,9 @@ export default function AdmitCardPage() {
       <div><h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Admit Card</h1><p className="text-xs sm:text-sm text-gray-500 mt-0.5">Generate exam admit cards</p></div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6">
-        <FormField label="Search Student" hint="Enter registration number">
+        <FormField label="Search Student" hint="Search by registration number or name">
           <div className="flex gap-2">
-            <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} className={`${inputClass} flex-1`} placeholder="e.g., UCE/0001" />
+            <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} className={`${inputClass} flex-1`} placeholder="e.g., UCE/0001 or student name" />
             <button onClick={handleSearch} disabled={loading} className="px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 shrink-0 flex items-center gap-1.5">
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />} Search
             </button>

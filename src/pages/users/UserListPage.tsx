@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
   Users, Plus, Search, MoreVertical, Pencil, ShieldCheck,
-  Power, X, Mail, Phone, Building2, ChevronRight,
+  Power, X, Mail, Phone, Building2, ChevronRight, Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -45,6 +45,8 @@ export default function UserListPage() {
   const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const [toggleTarget, setToggleTarget] = useState<UserWithBranch | null>(null)
   const [toggling, setToggling] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<UserWithBranch | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { fetchUsers() }, [])
   useEffect(() => {
@@ -88,6 +90,21 @@ export default function UserListPage() {
       setUsers(p => p.map(u => u.id === toggleTarget.id ? { ...u, is_active: ns } : u))
     } catch { toast.error('Failed to update user status') }
     finally { setToggling(false); setToggleTarget(null) }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('admin-delete-user', {
+        body: { user_id: deleteTarget.id },
+      })
+      if (fnError) throw fnError
+      if (data?.error) { toast.error(data.error); return }
+      toast.success(`User "${deleteTarget.full_name}" has been deleted`)
+      setUsers(p => p.filter(u => u.id !== deleteTarget.id))
+    } catch { toast.error('Failed to delete user') }
+    finally { setDeleting(false); setDeleteTarget(null) }
   }
 
   const filteredData = useMemo(() => {
@@ -220,6 +237,11 @@ export default function UserListPage() {
             <button onClick={() => { setMenuOpen(null); setToggleTarget(menuUser) }}
               className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium ${menuUser.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}>
               <Power size={16} /> {menuUser.is_active ? 'Deactivate' : 'Activate'}</button>
+            {isSuperAdmin && (
+              <button onClick={() => { setMenuOpen(null); setDeleteTarget(menuUser) }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 active:bg-red-100">
+                <Trash2 size={16} /> Delete User</button>
+            )}
           </div>
         </div>
         <div className="hidden md:block fixed z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, left: menuPos.left }}>
@@ -229,6 +251,11 @@ export default function UserListPage() {
           <button onClick={() => { setMenuOpen(null); setToggleTarget(menuUser) }}
             className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm ${menuUser.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}>
             <Power size={14} /> {menuUser.is_active ? 'Deactivate' : 'Activate'}</button>
+          {isSuperAdmin && (
+            <button onClick={() => { setMenuOpen(null); setDeleteTarget(menuUser) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-600 hover:bg-red-50">
+              <Trash2 size={14} /> Delete User</button>
+          )}
         </div>
       </>)}
 
@@ -236,6 +263,11 @@ export default function UserListPage() {
         title={toggleTarget?.is_active ? 'Deactivate User?' : 'Activate User?'}
         message={toggleTarget?.is_active ? `"${toggleTarget?.full_name}" will lose CRM access.` : `"${toggleTarget?.full_name}" will regain access.`}
         confirmText={toggleTarget?.is_active ? 'Deactivate' : 'Activate'} variant={toggleTarget?.is_active ? 'danger' : 'info'} loading={toggling} />
+
+      <ConfirmDialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete}
+        title="Delete User Permanently?"
+        message={`"${deleteTarget?.full_name}" will be permanently deleted along with their auth account and all permissions. This cannot be undone.`}
+        confirmText="Delete Permanently" variant="danger" loading={deleting} />
     </div>
   )
 }

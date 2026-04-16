@@ -63,9 +63,15 @@ export default function BatchPage() {
   async function handleSave() {
     if (!bName.trim()) { toast.error('Batch name is required'); return }
     if (!selectedCourse) { toast.error('Select a course first'); return }
+    if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
+      toast.error('End date must be after start date'); return
+    }
+    if (maxStudents && parseInt(maxStudents) < 1) {
+      toast.error('Max students must be at least 1'); return
+    }
     setSaving(true)
     try {
-      const payload = { course_id: selectedCourse, name: bName, start_date: startDate || null, end_date: endDate || null, max_students: maxStudents ? parseInt(maxStudents) : null }
+      const payload = { course_id: selectedCourse, name: bName.trim(), start_date: startDate || null, end_date: endDate || null, max_students: maxStudents ? parseInt(maxStudents) : null }
       if (editing) {
         const { error } = await supabase.from('uce_batches').update(payload).eq('id', editing.id)
         if (error) throw error; toast.success('Batch updated')
