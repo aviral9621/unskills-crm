@@ -35,6 +35,7 @@ export interface BuildAdmitCardInput {
   schedule: AdmitCardSchedule[]
   settings: AdmitCardSettings
   logoDataUrl: string
+  isoLogoDataUrl: string
   photoDataUrl: string
 }
 
@@ -97,7 +98,7 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
   await registerFonts()
   const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
 
-  const { student, center, settings, logoDataUrl, photoDataUrl } = input
+  const { student, center, settings, logoDataUrl, isoLogoDataUrl, photoDataUrl } = input
 
   // Sort schedule by date ascending, nulls last
   const schedule = [...input.schedule].sort((a, b) => {
@@ -142,12 +143,7 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
     subtitleText: { fontSize: 9, color: BLACK, fontWeight: 400 },
     certLine:  { fontSize: 8, color: MUTED, marginTop: 4, textAlign: 'center', lineHeight: 1.4 },
     isoCol:    { width: 80, alignItems: 'center', justifyContent: 'center' },
-    isoBox: {
-      borderWidth: 1.5, borderColor: '#1A6AB8', borderRadius: 4,
-      paddingVertical: 4, paddingHorizontal: 6, alignItems: 'center',
-    },
-    isoLetters: { fontSize: 18, fontWeight: 700, color: '#1A6AB8', letterSpacing: 1 },
-    isoSubText: { fontSize: 7, color: '#1A6AB8', textAlign: 'center', lineHeight: 1.3 },
+    isoImg:    { width: 72, height: 72, objectFit: 'contain' },
 
     // Bottom strip of header
     stripWrap: {
@@ -221,10 +217,9 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
             {settings.header_tagline ? <Text style={s.certLine}>{settings.header_tagline}</Text> : null}
           </View>
           <View style={s.isoCol}>
-            <View style={s.isoBox}>
-              <Text style={s.isoLetters}>ISO</Text>
-              <Text style={s.isoSubText}>{settings.iso_line}</Text>
-            </View>
+            {isoLogoDataUrl
+              ? <PdfImage src={isoLogoDataUrl} style={s.isoImg} />
+              : <Text style={{ fontSize: 8, color: '#1A6AB8', textAlign: 'center' }}>{settings.iso_line}</Text>}
           </View>
         </View>
 
