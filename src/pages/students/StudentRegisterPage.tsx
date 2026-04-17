@@ -181,7 +181,11 @@ export default function StudentRegisterPage() {
     const { data } = await supabase.from('uce_batches').select('*').eq('course_id', cid).eq('is_active', true).order('name')
     setBatches(data ?? [])
     const c = courses.find(x => x.id === cid)
-    if (c) { setValue('total_fee', c.total_fee); setCertFee(c.certification_fee) }
+    if (c) {
+      // Only pre-fill fee when creating — don't overwrite the student's existing fee on edit
+      if (!isEdit) setValue('total_fee', c.total_fee)
+      setCertFee(c.certification_fee)
+    }
   }
 
   const stepFields: Record<number, (keyof FormData)[]> = {
@@ -227,6 +231,7 @@ export default function StudentRegisterPage() {
   }
 
   async function onSubmit(form: FormData) {
+    if (step !== 4) return  // guard: never save unless user is on the final step
     const parsed = schema.safeParse(form)
     if (!parsed.success) {
       const issue = parsed.error.issues[0]
@@ -533,7 +538,12 @@ export default function StudentRegisterPage() {
               Next <ArrowRight size={16} />
             </button>
           ) : (
-            <button type="submit" disabled={saving} className="px-4 sm:px-6 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 flex items-center gap-2 shadow-sm">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => handleSubmit(onSubmit)()}
+              className="px-4 sm:px-6 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 flex items-center gap-2 shadow-sm"
+            >
               {saving && <Loader2 size={16} className="animate-spin" />}{saving ? 'Saving...' : isEdit ? 'Update' : 'Register'}
             </button>
           )}
