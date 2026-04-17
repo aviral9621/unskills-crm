@@ -53,28 +53,22 @@ let fontsRegistered = false
 async function registerFonts() {
   if (fontsRegistered) return
   const { Font } = await import('@react-pdf/renderer')
-  try {
-    // DM Sans — English body font. Google Fonts TTF endpoints.
-    Font.register({
-      family: 'DMSans',
-      fonts: [
-        { src: 'https://fonts.gstatic.com/s/dmsans/v15/rP2Hp2ywxg089UriCZaIGDWCBl0O8Q.ttf', fontWeight: 400 },
-        { src: 'https://fonts.gstatic.com/s/dmsans/v15/rP2Cp2ywxg089UriAWCrCBamC2QX.ttf',   fontWeight: 700 },
-      ],
-    })
-    // Noto Sans Devanagari — Hindi instructions.
-    Font.register({
-      family: 'NotoDevanagari',
-      fonts: [
-        { src: 'https://fonts.gstatic.com/s/notosansdevanagari/v26/TuGoUUFzXI5FBtUq5a8bjKYTZjtRU6Sgv3NaV_SNmI0b8QQCQmHn6B2OHjbL_08AlXQly-AzoFoW4Ow.ttf', fontWeight: 400 },
-        { src: 'https://fonts.gstatic.com/s/notosansdevanagari/v26/TuGoUUFzXI5FBtUq5a8bjKYTZjtRU6Sgv3NaV_SNmI0b8QQCQmHn6B2OHjbL_08AlXQly-AzodoV4Ow.ttf', fontWeight: 700 },
-      ],
-    })
-    fontsRegistered = true
-  } catch {
-    // If CDN is unreachable, @react-pdf falls back to Helvetica.
-    fontsRegistered = true
-  }
+  // Fonts are served from /public/fonts — same origin, always available.
+  Font.register({
+    family: 'DMSans',
+    fonts: [
+      { src: '/fonts/dm-sans-400.woff', fontWeight: 400 },
+      { src: '/fonts/dm-sans-700.woff', fontWeight: 700 },
+    ],
+  })
+  Font.register({
+    family: 'NotoDevanagari',
+    fonts: [
+      { src: '/fonts/noto-devanagari-400.woff', fontWeight: 400 },
+      { src: '/fonts/noto-devanagari-700.woff', fontWeight: 700 },
+    ],
+  })
+  fontsRegistered = true
 }
 
 /** Convert a same-origin or Supabase-public URL to a data URL for @react-pdf. */
