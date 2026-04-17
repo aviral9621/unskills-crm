@@ -1,18 +1,9 @@
-// Admit-card PDF generator.
-// Renders an A4 admit card matching the reference design:
-// red accent bars, logo+company heading, student details table with photo,
-// exam schedule table, bilingual instructions, signature line, red footer.
-//
-// Custom fonts (DM Sans for English, Noto Sans Devanagari for Hindi) are
-// registered on first call. This requires globalThis.Buffer to be polyfilled
-// (done in main.tsx).
-
 import type { AdmitCardSettings } from '../admitCardSettings'
 
 export interface AdmitCardSchedule {
   subject_id: string
   subject_name: string
-  date: string          // YYYY-MM-DD
+  date: string           // YYYY-MM-DD
   reporting_time: string // HH:MM
   exam_time: string      // HH:MM
   end_time?: string | null
@@ -43,17 +34,15 @@ export interface BuildAdmitCardInput {
   center: AdmitCardExamCenter
   schedule: AdmitCardSchedule[]
   settings: AdmitCardSettings
-  logoDataUrl: string       // '/MAIN LOGO FOR ALL CARDS.png' converted to data-url
-  photoDataUrl: string      // student photo converted to data-url (or empty)
+  logoDataUrl: string
+  photoDataUrl: string
 }
 
-// Registered flag so Font.register runs only once per browser session.
 let fontsRegistered = false
 
 async function registerFonts() {
   if (fontsRegistered) return
   const { Font } = await import('@react-pdf/renderer')
-  // Fonts are served from /public/fonts — same origin, always available.
   Font.register({
     family: 'DMSans',
     fonts: [
@@ -71,7 +60,6 @@ async function registerFonts() {
   fontsRegistered = true
 }
 
-/** Convert a same-origin or Supabase-public URL to a data URL for @react-pdf. */
 export async function toDataUrl(url: string): Promise<string> {
   const res = await fetch(url, { mode: 'cors' })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -84,16 +72,17 @@ export async function toDataUrl(url: string): Promise<string> {
   })
 }
 
-/** Format YYYY-MM-DD to "DD MMM YYYY" (e.g. "20 Nov 2023"). */
+/** Format YYYY-MM-DD → "26 May, 26" (DD Mon, YY) */
 function fmtDate(iso: string | null): string {
   if (!iso) return '—'
-  const d = new Date(iso)
+  const d = new Date(iso + 'T00:00:00')
   if (isNaN(d.getTime())) return iso
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]} ${d.getFullYear()}`
+  const yy = String(d.getFullYear()).slice(2)
+  return `${String(d.getDate()).padStart(2,'0')} ${months[d.getMonth()]}, ${yy}`
 }
 
-/** Format HH:MM[:SS] to "HH:MM AM/PM". */
+/** Format HH:MM[:SS] → "HH:MM AM/PM" */
 function fmtTime(t: string | null | undefined): string {
   if (!t) return '—'
   const [hStr, m = '00'] = t.split(':')
@@ -108,13 +97,24 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
   await registerFonts()
   const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
 
-  const { student, center, schedule, settings, logoDataUrl, photoDataUrl } = input
+  const { student, center, settings, logoDataUrl, photoDataUrl } = input
+
+  // Sort schedule by date ascending, nulls last
+  const schedule = [...input.schedule].sort((a, b) => {
+    if (!a.date && !b.date) return 0
+    if (!a.date) return 1
+    if (!b.date) return -1
+    return a.date.localeCompare(b.date)
+  })
 
   const RED = '#C8102E'
+  const DARK = '#1A1A2E'
   const BLACK = '#111111'
   const BORDER = '#D1D5DB'
   const MUTED = '#6B7280'
   const BG_ROW = '#F9FAFB'
+  const TEAL = '#0D6B5E'
+  const GOLD = '#B8962E'
 
   const s = StyleSheet.create({
     page: {
@@ -122,82 +122,118 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
       fontFamily: 'DMSans', fontSize: 10, color: BLACK, backgroundColor: '#FFFFFF',
     },
 
-    topBarRed:    { height: 10, backgroundColor: RED },
-    topBarWhite:  { height: 3,  backgroundColor: '#FFFFFF' },
-    topBarRed2:   { height: 3,  backgroundColor: RED },
+    // Top decorative bars (tricolor-inspired)
+    topBarGreen:  { height: 5, backgroundColor: TEAL },
+    topBarGold:   { height: 2, backgroundColor: GOLD },
+    topBarWhite:  { height: 2, backgroundColor: '#FFFFFF' },
+    topBarRed:    { height: 2, backgroundColor: RED },
 
+    // Main header row
     headerWrap: {
-      flexDirection: 'row', alignItems: 'center', padding: 14,
-      borderBottomWidth: 1, borderBottomColor: BORDER,
+      flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10,
+      borderBottomWidth: 0,
     },
-    logoCol: { width: 76, alignItems: 'center', justifyContent: 'center' },
-    logo:    { width: 60, height: 60, objectFit: 'contain' },
+    logoCol:   { width: 72, alignItems: 'center', justifyContent: 'center' },
+    logo:      { width: 58, height: 58, objectFit: 'contain' },
     middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
-    brand:    { fontSize: 22, fontWeight: 700, color: BLACK, letterSpacing: 0.5 },
-    subtitle: { fontSize: 10, color: BLACK, marginTop: 2, fontWeight: 700 },
-    tagline:  { fontSize: 7, color: MUTED, marginTop: 3, textAlign: 'center', lineHeight: 1.3 },
-    isoCol:   { width: 96, alignItems: 'center' },
-    isoText:  { fontSize: 9, color: BLACK, textAlign: 'center', fontWeight: 400, lineHeight: 1.3 },
+    brand:     { fontSize: 20, fontWeight: 700, color: DARK, letterSpacing: 0.5, textAlign: 'center' },
+    subtitleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3, gap: 6 },
+    subtitleDash: { width: 24, height: 1.5, backgroundColor: RED },
+    subtitleText: { fontSize: 9, color: BLACK, fontWeight: 400 },
+    certLine:  { fontSize: 8, color: MUTED, marginTop: 4, textAlign: 'center', lineHeight: 1.4 },
+    isoCol:    { width: 80, alignItems: 'center', justifyContent: 'center' },
+    isoBox: {
+      borderWidth: 1.5, borderColor: '#1A6AB8', borderRadius: 4,
+      paddingVertical: 4, paddingHorizontal: 6, alignItems: 'center',
+    },
+    isoLetters: { fontSize: 18, fontWeight: 700, color: '#1A6AB8', letterSpacing: 1 },
+    isoSubText: { fontSize: 7, color: '#1A6AB8', textAlign: 'center', lineHeight: 1.3 },
 
-    titleWrap:  { alignItems: 'center', marginTop: 10, marginBottom: 6 },
-    titleText:  { fontSize: 16, fontWeight: 700, color: BLACK, letterSpacing: 1 },
-    titleRule:  { width: 90, height: 2, backgroundColor: RED, marginTop: 3 },
+    // Bottom strip of header
+    stripWrap: {
+      backgroundColor: '#F8F8F8', borderTopWidth: 1, borderTopColor: BORDER,
+      borderBottomWidth: 2, borderBottomColor: RED,
+      paddingVertical: 5, paddingHorizontal: 14, alignItems: 'center',
+    },
+    stripText: { fontSize: 9.5, fontWeight: 700, color: DARK, letterSpacing: 0.3, textAlign: 'center' },
+
+    titleWrap: { alignItems: 'center', marginTop: 10, marginBottom: 6 },
+    titleText: { fontSize: 15, fontWeight: 700, color: BLACK, letterSpacing: 1 },
+    titleRule: { width: 90, height: 2, backgroundColor: RED, marginTop: 3 },
 
     body: { paddingHorizontal: 18 },
     studentRow: { flexDirection: 'row', borderWidth: 1, borderColor: BORDER, marginTop: 8 },
     studentCol: { flex: 1, borderRightWidth: 1, borderRightColor: BORDER },
-    photoCol:   { width: 120, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
-    photoBox:   { width: 92, height: 108, borderWidth: 1, borderColor: BORDER, objectFit: 'cover' },
-    photoPlaceholder: { width: 92, height: 108, borderWidth: 1, borderColor: BORDER, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-    photoCaption: { fontSize: 8, color: MUTED, marginTop: 4 },
+    photoCol:   { width: 110, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
+    photoBox:   { width: 84, height: 100, borderWidth: 1, borderColor: BORDER, objectFit: 'cover' },
+    photoPlaceholder: { width: 84, height: 100, borderWidth: 1, borderColor: BORDER, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+    photoCaption: { fontSize: 7.5, color: MUTED, marginTop: 3 },
 
-    tRow:    { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER, minHeight: 22 },
-    tRowLast:{ flexDirection: 'row', minHeight: 22 },
-    tLbl:    { width: 120, paddingVertical: 5, paddingHorizontal: 8, fontSize: 9, color: BLACK, borderRightWidth: 1, borderRightColor: BORDER },
-    tVal:    { flex: 1, paddingVertical: 5, paddingHorizontal: 8, fontSize: 9, color: BLACK, fontWeight: 700 },
+    tRow:     { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER, minHeight: 20 },
+    tRowLast: { flexDirection: 'row', minHeight: 20 },
+    tLbl:     { width: 110, paddingVertical: 4, paddingHorizontal: 7, fontSize: 8.5, color: MUTED, borderRightWidth: 1, borderRightColor: BORDER },
+    tVal:     { flex: 1, paddingVertical: 4, paddingHorizontal: 7, fontSize: 8.5, color: BLACK, fontWeight: 700 },
 
-    sectionTitle: { fontSize: 13, fontWeight: 700, color: BLACK, marginTop: 14, letterSpacing: 0.5 },
-    sectionRule:  { width: 100, height: 2, backgroundColor: RED, marginTop: 2, marginBottom: 6 },
+    sectionTitle: { fontSize: 12, fontWeight: 700, color: BLACK, marginTop: 12, letterSpacing: 0.5 },
+    sectionRule:  { width: 80, height: 2, backgroundColor: RED, marginTop: 2, marginBottom: 5 },
 
-    schTable:  { borderWidth: 1, borderColor: BORDER, marginBottom: 6 },
-    schHeader: { flexDirection: 'row', backgroundColor: BG_ROW, borderBottomWidth: 1, borderBottomColor: BORDER },
-    schHeadCell: { paddingVertical: 5, paddingHorizontal: 8, fontSize: 9, fontWeight: 700, color: BLACK },
-    schRow:    { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER },
-    schRowLast:{ flexDirection: 'row' },
-    schCell:   { paddingVertical: 5, paddingHorizontal: 8, fontSize: 9, color: BLACK },
+    schTable:    { borderWidth: 1, borderColor: BORDER, marginBottom: 6 },
+    schHeader:   { flexDirection: 'row', backgroundColor: BG_ROW, borderBottomWidth: 1, borderBottomColor: BORDER },
+    schHeadCell: { paddingVertical: 5, paddingHorizontal: 7, fontSize: 8.5, fontWeight: 700, color: BLACK },
+    schRow:      { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER },
+    schRowLast:  { flexDirection: 'row' },
+    schCell:     { paddingVertical: 4, paddingHorizontal: 7, fontSize: 8.5, color: BLACK },
 
-    instrHeader: { fontSize: 10, fontWeight: 700, color: BLACK, marginTop: 12, marginBottom: 5 },
-    instrBody:   { fontFamily: 'NotoDevanagari', fontSize: 8.5, color: BLACK, lineHeight: 1.6 },
+    instrHeader: { fontSize: 9.5, fontWeight: 700, color: BLACK, marginTop: 10, marginBottom: 4 },
+    instrBody:   { fontFamily: 'NotoDevanagari', fontSize: 8, color: BLACK, lineHeight: 1.6 },
 
-    sigRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 22, paddingHorizontal: 4 },
-    sigCell: { alignItems: 'center', width: 160 },
-    sigWebsite: { fontSize: 9, color: MUTED, alignSelf: 'center' },
-    sigLabel: { fontSize: 9, fontWeight: 700, color: BLACK },
+    sigRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 18, paddingHorizontal: 4 },
+    sigCell: { alignItems: 'center', width: 150 },
+    sigImg:  { height: 30, width: 120, objectFit: 'contain', marginBottom: 3 },
+    sigWebsite: { fontSize: 8.5, color: MUTED, alignSelf: 'center' },
+    sigLabel:   { fontSize: 8.5, fontWeight: 700, color: BLACK, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 3, width: 140, textAlign: 'center' },
 
-    footerWrap: { marginTop: 14, backgroundColor: RED, paddingVertical: 8, paddingHorizontal: 18 },
-    footerText: { color: '#FFFFFF', fontSize: 9, fontWeight: 700 },
+    footerWrap: { marginTop: 12, backgroundColor: RED, paddingVertical: 7, paddingHorizontal: 18 },
+    footerText: { color: '#FFFFFF', fontSize: 8.5, fontWeight: 700 },
   })
 
   const Doc = (
     <Document>
       <Page size="A4" style={s.page}>
-        <View style={s.topBarRed} />
+        {/* Top decorative bars */}
+        <View style={s.topBarGreen} />
+        <View style={s.topBarGold} />
         <View style={s.topBarWhite} />
-        <View style={s.topBarRed2} />
+        <View style={s.topBarRed} />
 
+        {/* Main header */}
         <View style={s.headerWrap}>
           <View style={s.logoCol}>
             {logoDataUrl ? <PdfImage src={logoDataUrl} style={s.logo} /> : null}
           </View>
           <View style={s.middleCol}>
             <Text style={s.brand}>{settings.header_title}</Text>
-            <Text style={s.subtitle}>{settings.header_subtitle}</Text>
-            {settings.header_tagline ? <Text style={s.tagline}>{settings.header_tagline}</Text> : null}
+            <View style={s.subtitleRow}>
+              <View style={s.subtitleDash} />
+              <Text style={s.subtitleText}>{settings.header_subtitle}</Text>
+              <View style={s.subtitleDash} />
+            </View>
+            {settings.header_tagline ? <Text style={s.certLine}>{settings.header_tagline}</Text> : null}
           </View>
           <View style={s.isoCol}>
-            <Text style={s.isoText}>{settings.iso_line}</Text>
+            <View style={s.isoBox}>
+              <Text style={s.isoLetters}>ISO</Text>
+              <Text style={s.isoSubText}>{settings.iso_line}</Text>
+            </View>
           </View>
         </View>
+
+        {/* Bottom strip */}
+        {settings.header_strip ? (
+          <View style={s.stripWrap}>
+            <Text style={s.stripText}>{settings.header_strip}</Text>
+          </View>
+        ) : null}
 
         <View style={s.titleWrap}>
           <Text style={s.titleText}>CANDIDATE ADMIT CARD</Text>
@@ -222,7 +258,7 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
             <View style={s.photoCol}>
               {photoDataUrl
                 ? <PdfImage src={photoDataUrl} style={s.photoBox} />
-                : <View style={s.photoPlaceholder}><Text style={{ fontSize: 22, color: '#9CA3AF', fontWeight: 700 }}>{student.name.charAt(0).toUpperCase()}</Text></View>}
+                : <View style={s.photoPlaceholder}><Text style={{ fontSize: 20, color: '#9CA3AF', fontWeight: 700 }}>{student.name.charAt(0).toUpperCase()}</Text></View>}
               <Text style={s.photoCaption}>Candidate Photo</Text>
             </View>
           </View>
@@ -239,7 +275,7 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
             </View>
             {schedule.map((row, idx) => (
               <View key={idx} style={idx === schedule.length - 1 ? s.schRowLast : s.schRow}>
-                <Text style={[s.schCell, { flex: 2 }]}>{row.date || '—'}</Text>
+                <Text style={[s.schCell, { flex: 2 }]}>{fmtDate(row.date)}</Text>
                 <Text style={[s.schCell, { flex: 3, borderLeftWidth: 1, borderLeftColor: BORDER }]}>{row.subject_name}</Text>
                 <Text style={[s.schCell, { flex: 2, borderLeftWidth: 1, borderLeftColor: BORDER }]}>{fmtTime(row.reporting_time)}</Text>
                 <Text style={[s.schCell, { flex: 2, borderLeftWidth: 1, borderLeftColor: BORDER }]}>{fmtTime(row.exam_time)}</Text>
@@ -251,9 +287,19 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
           {settings.instructions_hi ? <Text style={s.instrBody}>{settings.instructions_hi}</Text> : null}
 
           <View style={s.sigRow}>
-            <View style={s.sigCell}><Text style={s.sigLabel}>{settings.left_signer}</Text></View>
+            <View style={s.sigCell}>
+              {settings.controller_signature_url
+                ? <PdfImage src={settings.controller_signature_url} style={s.sigImg} />
+                : <View style={{ height: 30 }} />}
+              <Text style={s.sigLabel}>{settings.left_signer}</Text>
+            </View>
             <Text style={s.sigWebsite}>{settings.website}</Text>
-            <View style={s.sigCell}><Text style={s.sigLabel}>{settings.right_signer}</Text></View>
+            <View style={s.sigCell}>
+              {settings.director_signature_url
+                ? <PdfImage src={settings.director_signature_url} style={s.sigImg} />
+                : <View style={{ height: 30 }} />}
+              <Text style={s.sigLabel}>{settings.right_signer}</Text>
+            </View>
           </View>
         </View>
 

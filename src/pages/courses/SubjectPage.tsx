@@ -20,6 +20,7 @@ export default function SubjectPage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedCourse, setSelectedCourse] = useState(courseIdParam || '')
   const [courseName, setCourseName] = useState('')
+  const [courseTotalSemesters, setCourseTotalSemesters] = useState<number>(0)
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -35,16 +36,20 @@ export default function SubjectPage() {
   const [theoryMarks, setTheoryMarks] = useState(100)
   const [practicalMarks, setPracticalMarks] = useState(50)
   const [order, setOrder] = useState(0)
+  const [semester, setSemester] = useState<number | ''>(1)
 
   useEffect(() => { fetchCourses() }, [])
   useEffect(() => { if (selectedCourse) fetchSubjects() }, [selectedCourse])
 
   async function fetchCourses() {
-    const { data } = await supabase.from('uce_courses').select('id, name, code').eq('is_active', true).order('name')
+    const { data } = await supabase.from('uce_courses').select('id, name, code, total_semesters').eq('is_active', true).order('name')
     setCourses((data ?? []) as Course[])
     if (courseIdParam) {
       const c = data?.find((x: { id: string }) => x.id === courseIdParam)
-      if (c) setCourseName((c as { name: string }).name)
+      if (c) {
+        setCourseName((c as { name: string }).name)
+        setCourseTotalSemesters((c as { total_semesters: number | null }).total_semesters ?? 0)
+      }
     }
     setLoading(false)
   }
@@ -52,24 +57,27 @@ export default function SubjectPage() {
   async function fetchSubjects() {
     setLoading(true)
     try {
-      const { data, error } = await supabase.from('uce_subjects').select('*').eq('course_id', selectedCourse).order('display_order').order('name')
+      const { data, error } = await supabase.from('uce_subjects').select('*').eq('course_id', selectedCourse).order('semester', { nullsFirst: false }).order('display_order').order('name')
       if (error) throw error
       setSubjects(data ?? [])
       const c = courses.find(x => x.id === selectedCourse)
-      if (c) setCourseName(c.name)
+      if (c) {
+        setCourseName(c.name)
+        setCourseTotalSemesters((c as Course).total_semesters ?? 0)
+      }
     } catch { toast.error('Failed to load subjects') }
     finally { setLoading(false) }
   }
 
-  function openAdd() { setEditing(null); setCode(''); setName(''); setTheoryMarks(100); setPracticalMarks(50); setOrder(subjects.length); setModalOpen(true) }
-  function openEdit(s: Subject) { setEditing(s); setCode(s.code || ''); setName(s.name); setTheoryMarks(s.theory_max_marks); setPracticalMarks(s.practical_max_marks); setOrder(s.display_order); setModalOpen(true) }
+  function openAdd() { setEditing(null); setCode(''); setName(''); setTheoryMarks(100); setPracticalMarks(50); setOrder(subjects.length); setSemester(1); setModalOpen(true) }
+  function openEdit(s: Subject) { setEditing(s); setCode(s.code || ''); setName(s.name); setTheoryMarks(s.theory_max_marks); setPracticalMarks(s.practical_max_marks); setOrder(s.display_order); setSemester(s.semester ?? ''); setModalOpen(true) }
 
   async function handleSave() {
     if (!name.trim()) { toast.error('Subject name is required'); return }
     if (!selectedCourse) { toast.error('Select a course first'); return }
     setSaving(true)
     try {
-      const payload = { course_id: selectedCourse, code: code || null, name, theory_max_marks: theoryMarks, practical_max_marks: practicalMarks, display_order: order }
+      const payload = { course_id: selectedCourse, code: code || null, name, theory_max_marks: theoryMarks, practical_max_marks: practicalMarks, display_order: order, semester: semester !== '' ? Number(semester) : null }
       if (editing) {
         const { error } = await supabase.from('uce_subjects').update(payload).eq('id', editing.id)
         if (error) throw error; toast.success('Subject updated')
@@ -98,6 +106,7 @@ export default function SubjectPage() {
     colHelper.display({ id: 'num', header: '#', cell: i => <span className="text-sm text-gray-400">{i.row.index + 1}</span> }),
     colHelper.accessor('code', { header: 'Code', cell: i => <span className="text-xs font-mono text-gray-600">{i.getValue() || '—'}</span> }),
     colHelper.accessor('name', { header: 'Subject Name', cell: i => <span className="text-sm font-medium text-gray-900">{i.getValue()}</span> }),
+    colHelper.accessor('semester', { header: 'Sem', cell: i => <span className="text-sm text-gray-700">{i.getValue() ?? '—'}</span> }),
     colHelper.accessor('theory_max_marks', { header: 'Theory', cell: i => <span className="text-sm text-gray-700">{i.getValue()}</span> }),
     colHelper.accessor('practical_max_marks', { header: 'Practical', cell: i => <span className="text-sm text-gray-700">{i.getValue()}</span> }),
     colHelper.accessor('total_max_marks', { header: 'Total', cell: i => <span className="text-sm font-semibold text-gray-900">{i.getValue()}</span> }),
@@ -142,7 +151,10 @@ export default function SubjectPage() {
                 <span className="text-xs text-gray-400 font-mono w-5 shrink-0">{idx + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
-                  <p className="text-xs text-gray-400">T:{s.theory_max_marks} P:{s.practical_max_marks} = <span className="font-semibold text-gray-700">{s.total_max_marks}</span></p>
+                  <p className="text-xs text-gray-400">
+                    {s.semester ? <span className="mr-1.5">Sem {s.semester} ·</span> : null}
+                    T:{s.theory_max_marks} P:{s.practical_max_marks} = <span className="font-semibold text-gray-700">{s.total_max_marks}</span>
+                  </p>
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><Pencil size={14} /></button>
@@ -164,6 +176,18 @@ export default function SubjectPage() {
             <FormField label="Code"><input value={code} onChange={e => setCode(e.target.value)} className={inputClass} placeholder="e.g., CF-101" /></FormField>
             <FormField label="Subject Name" required><input value={name} onChange={e => setName(e.target.value)} className={inputClass} placeholder="Subject name" /></FormField>
           </div>
+          <FormField label="Semester" hint="Which semester this subject belongs to">
+            {courseTotalSemesters > 0 ? (
+              <select value={semester} onChange={e => setSemester(e.target.value === '' ? '' : Number(e.target.value))} className={selectClass}>
+                <option value="">Select semester</option>
+                {Array.from({ length: courseTotalSemesters }, (_, i) => i + 1).map(n => (
+                  <option key={n} value={n}>Semester {n}</option>
+                ))}
+              </select>
+            ) : (
+              <input type="number" value={semester} onChange={e => setSemester(e.target.value === '' ? '' : Number(e.target.value))} className={inputClass} placeholder="e.g., 1" min={1} />
+            )}
+          </FormField>
           <div className="grid grid-cols-3 gap-3">
             <FormField label="Theory Max"><input type="number" value={theoryMarks} onChange={e => setTheoryMarks(Number(e.target.value))} className={inputClass} min={0} /></FormField>
             <FormField label="Practical Max"><input type="number" value={practicalMarks} onChange={e => setPracticalMarks(Number(e.target.value))} className={inputClass} min={0} /></FormField>

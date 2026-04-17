@@ -1,9 +1,41 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Loader2, Settings, Info, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import FormField, { inputClass } from '../../components/FormField'
 import { getAdmitCardSettings, saveAdmitCardSettings, ADMIT_DEFAULTS, type AdmitCardSettings } from '../../lib/admitCardSettings'
+
+function SignatureUpload({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [error, setError] = useState('')
+
+  const handleFile = useCallback((file: File) => {
+    setError('')
+    if (!['image/jpeg', 'image/png'].includes(file.type)) { setError('Only JPG or PNG allowed'); return }
+    if (file.size > 100 * 1024) { setError('Max size is 100 KB'); return }
+    const reader = new FileReader()
+    reader.onloadend = () => onChange(reader.result as string)
+    reader.readAsDataURL(file)
+  }, [onChange])
+
+  return (
+    <div>
+      <p className="text-xs font-medium text-gray-700 mb-1.5">{label}</p>
+      {value ? (
+        <div className="flex items-center gap-3">
+          <img src={value} alt="signature" className="h-12 max-w-[180px] object-contain border border-gray-200 rounded-lg bg-gray-50 p-1" />
+          <button type="button" onClick={() => onChange('')} className="text-xs text-red-500 hover:underline">Remove</button>
+        </div>
+      ) : (
+        <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 rounded-xl p-4 cursor-pointer hover:border-gray-400 hover:bg-gray-50 w-48">
+          <span className="text-xs text-gray-500 text-center">Click to upload signature</span>
+          <span className="text-[10px] text-gray-400">Max 100 KB · JPG, PNG</span>
+          <input type="file" accept="image/jpeg,image/png" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = '' }} />
+        </label>
+      )}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+    </div>
+  )
+}
 
 export default function AdmitCardSettingsPage() {
   const navigate = useNavigate()
@@ -71,10 +103,13 @@ export default function AdmitCardSettingsPage() {
         <FormField label="Subtitle" hint="Line below the brand name">
           <input value={s.header_subtitle} onChange={e => update('header_subtitle', e.target.value)} className={inputClass} />
         </FormField>
-        <FormField label="Header Tagline" hint="Small grey text under the subtitle">
+        <FormField label="Certifications Line" hint="ISO / Govt. certifications shown below the subtitle">
           <textarea value={s.header_tagline} onChange={e => update('header_tagline', e.target.value)} rows={2} className={`${inputClass} resize-none`} />
         </FormField>
-        <FormField label="ISO Certification Line" hint="Top-right block">
+        <FormField label="Bottom Strip" hint="Shown in the strip below the header (e.g. Skill Development | Computer Education)">
+          <input value={s.header_strip} onChange={e => update('header_strip', e.target.value)} className={inputClass} />
+        </FormField>
+        <FormField label="ISO Block (top-right)" hint="Short text shown in the right ISO column">
           <input value={s.iso_line} onChange={e => update('iso_line', e.target.value)} className={inputClass} />
         </FormField>
       </div>
@@ -83,10 +118,23 @@ export default function AdmitCardSettingsPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 space-y-4">
         <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Signature Line</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <FormField label="Left Signer"><input value={s.left_signer} onChange={e => update('left_signer', e.target.value)} className={inputClass} /></FormField>
+          <FormField label="Left Signer Label"><input value={s.left_signer} onChange={e => update('left_signer', e.target.value)} className={inputClass} /></FormField>
           <FormField label="Website (center)"><input value={s.website} onChange={e => update('website', e.target.value)} className={inputClass} /></FormField>
-          <FormField label="Right Signer"><input value={s.right_signer} onChange={e => update('right_signer', e.target.value)} className={inputClass} /></FormField>
+          <FormField label="Right Signer Label"><input value={s.right_signer} onChange={e => update('right_signer', e.target.value)} className={inputClass} /></FormField>
         </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
+          <SignatureUpload
+            label="Controller of Examination — Signature Image"
+            value={s.controller_signature_url}
+            onChange={v => update('controller_signature_url', v)}
+          />
+          <SignatureUpload
+            label="Director — Signature Image"
+            value={s.director_signature_url}
+            onChange={v => update('director_signature_url', v)}
+          />
+        </div>
+        <p className="text-xs text-gray-400">Signatures appear above the signer labels on the PDF. Max 100 KB each (JPG or PNG).</p>
       </div>
 
       {/* Footer */}

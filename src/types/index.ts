@@ -78,6 +78,8 @@ export interface Course {
   program_id: string
   duration_months: number | null
   duration_label: string | null
+  total_semesters: number | null
+  months_per_semester: number | null
   eligibility: string | null
   description: string | null
   total_fee: number
@@ -101,6 +103,7 @@ export interface Subject {
   practical_max_marks: number
   total_max_marks: number
   display_order: number
+  semester: number | null
   is_active: boolean
   created_at: string
 }

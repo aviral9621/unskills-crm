@@ -1,40 +1,49 @@
 import { supabase } from './supabase'
 
 export interface AdmitCardSettings {
-  header_title: string       // e.g. "UNSKILLS COMPUTER"
+  header_title: string       // e.g. "UNSKILLS COMPUTER EDUCATION"
   header_subtitle: string    // e.g. "A Unit of: UnSkills FuturePath Tech Pvt. Ltd."
-  header_tagline: string     // small grey line under subtitle
-  iso_line: string           // e.g. "ISO 9001:2015 Certified Organization"
+  header_tagline: string     // certifications line under subtitle
+  header_strip: string       // bottom strip e.g. "Skill Development | Computer Education | Vocational Training"
+  iso_line: string           // top-right ISO block text
   footer_address: string     // corporate office address in red footer
   website: string            // e.g. "www.unskillsc.org"
   left_signer: string        // e.g. "Controller of Examination"
   right_signer: string       // e.g. "Director"
+  controller_signature_url: string  // base64 data URL of controller signature image
+  director_signature_url: string    // base64 data URL of director signature image
   instructions_en: string    // English header line for instructions section
   instructions_hi: string    // Multi-line Hindi terms & conditions
 }
 
 const KEYS: Record<keyof AdmitCardSettings, string> = {
-  header_title:     'admit_header_title',
-  header_subtitle:  'admit_header_subtitle',
-  header_tagline:   'admit_header_tagline',
-  iso_line:         'admit_iso_line',
-  footer_address:   'admit_footer_address',
-  website:          'admit_website',
-  left_signer:      'admit_left_signer',
-  right_signer:     'admit_right_signer',
-  instructions_en:  'admit_instructions_en',
-  instructions_hi:  'admit_instructions_hi',
+  header_title:              'admit_header_title',
+  header_subtitle:           'admit_header_subtitle',
+  header_tagline:            'admit_header_tagline',
+  header_strip:              'admit_header_strip',
+  iso_line:                  'admit_iso_line',
+  footer_address:            'admit_footer_address',
+  website:                   'admit_website',
+  left_signer:               'admit_left_signer',
+  right_signer:              'admit_right_signer',
+  controller_signature_url:  'admit_controller_signature_url',
+  director_signature_url:    'admit_director_signature_url',
+  instructions_en:           'admit_instructions_en',
+  instructions_hi:           'admit_instructions_hi',
 }
 
 export const ADMIT_DEFAULTS: AdmitCardSettings = {
-  header_title:    'UNSKILLS COMPUTER',
-  header_subtitle: 'A Unit of: UnSkills FuturePath Tech Pvt. Ltd.',
-  header_tagline:  'Compact Accreditation is named by asociation and Ion/or Professional Examination, is out ISO 9001:2015 Certified Organization.',
-  iso_line:        'ISO 9001:2015 Certified Organization',
-  footer_address:  '2nd Floor Near Primary School Ranipur Road Mariahu Jaunpur Uttar Pradesh',
-  website:         'www.unskillsc.org',
-  left_signer:     'Controller of Examination',
-  right_signer:    'Director',
+  header_title:             'UNSKILLS COMPUTER EDUCATION',
+  header_subtitle:          'A Unit of: UnSkills FuturePath Tech Pvt. Ltd.',
+  header_tagline:           'ISO 9001:2015 Certified | Govt. Registered Organization | Authorized Training & Certification Body',
+  header_strip:             'Skill Development  |  Computer Education  |  Vocational Training',
+  iso_line:                 'ISO 9001:2015\nCertified',
+  footer_address:           '2nd Floor Near Primary School Ranipur Road Mariahu Jaunpur Uttar Pradesh',
+  website:                  'www.unskillsc.org',
+  left_signer:              'Controller of Examination',
+  right_signer:             'Director',
+  controller_signature_url: '',
+  director_signature_url:   '',
   instructions_en: 'INSTRUCTIONS TO BE FOLLOWED BY CANDIDATES AT EXAMINATION',
   instructions_hi: [
     '1. उम्मीदवारों को परीक्षा कक्ष में परीक्षा प्रारंभ होने के 15 मिनट पहले प्रवेश दिया जाएगा। परीक्षा शुरू होने के 30 मिनट बाद किसी भी उम्मीदवार को प्रवेश की अनुमति नहीं दी जाएगी।',

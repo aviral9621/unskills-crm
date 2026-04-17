@@ -13,6 +13,8 @@ const courseSchema = z.object({
   name: z.string().min(3, 'Course name is required'),
   short_name: z.string().optional(),
   program_id: z.string().min(1, 'Select a program'),
+  total_semesters: z.coerce.number().min(0).optional(),
+  months_per_semester: z.coerce.number().min(0).optional(),
   duration_months: z.coerce.number().min(0).optional(),
   duration_label: z.string().optional(),
   eligibility: z.string().optional(),
@@ -36,9 +38,18 @@ export default function CourseFormPage() {
   const [programs, setPrograms] = useState<Program[]>([])
   const [existing, setExisting] = useState<Course | null>(null)
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<CourseFormData>({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<CourseFormData>({
     defaultValues: { total_fee: 0, certification_fee: 0, is_marksheet_eligible: true },
   })
+
+  const watchedSemesters = watch('total_semesters')
+  const watchedMonths = watch('months_per_semester')
+
+  useEffect(() => {
+    const s = Number(watchedSemesters)
+    const m = Number(watchedMonths)
+    if (s > 0 && m > 0) setValue('duration_months', s * m)
+  }, [watchedSemesters, watchedMonths, setValue])
 
   useEffect(() => {
     fetchPrograms()
@@ -59,6 +70,7 @@ export default function CourseFormPage() {
       setExisting(data)
       reset({
         code: data.code, name: data.name, short_name: data.short_name || '', program_id: data.program_id,
+        total_semesters: data.total_semesters || 0, months_per_semester: data.months_per_semester || 0,
         duration_months: data.duration_months || 0, duration_label: data.duration_label || '',
         eligibility: data.eligibility || '', description: data.description || '',
         total_fee: data.total_fee, certification_fee: data.certification_fee,
@@ -76,6 +88,7 @@ export default function CourseFormPage() {
     try {
       const payload = {
         code: form.code, name: form.name, short_name: form.short_name || null, program_id: form.program_id,
+        total_semesters: form.total_semesters || null, months_per_semester: form.months_per_semester || null,
         duration_months: form.duration_months || null, duration_label: form.duration_label || null,
         eligibility: form.eligibility || null, description: form.description || null,
         total_fee: form.total_fee, certification_fee: form.certification_fee,
@@ -119,7 +132,11 @@ export default function CourseFormPage() {
             </FormField>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Duration (Months)"><input type="number" {...register('duration_months')} className={inputClass} placeholder="e.g., 12" min={0} /></FormField>
+            <FormField label="Total Semesters" hint="e.g., 2 for a 2-semester course"><input type="number" {...register('total_semesters')} className={inputClass} placeholder="e.g., 2" min={0} /></FormField>
+            <FormField label="Months per Semester" hint="e.g., 6 for 6-month semesters"><input type="number" {...register('months_per_semester')} className={inputClass} placeholder="e.g., 6" min={0} /></FormField>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField label="Duration (Months)" hint="Auto-computed from semesters × months"><input type="number" {...register('duration_months')} className={inputClass} placeholder="e.g., 12" min={0} /></FormField>
             <FormField label="Duration Label"><input {...register('duration_label')} className={inputClass} placeholder="e.g., 12 Months" /></FormField>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
