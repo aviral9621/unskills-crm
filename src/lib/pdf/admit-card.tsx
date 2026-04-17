@@ -190,8 +190,8 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
     sigWebsite: { fontSize: 8.5, color: MUTED, alignSelf: 'center' },
     sigLabel:   { fontSize: 8.5, fontWeight: 700, color: BLACK, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 3, width: 140, textAlign: 'center' },
 
-    footerWrap: { backgroundColor: RED, paddingVertical: 7, paddingHorizontal: 18 },
-    footerText: { color: '#FFFFFF', fontSize: 8.5, fontWeight: 700 },
+    footerWrap: { backgroundColor: RED, paddingVertical: 7, paddingHorizontal: 18, alignItems: 'center' },
+    footerText: { color: '#FFFFFF', fontSize: 8.5, fontWeight: 700, textAlign: 'center' },
   })
 
   const Doc = (
