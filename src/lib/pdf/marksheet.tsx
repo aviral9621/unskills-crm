@@ -189,7 +189,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     sigBox: { alignItems: 'center', width: 220 },
     sigImg: { height: 32, width: 150, objectFit: 'contain' },
     sigPlaceholder: { height: 32, width: 150 },
-    sigItalic: { fontSize: 10.5, fontWeight: 700, color: BLACK, fontStyle: 'italic', marginTop: -4, marginBottom: 4 },
+    sigItalic: { fontSize: 10.5, fontWeight: 700, color: BLACK, marginTop: -4, marginBottom: 4 },
     sigName: { fontSize: 9, fontWeight: 700, color: BLACK, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 3, width: 200, textAlign: 'center' },
     sigTitle: { fontSize: 8, color: BLACK, textAlign: 'center' },
 
