@@ -157,7 +157,7 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
     titleText: { fontSize: 15, fontWeight: 700, color: BLACK, letterSpacing: 1 },
     titleRule: { width: 90, height: 2, backgroundColor: RED, marginTop: 3 },
 
-    body: { paddingHorizontal: 18 },
+    body: { flex: 1, paddingHorizontal: 18, flexDirection: 'column' },
     studentRow: { flexDirection: 'row', borderWidth: 1, borderColor: BORDER, marginTop: 8 },
     studentCol: { flex: 1, borderRightWidth: 1, borderRightColor: BORDER },
     photoCol:   { width: 110, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
@@ -183,13 +183,14 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
     instrHeader: { fontSize: 9.5, fontWeight: 700, color: BLACK, marginTop: 10, marginBottom: 4 },
     instrBody:   { fontFamily: 'NotoDevanagari', fontSize: 8, color: BLACK, lineHeight: 1.6 },
 
-    sigRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 18, paddingHorizontal: 4 },
+    sigPusher: { marginTop: 'auto', paddingTop: 12 },
+    sigRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 4, paddingBottom: 10 },
     sigCell: { alignItems: 'center', width: 150 },
-    sigImg:  { height: 30, width: 120, objectFit: 'contain', marginBottom: 3 },
+    sigImg:  { height: 32, width: 120, objectFit: 'contain', marginBottom: 3 },
     sigWebsite: { fontSize: 8.5, color: MUTED, alignSelf: 'center' },
     sigLabel:   { fontSize: 8.5, fontWeight: 700, color: BLACK, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 3, width: 140, textAlign: 'center' },
 
-    footerWrap: { marginTop: 12, backgroundColor: RED, paddingVertical: 7, paddingHorizontal: 18 },
+    footerWrap: { backgroundColor: RED, paddingVertical: 7, paddingHorizontal: 18 },
     footerText: { color: '#FFFFFF', fontSize: 8.5, fontWeight: 700 },
   })
 
@@ -281,19 +282,22 @@ export async function buildAdmitCardPdfBlob(input: BuildAdmitCardInput): Promise
           {settings.instructions_en ? <Text style={s.instrHeader}>{settings.instructions_en}</Text> : null}
           {settings.instructions_hi ? <Text style={s.instrBody}>{settings.instructions_hi}</Text> : null}
 
-          <View style={s.sigRow}>
-            <View style={s.sigCell}>
-              {settings.controller_signature_url
-                ? <PdfImage src={settings.controller_signature_url} style={s.sigImg} />
-                : <View style={{ height: 30 }} />}
-              <Text style={s.sigLabel}>{settings.left_signer}</Text>
-            </View>
-            <Text style={s.sigWebsite}>{settings.website}</Text>
-            <View style={s.sigCell}>
-              {settings.director_signature_url
-                ? <PdfImage src={settings.director_signature_url} style={s.sigImg} />
-                : <View style={{ height: 30 }} />}
-              <Text style={s.sigLabel}>{settings.right_signer}</Text>
+          {/* Signature pushed to bottom of the flex body */}
+          <View style={s.sigPusher}>
+            <View style={s.sigRow}>
+              <View style={s.sigCell}>
+                {settings.controller_signature_url
+                  ? <PdfImage src={settings.controller_signature_url} style={s.sigImg} />
+                  : <View style={{ height: 32 }} />}
+                <Text style={s.sigLabel}>{settings.left_signer}</Text>
+              </View>
+              <Text style={s.sigWebsite}>{settings.website}</Text>
+              <View style={s.sigCell}>
+                {settings.director_signature_url
+                  ? <PdfImage src={settings.director_signature_url} style={s.sigImg} />
+                  : <View style={{ height: 32 }} />}
+                <Text style={s.sigLabel}>{settings.right_signer}</Text>
+              </View>
             </View>
           </View>
         </View>

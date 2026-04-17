@@ -170,7 +170,7 @@ export default function AdmitCardPage() {
     const [settings, logoDataUrl, isoLogoDataUrl] = await Promise.all([
       getAdmitCardSettings(),
       toDataUrl('/MAIN LOGO FOR ALL CARDS.png').catch(() => ''),
-      toDataUrl('/ISO LOGOs.png').catch(() => ''),
+      toDataUrl(encodeURI('/ISO LOGOs.png')).catch(() => ''),
     ])
     let photoDataUrl = ''
     if (photoUrl) photoDataUrl = await toDataUrl(photoUrl).catch(() => '')
