@@ -16,6 +16,7 @@ import StudentRegisterPage from './pages/students/StudentRegisterPage'
 import StudentIdCardPage from './pages/students/StudentIdCardPage'
 import IdCardSettingsPage from './pages/students/IdCardSettingsPage'
 import AdmitCardPage from './pages/students/AdmitCardPage'
+import AdmitCardSettingsPage from './pages/students/AdmitCardSettingsPage'
 import ProgramListPage from './pages/courses/ProgramListPage'
 import CourseListPage from './pages/courses/CourseListPage'
 import CourseFormPage from './pages/courses/CourseFormPage'
@@ -118,6 +119,7 @@ function AppRoutes() {
         <Route path="students/id-card" element={<StudentIdCardPage />} />
         <Route path="students/id-card-settings" element={<IdCardSettingsPage />} />
         <Route path="students/admit-card" element={<AdmitCardPage />} />
+        <Route path="students/admit-card-settings" element={<AdmitCardSettingsPage />} />
 
         {/* Courses */}
         <Route path="courses/programs" element={<ProgramListPage />} />

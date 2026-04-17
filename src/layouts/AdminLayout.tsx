@@ -13,6 +13,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/admin/students/id-card': 'Student ID Card',
   '/admin/students/id-card-settings': 'ID Card Settings',
   '/admin/students/admit-card': 'Admit Card',
+  '/admin/students/admit-card-settings': 'Admit Card Settings',
   '/admin/courses/programs': 'Programs',
   '/admin/courses': 'Manage Courses',
   '/admin/courses/subjects': 'Subjects',
