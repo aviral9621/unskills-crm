@@ -30,6 +30,7 @@ import PaperSetFormPage from './pages/exams/PaperSetFormPage'
 import QuestionsPage from './pages/exams/QuestionsPage'
 import ResultsPage from './pages/exams/ResultsPage'
 import MarksheetPage from './pages/marksheet/MarksheetPage'
+import MarksheetSettingsPage from './pages/marksheet/MarksheetSettingsPage'
 import CertificatePage from './pages/certificate/CertificatePage'
 import DepartmentPage from './pages/staff/DepartmentPage'
 import EmployeeListPage from './pages/staff/EmployeeListPage'
@@ -145,6 +146,7 @@ function AppRoutes() {
 
         {/* Documents */}
         <Route path="marksheets" element={<MarksheetPage />} />
+        <Route path="marksheets/settings" element={<MarksheetSettingsPage />} />
         <Route path="certificates" element={<CertificatePage />} />
 
         {/* Staff */}
