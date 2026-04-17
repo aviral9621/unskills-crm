@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Navigate, Link } from 'react-router-dom'
 import {
   Settings, Save, Loader2, Info, Building2, Mail, Phone, Globe, MapPin,
-  Facebook, Instagram, Youtube, Linkedin, IdCard, FileBadge2, Users, Briefcase,
+  Link2, IdCard, FileBadge2, Users, Briefcase,
   BookOpen, LogOut, ShieldCheck, Clock, ChevronRight, Upload, X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -182,19 +182,19 @@ export default function SettingsPage() {
           <p className="text-xs font-medium text-gray-700 mb-2">Social Links</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="relative">
-              <Facebook size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#1877F2] pointer-events-none" />
+              <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input value={s.social_facebook} onChange={e => update('social_facebook', e.target.value)} placeholder="Facebook URL" className={`${inputClass} pl-9`} />
             </div>
             <div className="relative">
-              <Instagram size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#E4405F] pointer-events-none" />
+              <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input value={s.social_instagram} onChange={e => update('social_instagram', e.target.value)} placeholder="Instagram URL" className={`${inputClass} pl-9`} />
             </div>
             <div className="relative">
-              <Youtube size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#FF0000] pointer-events-none" />
+              <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input value={s.social_youtube} onChange={e => update('social_youtube', e.target.value)} placeholder="YouTube URL" className={`${inputClass} pl-9`} />
             </div>
             <div className="relative">
-              <Linkedin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#0A66C2] pointer-events-none" />
+              <Link2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input value={s.social_linkedin} onChange={e => update('social_linkedin', e.target.value)} placeholder="LinkedIn URL" className={`${inputClass} pl-9`} />
             </div>
           </div>
