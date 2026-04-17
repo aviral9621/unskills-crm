@@ -43,11 +43,19 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
           <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-600 ring-2 ring-white" />
         </button>
         <div className="ml-1 sm:ml-2 flex items-center gap-2 sm:gap-3">
-          <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-red-600 flex items-center justify-center shrink-0">
-            <span className="text-xs sm:text-sm font-semibold text-white">
-              {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'U'}
-            </span>
-          </div>
+          {profile?.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              alt={profile.full_name ?? 'avatar'}
+              className="h-8 w-8 sm:h-9 sm:w-9 rounded-full object-cover shrink-0"
+            />
+          ) : (
+            <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-red-600 flex items-center justify-center shrink-0">
+              <span className="text-xs sm:text-sm font-semibold text-white">
+                {profile?.full_name?.charAt(0)?.toUpperCase() ?? 'U'}
+              </span>
+            </div>
+          )}
           <div className="hidden md:block">
             <p className="text-sm font-medium text-text-primary leading-tight">
               {profile?.full_name ?? 'User'}
