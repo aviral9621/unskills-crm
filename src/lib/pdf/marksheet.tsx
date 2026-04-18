@@ -93,17 +93,17 @@ async function registerFonts() {
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 const colors = {
-  pageBg: '#FDFBF5',            // cream ivory (page paper tone)
-  blockTint: '#FBF7EC',         // subtle cream for grouped blocks
-  borderPrimary: '#8B1A2B',     // deep maroon (frame, section bands)
-  borderAccent: '#C8102E',      // bright red (SKILLS, inner accent)
-  borderSoft: '#D4C9B0',        // muted gold-beige (table/field lines)
-  accentGold: '#B8860B',        // decorative gold
-  gradeHighlight: '#F4C430',    // bright gold for the Grade letter
+  pageBg: '#FDFBF5',
+  blockTint: '#FBF7EC',
+  borderPrimary: '#8B1A2B',
+  borderAccent: '#C8102E',
+  borderSoft: '#D4C9B0',
+  accentGold: '#B8860B',
+  gradeHighlight: '#F4C430',
   textPrimary: '#0A0A0A',
   textSecondary: '#4A4A4A',
-  textLabel: '#6B5E3C',         // warm brown-gold for labels
-  semesterTint: '#F4E8D0',      // warm gold-tint for semester dividers
+  textLabel: '#6B5E3C',
+  semesterTint: '#F4E8D0',
   white: '#FFFFFF',
   // Grade legend dots
   green: '#16A34A',
@@ -134,78 +134,78 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
   const s = StyleSheet.create({
     page: {
       fontFamily: 'DMSans', fontWeight: 400,
-      fontSize: 9,
+      fontSize: 8.5,
       color: colors.textPrimary,
       backgroundColor: colors.pageBg,
-      padding: 24,
+      padding: 18,
     },
 
-    // Outer + inner frames (double-border, nested Views)
+    // Double-border frame (nested Views)
     frameOuter: {
-      borderWidth: 2,
-      borderStyle: 'solid',
-      borderColor: colors.borderPrimary,
+      borderWidth: 2, borderStyle: 'solid', borderColor: colors.borderPrimary,
       padding: 4,
     },
     frameInner: {
-      borderWidth: 1,
-      borderStyle: 'solid',
-      borderColor: colors.borderAccent,
-      padding: 14,
+      borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderAccent,
+      padding: 12,
     },
 
     // ─── Header ───────────────────────────────────────────────────────────
     headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
-    logoCol: { width: 64, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
-    logo: { width: 54, height: 54, objectFit: 'contain' },
-    middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
+    logoCol: { width: 56, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 1 },
+    logo: { width: 46, height: 46, objectFit: 'contain' },
+    middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
     brandTitle: {
-      fontSize: 22, fontFamily: 'DMSans', fontWeight: 700,
-      textAlign: 'center', letterSpacing: 2, textTransform: 'uppercase',
+      fontSize: 17, fontFamily: 'DMSans', fontWeight: 700,
+      textAlign: 'center', letterSpacing: 1.2, textTransform: 'uppercase',
+      marginBottom: 2,
     },
-    subLine: {
-      fontSize: 8.5, color: colors.textSecondary,
-      textAlign: 'center', lineHeight: 1.5,
+    subHeader: {
+      fontSize: 7.5, color: colors.textSecondary,
+      textAlign: 'center', lineHeight: 1.35,
       fontFamily: 'DMSans', fontWeight: 400,
     },
-    rightCol: { width: 92, alignItems: 'flex-end', paddingTop: 4 },
+    subBullet: {
+      fontFamily: 'DMSans', fontWeight: 700, color: colors.borderPrimary,
+    },
+    rightCol: { width: 84, alignItems: 'flex-end', paddingTop: 2 },
     regLine: {
-      fontSize: 8.5, color: colors.textPrimary, textAlign: 'right',
+      fontSize: 7.8, color: colors.textPrimary, textAlign: 'right',
       fontFamily: 'DMSans', fontWeight: 700,
     },
 
     // ─── Title band ───────────────────────────────────────────────────────
-    titleBand: { alignItems: 'center', marginTop: 10 },
-    titleText: {
-      fontSize: 16, fontFamily: 'DMSans', fontWeight: 700,
-      color: colors.textPrimary, letterSpacing: 4, textTransform: 'uppercase',
-      marginBottom: 4,
+    titleBand: { alignItems: 'center', marginTop: 5 },
+    statementTitle: {
+      fontSize: 13, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.textPrimary, letterSpacing: 3, textTransform: 'uppercase',
+      marginTop: 6, marginBottom: 2,
     },
     sessionText: {
-      fontSize: 10, color: colors.textSecondary,
-      textAlign: 'center', marginTop: 2,
+      fontSize: 8.5, color: colors.textSecondary,
+      textAlign: 'center', marginBottom: 6,
       fontFamily: 'DMSans', fontWeight: 400,
     },
 
     // ─── Student info block ──────────────────────────────────────────────
     infoWrap: {
-      marginTop: 10, flexDirection: 'row',
+      marginTop: 5, flexDirection: 'row',
       borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft,
       backgroundColor: colors.blockTint,
     },
     infoLeft: { flex: 1 },
     infoPhotoCell: {
-      width: 92, alignItems: 'center', justifyContent: 'center',
-      padding: 6, borderLeftWidth: 1, borderLeftColor: colors.borderSoft,
+      width: 80, alignItems: 'center', justifyContent: 'center',
+      padding: 5, borderLeftWidth: 1, borderLeftColor: colors.borderSoft,
       backgroundColor: colors.pageBg,
     },
     infoPhotoImg: {
-      width: 80, height: 92, objectFit: 'cover',
+      width: 65, height: 75, objectFit: 'cover',
       borderWidth: 2, borderStyle: 'solid', borderColor: colors.borderPrimary,
       borderRadius: 2,
     },
     infoPhotoPlaceholder: {
-      width: 80, height: 92, backgroundColor: '#EDE5D0',
+      width: 65, height: 75, backgroundColor: '#EDE5D0',
       borderWidth: 2, borderStyle: 'solid', borderColor: colors.borderPrimary,
       borderRadius: 2, alignItems: 'center', justifyContent: 'center',
     },
@@ -214,45 +214,44 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       borderBottomWidth: 1, borderBottomColor: colors.borderSoft,
     },
     infoRowLast: { flexDirection: 'row' },
-    infoCellWrap: {
-      flex: 1, flexDirection: 'row',
-      paddingVertical: 5, paddingHorizontal: 9,
-      alignItems: 'baseline',
+    detailCell: {
+      flex: 1,
+      justifyContent: 'flex-start',
+      alignItems: 'flex-start',
+      paddingVertical: 4, paddingHorizontal: 8,
     },
-    infoCellDivider: { borderRightWidth: 1, borderRightColor: colors.borderSoft },
-    infoLabel: { fontSize: 9, color: colors.textLabel, fontFamily: 'DMSans', fontWeight: 700 },
-    infoColon: { fontSize: 9, color: colors.textLabel, marginHorizontal: 4, fontFamily: 'DMSans', fontWeight: 700 },
-    infoValue: { fontSize: 10, color: colors.textPrimary, flex: 1, fontFamily: 'DMSans', fontWeight: 700 },
+    detailCellDivider: { borderRightWidth: 1, borderRightColor: colors.borderSoft },
+    detailLabel: { fontSize: 8, fontFamily: 'DMSans', fontWeight: 700, color: colors.textLabel },
+    detailValue: { fontSize: 8.5, fontFamily: 'DMSans', fontWeight: 700, color: colors.textPrimary },
 
     // ─── Marks table ─────────────────────────────────────────────────────
     tableWrap: {
-      marginTop: 10,
+      marginTop: 5,
       borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft,
     },
     tHeadRow: {
       flexDirection: 'row', backgroundColor: colors.borderPrimary,
-      minHeight: 26,
     },
     tHeadSubject: {
-      flex: 3.2, paddingVertical: 6, paddingHorizontal: 8,
+      flex: 3.2, paddingVertical: 5, paddingHorizontal: 8,
       borderRightWidth: 0.6, borderRightColor: '#FFFFFF66',
       alignItems: 'center', justifyContent: 'center',
     },
     tHeadGroup: {
       flex: 2, borderRightWidth: 0.6, borderRightColor: '#FFFFFF66',
-      alignItems: 'center', justifyContent: 'center', paddingVertical: 4,
+      alignItems: 'center', justifyContent: 'center', paddingVertical: 3,
     },
     tHeadTotal: {
-      flex: 1, paddingVertical: 6, paddingHorizontal: 6,
+      flex: 1, paddingVertical: 5, paddingHorizontal: 6,
       alignItems: 'center', justifyContent: 'center',
     },
     tHeadText: {
-      fontSize: 10, fontFamily: 'DMSans', fontWeight: 700,
+      fontSize: 9, fontFamily: 'DMSans', fontWeight: 700,
       color: colors.white, textAlign: 'center',
-      textTransform: 'uppercase', letterSpacing: 0.8,
+      textTransform: 'uppercase', letterSpacing: 0.5,
     },
     tHeadSub: {
-      fontSize: 7.5, color: '#FFFFFFCC', textAlign: 'center', marginTop: 1.5,
+      fontSize: 7, color: '#FFFFFFCC', textAlign: 'center', marginTop: 1,
       fontFamily: 'DMSans', fontWeight: 400,
     },
 
@@ -263,154 +262,152 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       borderBottomWidth: 1, borderBottomColor: colors.borderSoft,
     },
     tSemCell: {
-      flex: 1, paddingVertical: 5, paddingHorizontal: 8,
-      fontSize: 10, fontFamily: 'DMSans', fontWeight: 700,
+      flex: 1, paddingVertical: 3, paddingHorizontal: 8,
+      fontSize: 9, fontFamily: 'DMSans', fontWeight: 700,
       color: colors.textLabel, textAlign: 'center',
     },
 
     tRow: {
       flexDirection: 'row',
       borderBottomWidth: 1, borderBottomColor: colors.borderSoft,
-      minHeight: 18,
     },
     tCellSubject: {
-      flex: 3.2, paddingVertical: 5, paddingHorizontal: 8,
+      flex: 3.2, paddingVertical: 4, paddingHorizontal: 8,
       fontSize: 9, color: '#1A1A1A',
       fontFamily: 'DMSans', fontWeight: 400, textAlign: 'left',
       borderRightWidth: 0.6, borderRightColor: colors.borderSoft,
     },
     tCellNum: {
-      flex: 1, paddingVertical: 5, paddingHorizontal: 8,
+      flex: 1, paddingVertical: 4, paddingHorizontal: 8,
       fontSize: 9, color: colors.textPrimary,
       fontFamily: 'DMSans', fontWeight: 700, textAlign: 'right',
       borderRightWidth: 0.6, borderRightColor: colors.borderSoft,
     },
     tCellNumLast: {
-      flex: 1, paddingVertical: 5, paddingHorizontal: 8,
+      flex: 1, paddingVertical: 4, paddingHorizontal: 8,
       fontSize: 9, color: colors.textPrimary,
       fontFamily: 'DMSans', fontWeight: 700, textAlign: 'right',
     },
 
     tTotalRow: {
       flexDirection: 'row', backgroundColor: colors.borderPrimary,
-      minHeight: 22,
     },
     tTotalCellLabel: {
-      flex: 3.2, paddingVertical: 7, paddingHorizontal: 10,
-      fontSize: 11, fontFamily: 'DMSans', fontWeight: 700,
+      flex: 3.2, paddingVertical: 5, paddingHorizontal: 10,
+      fontSize: 10, fontFamily: 'DMSans', fontWeight: 700,
       color: colors.white, textAlign: 'left',
-      textTransform: 'uppercase', letterSpacing: 0.8,
+      textTransform: 'uppercase', letterSpacing: 0.5,
       borderRightWidth: 0.6, borderRightColor: '#FFFFFF66',
     },
     tTotalCellNum: {
-      flex: 1, paddingVertical: 7, paddingHorizontal: 8,
-      fontSize: 11, fontFamily: 'DMSans', fontWeight: 700,
+      flex: 1, paddingVertical: 5, paddingHorizontal: 8,
+      fontSize: 10, fontFamily: 'DMSans', fontWeight: 700,
       color: colors.white, textAlign: 'right',
       borderRightWidth: 0.6, borderRightColor: '#FFFFFF66',
     },
     tTotalCellNumLast: {
-      flex: 1, paddingVertical: 7, paddingHorizontal: 8,
-      fontSize: 11, fontFamily: 'DMSans', fontWeight: 700,
+      flex: 1, paddingVertical: 5, paddingHorizontal: 8,
+      fontSize: 10, fontFamily: 'DMSans', fontWeight: 700,
       color: colors.white, textAlign: 'right',
     },
 
     // ─── Grade legend ────────────────────────────────────────────────────
     legendWrap: {
-      marginTop: 10,
+      marginTop: 5,
       borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft,
       backgroundColor: colors.blockTint,
       flexDirection: 'row', justifyContent: 'space-between',
-      paddingVertical: 8, paddingHorizontal: 10,
+      paddingVertical: 4, paddingHorizontal: 10,
     },
     legendCol: { flex: 1, alignItems: 'center' },
     legendLabelRow: { flexDirection: 'row', alignItems: 'center' },
     legendLabelText: {
-      fontSize: 9, fontFamily: 'DMSans', fontWeight: 700, color: colors.textPrimary,
-      marginLeft: 4,
+      fontSize: 8, fontFamily: 'DMSans', fontWeight: 700, color: colors.textPrimary,
+      marginLeft: 3,
     },
     legendRange: {
-      fontSize: 8, color: colors.textSecondary,
-      fontFamily: 'DMSans', fontWeight: 400, marginTop: 2,
+      fontSize: 7, color: colors.textSecondary,
+      fontFamily: 'DMSans', fontWeight: 400, marginTop: 1,
     },
 
     // ─── Final grade banner ──────────────────────────────────────────────
     finalWrap: {
-      marginTop: 10, backgroundColor: colors.borderPrimary,
-      paddingVertical: 12, alignItems: 'center',
+      marginTop: 5, backgroundColor: colors.borderPrimary,
+      paddingVertical: 7, alignItems: 'center',
       flexDirection: 'row', justifyContent: 'center',
     },
-    finalLabel: {
-      fontSize: 15, fontFamily: 'DMSans', fontWeight: 700,
-      color: colors.white, letterSpacing: 2, textTransform: 'uppercase',
+    gradeLabel: {
+      fontSize: 12, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.white, letterSpacing: 1.5, textTransform: 'uppercase',
     },
-    finalValue: {
-      fontSize: 20, fontFamily: 'DMSans', fontWeight: 700,
+    gradeLetter: {
+      fontSize: 16, fontFamily: 'DMSans', fontWeight: 700,
       color: colors.gradeHighlight, marginLeft: 8,
     },
 
-    notes: { marginTop: 5, fontSize: 8, color: colors.textSecondary, textAlign: 'center' },
+    notes: { marginTop: 3, fontSize: 7.5, color: colors.textSecondary, textAlign: 'center' },
 
     // ─── QR + Signature row ──────────────────────────────────────────────
     bottomRow: {
-      flexDirection: 'row', marginTop: 12,
+      flexDirection: 'row', marginVertical: 6,
       alignItems: 'flex-start', justifyContent: 'space-between',
     },
-    qrBox: { width: 150 },
+    qrBox: { width: 140 },
     qrFrame: {
-      padding: 4,
+      padding: 3,
       borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft,
       backgroundColor: colors.white,
-      width: 78, alignItems: 'center', justifyContent: 'center',
+      width: 66, alignItems: 'center', justifyContent: 'center',
     },
-    qrImg: { width: 70, height: 70, objectFit: 'contain' },
-    qrPlaceholder: { width: 70, height: 70, alignItems: 'center', justifyContent: 'center' },
+    qrImg: { width: 60, height: 60, objectFit: 'contain' },
+    qrPlaceholder: { width: 60, height: 60, alignItems: 'center', justifyContent: 'center' },
     qrLabel: {
-      fontSize: 8.5, color: colors.textLabel,
+      fontSize: 7.5, color: colors.textLabel,
       fontFamily: 'DMSans', fontWeight: 700,
-      marginTop: 4, width: 78, textAlign: 'center',
+      marginTop: 3, width: 66, textAlign: 'center',
     },
     dateIssue: {
-      fontSize: 8.5, color: colors.textLabel,
-      fontFamily: 'DMSans', fontWeight: 700, marginTop: 6,
+      fontSize: 7.5, color: colors.textLabel,
+      fontFamily: 'DMSans', fontWeight: 700, marginTop: 4,
     },
 
-    sigBox: { width: 200, alignItems: 'flex-end' },
-    sigImg: { height: 32, width: 160, objectFit: 'contain' },
-    sigPlaceholder: { height: 32, width: 160 },
+    sigBox: { width: 180, alignItems: 'flex-end' },
+    sigImg: { height: 28, width: 150, objectFit: 'contain' },
+    sigPlaceholder: { height: 28, width: 150 },
     sigLine: {
       width: 140, borderTopWidth: 1, borderTopStyle: 'solid',
       borderTopColor: colors.borderPrimary,
-      marginBottom: 4, alignSelf: 'flex-end',
+      marginBottom: 3, alignSelf: 'flex-end',
     },
     sigName: {
-      fontSize: 10.5, fontFamily: 'DMSans', fontWeight: 700,
-      color: colors.textPrimary, textAlign: 'right', width: 200,
+      fontSize: 9.5, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.textPrimary, textAlign: 'right', width: 180,
     },
     sigTitle: {
-      fontSize: 9, fontFamily: 'DMSans', fontWeight: 400,
-      color: colors.textSecondary, textAlign: 'right', width: 200,
+      fontSize: 8, fontFamily: 'DMSans', fontWeight: 400,
+      color: colors.textSecondary, textAlign: 'right', width: 180,
     },
 
     // ─── Certification strip ─────────────────────────────────────────────
     certStrip: {
-      marginTop: 14,
+      marginTop: 5,
       flexDirection: 'row',
       alignItems: 'center', justifyContent: 'space-around',
-      paddingVertical: 10, paddingHorizontal: 16,
+      paddingVertical: 6, paddingHorizontal: 14,
       backgroundColor: colors.blockTint,
       borderTopWidth: 1, borderTopColor: colors.borderSoft,
       borderBottomWidth: 1, borderBottomColor: colors.borderSoft,
     },
-    certLogo: { height: 30, width: 54, objectFit: 'contain' },
+    certLogo: { height: 20, width: 46, objectFit: 'contain' },
 
     // ─── Footer ──────────────────────────────────────────────────────────
-    footerLine: {
-      marginTop: 10, alignItems: 'center',
+    footer: {
+      marginTop: 5, alignItems: 'center', paddingVertical: 4,
     },
     footerText: {
-      fontSize: 8.5, color: colors.textSecondary,
+      fontSize: 7.5, color: colors.textSecondary,
       fontFamily: 'DMSans', fontWeight: 400,
-      textAlign: 'center', lineHeight: 1.5,
+      textAlign: 'center', lineHeight: 1.3,
     },
     footerBold: {
       fontFamily: 'DMSans', fontWeight: 700, color: colors.textPrimary,
@@ -420,17 +417,15 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     },
   })
 
-  // Build a flat zebra counter so subject rows alternate regardless of
-  // semester boundaries (spec requirement §8).
+  // Flat zebra counter so subject rows alternate regardless of semester.
   let zebraIdx = 0
   const semesters = Array.from(new Set(rows.map(r => r.semester ?? 0))).sort((a, b) => a - b)
 
   return await pdf(
     <Document>
       <Page size="A4" style={s.page}>
-        {/* Double-border frame: outer maroon (2pt) → 4pt cream gap → inner red (1pt) → 14pt content padding */}
         <View style={s.frameOuter}>
-          <View style={s.frameInner}>
+          <View style={s.frameInner} wrap={false}>
 
             {/* Header — institute info only */}
             <View style={s.headerRow}>
@@ -443,13 +438,16 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                   <Text style={{ color: colors.borderAccent }}>SKILLS</Text>
                   <Text style={{ color: colors.textPrimary }}> COMPUTER EDUCATION</Text>
                 </Text>
-                {settings.header_subtitle ? <Text style={s.subLine}>{settings.header_subtitle}</Text> : null}
-                {settings.header_tagline
-                  ? settings.header_tagline.split('\n').map((line, i) => (
-                      <Text key={i} style={s.subLine}>{line}</Text>
-                    ))
-                  : null}
-                {settings.reg_line ? <Text style={s.subLine}>{settings.reg_line}</Text> : null}
+                <Text style={s.subHeader}>
+                  An ISO 9001:2015 Certified Organization
+                  <Text style={s.subBullet}>  •  </Text>
+                  Run by UnSkills FuturePath Tech Pvt. Ltd.
+                </Text>
+                <Text style={s.subHeader}>
+                  Alliance with Skill India, MSME, NSDC, etc.
+                  <Text style={s.subBullet}>  •  </Text>
+                  Registered under Company Act 2013
+                </Text>
               </View>
               <View style={s.rightCol}>
                 <Text style={s.regLine}>Reg. No.:</Text>
@@ -459,80 +457,90 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
 
             {/* Title band + diamond divider */}
             <View style={s.titleBand}>
-              <Text style={s.titleText}>Statement of Marks</Text>
-              <Svg width={100} height={10} style={{ alignSelf: 'center', marginBottom: 6 }}>
-                <Line x1="0" y1="5" x2="40" y2="5" stroke={colors.borderPrimary} strokeWidth={1} />
-                <Path d="M 50 1 L 55 5 L 50 9 L 45 5 Z" fill={colors.borderPrimary} />
-                <Line x1="60" y1="5" x2="100" y2="5" stroke={colors.borderPrimary} strokeWidth={1} />
+              <Text style={s.statementTitle}>Statement of Marks</Text>
+              <Svg width={80} height={10} style={{ alignSelf: 'center', marginBottom: 3 }}>
+                <Line x1="0" y1="5" x2="32" y2="5" stroke={colors.borderPrimary} strokeWidth={1} />
+                <Path d="M 40 1 L 45 5 L 40 9 L 35 5 Z" fill={colors.borderPrimary} />
+                <Line x1="48" y1="5" x2="80" y2="5" stroke={colors.borderPrimary} strokeWidth={1} />
               </Svg>
               {student.session ? <Text style={s.sessionText}>Session: {student.session}</Text> : null}
             </View>
 
-            {/* Student info */}
+            {/* Student info — inline label+value on same line, top-aligned cells */}
             <View style={s.infoWrap}>
               <View style={s.infoLeft}>
                 <View style={s.infoRow}>
-                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                    <Text style={s.infoLabel}>Enrollment No</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{student.registration_no}</Text>
+                  <View style={[s.detailCell, s.detailCellDivider]}>
+                    <Text>
+                      <Text style={s.detailLabel}>Enrollment No : </Text>
+                      <Text style={s.detailValue}>{student.registration_no}</Text>
+                    </Text>
                   </View>
-                  <View style={s.infoCellWrap}>
-                    <Text style={s.infoLabel}>Roll No</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{roll_no || '—'}</Text>
-                  </View>
-                </View>
-
-                <View style={s.infoRow}>
-                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                    <Text style={s.infoLabel}>Training Center</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{center.name || '—'}</Text>
-                  </View>
-                  <View style={s.infoCellWrap}>
-                    <Text style={s.infoLabel}>Center Code</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{center.code || '—'}</Text>
+                  <View style={s.detailCell}>
+                    <Text>
+                      <Text style={s.detailLabel}>Roll No : </Text>
+                      <Text style={s.detailValue}>{roll_no || '—'}</Text>
+                    </Text>
                   </View>
                 </View>
 
                 <View style={s.infoRow}>
-                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                    <Text style={s.infoLabel}>Course Name</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{student.course_name || '—'}</Text>
+                  <View style={[s.detailCell, s.detailCellDivider]}>
+                    <Text>
+                      <Text style={s.detailLabel}>Training Center : </Text>
+                      <Text style={s.detailValue}>{center.name || '—'}</Text>
+                    </Text>
                   </View>
-                  <View style={s.infoCellWrap}>
-                    <Text style={s.infoLabel}>Course Duration</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{student.course_duration || '—'}</Text>
+                  <View style={s.detailCell}>
+                    <Text>
+                      <Text style={s.detailLabel}>Center Code : </Text>
+                      <Text style={s.detailValue}>{center.code || '—'}</Text>
+                    </Text>
                   </View>
                 </View>
 
                 <View style={s.infoRow}>
-                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                    <Text style={s.infoLabel}>Student Name</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{student.name}</Text>
+                  <View style={[s.detailCell, s.detailCellDivider]}>
+                    <Text>
+                      <Text style={s.detailLabel}>Course Name : </Text>
+                      <Text style={s.detailValue}>{student.course_name || '—'}</Text>
+                    </Text>
                   </View>
-                  <View style={s.infoCellWrap}>
-                    <Text style={s.infoLabel}>Father&#39;s Name</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{student.father_name || '—'}</Text>
+                  <View style={s.detailCell}>
+                    <Text>
+                      <Text style={s.detailLabel}>Course Duration : </Text>
+                      <Text style={s.detailValue}>{student.course_duration || '—'}</Text>
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={s.infoRow}>
+                  <View style={[s.detailCell, s.detailCellDivider]}>
+                    <Text>
+                      <Text style={s.detailLabel}>Student Name : </Text>
+                      <Text style={s.detailValue}>{student.name}</Text>
+                    </Text>
+                  </View>
+                  <View style={s.detailCell}>
+                    <Text>
+                      <Text style={s.detailLabel}>Father&#39;s Name : </Text>
+                      <Text style={s.detailValue}>{student.father_name || '—'}</Text>
+                    </Text>
                   </View>
                 </View>
 
                 <View style={s.infoRowLast}>
-                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                    <Text style={s.infoLabel}>Date of Registration</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{fmtDate(student.enrollment_date)}</Text>
+                  <View style={[s.detailCell, s.detailCellDivider]}>
+                    <Text>
+                      <Text style={s.detailLabel}>Date of Registration : </Text>
+                      <Text style={s.detailValue}>{fmtDate(student.enrollment_date)}</Text>
+                    </Text>
                   </View>
-                  <View style={s.infoCellWrap}>
-                    <Text style={s.infoLabel}>Center Address</Text>
-                    <Text style={s.infoColon}>:</Text>
-                    <Text style={s.infoValue}>{center.address || '—'}</Text>
+                  <View style={s.detailCell}>
+                    <Text>
+                      <Text style={s.detailLabel}>Center Address : </Text>
+                      <Text style={s.detailValue}>{center.address || '—'}</Text>
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -541,7 +549,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                 {photoDataUrl
                   ? <PdfImage src={photoDataUrl} style={s.infoPhotoImg} />
                   : <View style={s.infoPhotoPlaceholder}>
-                      <Text style={{ fontSize: 22, color: colors.textLabel, fontFamily: 'DMSans', fontWeight: 700 }}>
+                      <Text style={{ fontSize: 18, color: colors.textLabel, fontFamily: 'DMSans', fontWeight: 700 }}>
                         {student.name.charAt(0).toUpperCase()}
                       </Text>
                     </View>}
@@ -597,7 +605,6 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                 )
               })}
 
-              {/* Totals row */}
               <View style={s.tTotalRow}>
                 <Text style={s.tTotalCellLabel}>Total</Text>
                 <Text style={s.tTotalCellNum}>—</Text>
@@ -608,13 +615,13 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
               </View>
             </View>
 
-            {/* Grade legend row — colored dots (SVG Circle) */}
+            {/* Grade legend */}
             <View style={s.legendWrap}>
               {gradingScheme.map((band, i) => (
                 <View key={band.label} style={s.legendCol}>
                   <View style={s.legendLabelRow}>
-                    <Svg width={8} height={8}>
-                      <Circle cx={4} cy={4} r={3} fill={LEGEND_DOT_COLORS[i] || colors.green} />
+                    <Svg width={6} height={6}>
+                      <Circle cx={3} cy={3} r={2.5} fill={LEGEND_DOT_COLORS[i] || colors.green} />
                     </Svg>
                     <Text style={s.legendLabelText}>{band.label}</Text>
                   </View>
@@ -625,13 +632,13 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
 
             {/* Final grade banner */}
             <View style={s.finalWrap}>
-              <Text style={s.finalLabel}>Final Grade:</Text>
-              <Text style={s.finalValue}>{finalGrade}</Text>
+              <Text style={s.gradeLabel}>Final Grade:</Text>
+              <Text style={s.gradeLetter}>{finalGrade}</Text>
             </View>
 
             {settings.notes ? <Text style={s.notes}>{settings.notes}</Text> : null}
 
-            {/* QR + Signature row */}
+            {/* QR + Signature */}
             <View style={s.bottomRow}>
               <View style={s.qrBox}>
                 <View style={s.qrFrame}>
@@ -662,7 +669,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
             </View>
 
             {/* Footer */}
-            <View style={s.footerLine}>
+            <View style={s.footer}>
               <Text style={s.footerText}>
                 <Text style={s.footerBold}>Head Office: </Text>
                 {settings.footer_address}
