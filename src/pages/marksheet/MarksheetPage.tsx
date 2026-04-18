@@ -30,6 +30,20 @@ async function buildQrDataUrl(url: string): Promise<string> {
   }
 }
 
+// Ordered list of certification logos to display at the bottom of the PDF.
+const CERT_LOGO_PATHS = [
+  '/ISO LOGOs.png',
+  '/MSME loogo.png',
+  '/Skill India Logo.png',
+  '/NSDC logo.png',
+  '/Digital India logo.png',
+  '/ANSI logo.png',
+  '/IAF LOGO.png',
+]
+async function loadCertLogos(): Promise<string[]> {
+  return Promise.all(CERT_LOGO_PATHS.map(p => toDataUrl(encodeURI(p)).catch(() => '')))
+}
+
 interface StudentData {
   id: string; registration_no: string; name: string; father_name: string
   dob: string | null; photo_url: string | null
@@ -271,6 +285,15 @@ export default function MarksheetPage() {
     setRows(prev => prev.map((r, i) => {
       if (i !== idx) return r
       const next = { ...r, ...patch }
+      // Clamp obtained marks to max and warn the user once per over-entry.
+      if (patch.theory_obtained != null && Number(patch.theory_obtained) > (Number(next.theory_max) || 0)) {
+        toast.error(`Theory obtained cannot exceed max marks (${next.theory_max})`)
+        next.theory_obtained = next.theory_max
+      }
+      if (patch.practical_obtained != null && Number(patch.practical_obtained) > (Number(next.practical_max) || 0)) {
+        toast.error(`Practical obtained cannot exceed max marks (${next.practical_max})`)
+        next.practical_obtained = next.practical_max
+      }
       next.total = (Number(next.theory_obtained) || 0) + (Number(next.practical_obtained) || 0)
       return next
     }))
@@ -305,19 +328,19 @@ export default function MarksheetPage() {
 
     setGenerating(true)
     try {
-      const [settings, logoDataUrl, isoLogoDataUrl] = await Promise.all([
+      const [settings, logoDataUrl, certLogos] = await Promise.all([
         getMarksheetSettings(),
         toDataUrl('/MAIN LOGO FOR ALL CARDS.png').catch(() => ''),
-        toDataUrl(encodeURI('/ISO LOGOs.png')).catch(() => ''),
+        loadCertLogos(),
       ])
       const photoDataUrl = student.photo_url ? await toDataUrl(student.photo_url).catch(() => '') : ''
-      const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, student.registration_no))
 
       const bands = parseGradingScheme(settings.grading_scheme_json)
       const { grade, isPass } = resolveGrade(totals.percentage, bands)
-      const resultStr = isPass ? 'Pass' : 'Fail'
+      const resultStr: 'pass' | 'fail' = isPass ? 'pass' : 'fail'
 
       const serial_no = await buildSerialNo()
+      const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, serial_no))
       const br = student.branch
       const centerCode = br?.b_code || br?.code || ''
       const centerAddress = br ? `${br.address_line1 || ''}${br.district ? ', ' + br.district : ''}${br.state ? ', ' + br.state : ''}${br.pincode ? ' - ' + br.pincode : ''}`.replace(/^,\s*/, '') : ''
@@ -338,10 +361,10 @@ export default function MarksheetPage() {
         serial_no,
         totals,
         finalGrade: grade,
-        result: resultStr,
+        result: resultStr === 'pass' ? 'Pass' : 'Fail',
         gradingScheme: bands,
         settings,
-        logoDataUrl, isoLogoDataUrl, photoDataUrl, qrDataUrl,
+        logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
       })
 
       const marksData: MarksheetMarksData = {
@@ -351,7 +374,7 @@ export default function MarksheetPage() {
         grading_scheme: bands,
       }
 
-      await supabase.from('uce_marksheets').insert({
+      const { error: insertError } = await supabase.from('uce_marksheets').insert({
         student_id: student.id,
         course_id: student.course_id,
         serial_no,
@@ -363,6 +386,7 @@ export default function MarksheetPage() {
         result: resultStr,
         issue_date: issueDate,
       })
+      if (insertError) { console.error(insertError); toast.error(`Save failed: ${insertError.message}`); return }
       loadHistory()
 
       const url = URL.createObjectURL(blob)
@@ -385,14 +409,14 @@ export default function MarksheetPage() {
         .eq('id', rec.student_id).single()
       if (!sd) { toast.error('Student not found'); return }
 
-      const [settings, logoDataUrl, isoLogoDataUrl] = await Promise.all([
+      const [settings, logoDataUrl, certLogos] = await Promise.all([
         getMarksheetSettings(),
         toDataUrl('/MAIN LOGO FOR ALL CARDS.png').catch(() => ''),
-        toDataUrl(encodeURI('/ISO LOGOs.png')).catch(() => ''),
+        loadCertLogos(),
       ])
       const sdc = sd as unknown as StudentData
       const photoDataUrl = sdc.photo_url ? await toDataUrl(sdc.photo_url).catch(() => '') : ''
-      const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, sdc.registration_no))
+      const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, rec.serial_no || sdc.registration_no))
       const bands = rec.marks_data.grading_scheme ?? parseGradingScheme(settings.grading_scheme_json)
       const br = sdc.branch
       const centerCode = br?.b_code || br?.code || ''
@@ -417,7 +441,7 @@ export default function MarksheetPage() {
         result: rec.result || '-',
         gradingScheme: bands,
         settings,
-        logoDataUrl, isoLogoDataUrl, photoDataUrl, qrDataUrl,
+        logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
       })
 
       const url = URL.createObjectURL(blob)
@@ -611,13 +635,13 @@ export default function MarksheetPage() {
                               <input type="number" value={r.theory_max || ''} onChange={e => updateRow(idx, { theory_max: Number(e.target.value) })} className={`${inputClass} py-1.5 w-20 text-center`} />
                             </td>
                             <td className="py-1.5 px-2">
-                              <input type="number" value={r.theory_obtained ?? ''} onChange={e => updateRow(idx, { theory_obtained: e.target.value === '' ? null : Number(e.target.value) })} className={`${inputClass} py-1.5 w-20 text-center`} />
+                              <input type="number" min={0} max={r.theory_max || undefined} value={r.theory_obtained ?? ''} onChange={e => updateRow(idx, { theory_obtained: e.target.value === '' ? null : Number(e.target.value) })} className={`${inputClass} py-1.5 w-20 text-center`} />
                             </td>
                             <td className="py-1.5 px-2">
-                              <input type="number" value={r.practical_max || ''} onChange={e => updateRow(idx, { practical_max: Number(e.target.value) })} className={`${inputClass} py-1.5 w-20 text-center`} />
+                              <input type="number" min={0} value={r.practical_max || ''} onChange={e => updateRow(idx, { practical_max: Number(e.target.value) })} className={`${inputClass} py-1.5 w-20 text-center`} />
                             </td>
                             <td className="py-1.5 px-2">
-                              <input type="number" value={r.practical_obtained ?? ''} onChange={e => updateRow(idx, { practical_obtained: e.target.value === '' ? null : Number(e.target.value) })} className={`${inputClass} py-1.5 w-20 text-center`} />
+                              <input type="number" min={0} max={r.practical_max || undefined} value={r.practical_obtained ?? ''} onChange={e => updateRow(idx, { practical_obtained: e.target.value === '' ? null : Number(e.target.value) })} className={`${inputClass} py-1.5 w-20 text-center`} />
                             </td>
                             <td className="py-1.5 px-2 text-center font-semibold text-gray-900">{r.total || '—'}</td>
                           </tr>

@@ -115,8 +115,8 @@ export function resolveGrade(percentage: number, bands: GradeBand[]): { grade: s
   return { grade: band.grade, label: band.label, isPass }
 }
 
-/** QR URL for marksheet verification — scanners land on the student verify page. */
-export function marksheetVerifyUrl(baseUrl: string, registrationNo: string): string {
+/** QR URL for marksheet verification — scanners land on the public marksheet page. */
+export function marksheetVerifyUrl(baseUrl: string, serialNo: string): string {
   const b = (baseUrl || '').replace(/\/+$/, '')
-  return `${b}/verify/id-card/${encodeURIComponent(registrationNo)}`
+  return `${b}/verify/marksheet/${encodeURIComponent(serialNo)}`
 }

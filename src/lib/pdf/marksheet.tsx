@@ -44,7 +44,8 @@ export interface BuildMarksheetInput {
   gradingScheme: GradeBand[]
   settings: MarksheetSettings
   logoDataUrl: string
-  isoLogoDataUrl: string
+  /** Ordered list of certification logo data URLs (ISO, MSME, Skill India, NSDC, Digital India, ANSI, IAF). */
+  certLogos: string[]
   photoDataUrl: string
   qrDataUrl: string
 }
@@ -82,10 +83,10 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
   const {
     student, center, rows, roll_no, issue_date, serial_no,
     totals, finalGrade, gradingScheme, settings,
-    logoDataUrl, isoLogoDataUrl, photoDataUrl, qrDataUrl,
+    logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
   } = input
 
-  const ORANGE = '#F97316'
+  const RED = '#C8102E'
   const BLACK = '#0F172A'
   const BORDER = '#111827'
   const BORDER_LIGHT = '#D1D5DB'
@@ -101,27 +102,13 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       padding: 0,
     },
 
-    // Outer frame + orange top corners (symmetric)
-    outerFrame: {
-      position: 'absolute', top: 14, left: 14, right: 14, bottom: 14,
-      borderWidth: 1, borderColor: BORDER,
-    },
-    cornerTL: { position: 'absolute', top: 14, left: 14, width: 36, height: 36, backgroundColor: ORANGE },
-    cornerTLMask: {
-      position: 'absolute', top: 14, left: 14,
-      borderTopWidth: 0, borderRightWidth: 36, borderBottomWidth: 36, borderLeftWidth: 0,
-      borderTopColor: 'transparent', borderRightColor: '#FFFFFF',
-      borderBottomColor: '#FFFFFF', borderLeftColor: 'transparent',
-    },
-    cornerTR: { position: 'absolute', top: 14, right: 14, width: 36, height: 36, backgroundColor: ORANGE },
-    cornerTRMask: {
-      position: 'absolute', top: 14, right: 14,
-      borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 36, borderLeftWidth: 36,
-      borderTopColor: 'transparent', borderRightColor: 'transparent',
-      borderBottomColor: '#FFFFFF', borderLeftColor: '#FFFFFF',
-    },
+    // Thick decorative border — four concentric strips: red, black, red, black
+    frameRed1:   { position: 'absolute', top: 10, left: 10, right: 10, bottom: 10, borderWidth: 2.2, borderColor: RED },
+    frameBlack1: { position: 'absolute', top: 14, left: 14, right: 14, bottom: 14, borderWidth: 1.5, borderColor: BLACK },
+    frameRed2:   { position: 'absolute', top: 18, left: 18, right: 18, bottom: 18, borderWidth: 1.2, borderColor: RED },
+    frameBlack2: { position: 'absolute', top: 21, left: 21, right: 21, bottom: 21, borderWidth: 0.8, borderColor: BLACK },
 
-    content: { paddingTop: 22, paddingHorizontal: 22, paddingBottom: 14 },
+    content: { paddingTop: 28, paddingHorizontal: 28, paddingBottom: 20 },
 
     // Header
     headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 },
@@ -154,10 +141,10 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     },
     infoRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: BORDER, minHeight: 18 },
     infoRowLast: { flexDirection: 'row', minHeight: 18 },
-    infoCellWrap: { flex: 1, flexDirection: 'row', paddingVertical: 3.5, paddingHorizontal: 6 },
+    infoCellWrap: { flex: 1, flexDirection: 'row', paddingVertical: 3.5, paddingHorizontal: 6, alignItems: 'baseline' },
     infoCellDivider: { borderRightWidth: 0.5, borderRightColor: BORDER },
     infoLabel: { fontSize: 8.8, color: BLACK, fontFamily: 'Helvetica-Bold' },
-    infoArrow: { fontSize: 8.8, color: BLACK, marginHorizontal: 3 },
+    infoColon: { fontSize: 8.8, color: BLACK, marginHorizontal: 4, fontFamily: 'Helvetica-Bold' },
     infoValue: { fontSize: 8.8, color: BLACK, flex: 1 },
 
     // Marks table
@@ -236,19 +223,24 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     qrLabel: { fontSize: 7, color: MUTED, textAlign: 'center', marginTop: 2, width: 76 },
     dateIssue: { fontSize: 8.5, color: BLACK, marginTop: 8 },
 
-    sigBox: { alignItems: 'center', width: 230 },
-    sigImg: { height: 30, width: 150, objectFit: 'contain' },
-    sigPlaceholder: { height: 30, width: 150 },
-    sigScriptName: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: BLACK, marginBottom: 2 },
+    // Signature block — right-anchored with a fixed line width so the name sits centered on it
+    sigBox: { width: 200, alignItems: 'center' },
+    sigImg: { height: 32, width: 180, objectFit: 'contain' },
+    sigPlaceholder: { height: 32, width: 180 },
+    sigLine: { width: 200, height: 0.7, backgroundColor: BLACK, marginTop: 2 },
     sigName: {
-      fontSize: 9.4, fontFamily: 'Helvetica-Bold', color: BLACK,
-      borderTopWidth: 0.6, borderTopColor: BLACK, paddingTop: 3, minWidth: 190, textAlign: 'center',
+      fontSize: 9.6, fontFamily: 'Helvetica-Bold', color: BLACK,
+      paddingTop: 3, width: 200, textAlign: 'center',
     },
-    sigTitle: { fontSize: 8.2, color: BLACK, textAlign: 'center' },
+    sigTitle: { fontSize: 8.2, color: BLACK, textAlign: 'center', width: 200 },
 
-    // Certification logos strip — single row, centered
-    certStrip: { marginTop: 10, alignItems: 'center' },
-    certLogo: { height: 36, width: 320, objectFit: 'contain' },
+    // Certification logos strip — seven individual logos, evenly spaced
+    certStrip: {
+      marginTop: 10, flexDirection: 'row',
+      alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 6,
+    },
+    certLogo: { height: 34, width: 56, objectFit: 'contain' },
 
     // Footer
     footerLine: {
@@ -268,11 +260,10 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
   return await pdf(
     <Document>
       <Page size="A4" style={s.page}>
-        <View style={s.outerFrame} fixed />
-        <View style={s.cornerTL} fixed />
-        <View style={s.cornerTLMask} fixed />
-        <View style={s.cornerTR} fixed />
-        <View style={s.cornerTRMask} fixed />
+        <View style={s.frameRed1} fixed />
+        <View style={s.frameBlack1} fixed />
+        <View style={s.frameRed2} fixed />
+        <View style={s.frameBlack2} fixed />
 
         <View style={s.content}>
           {/* Header — institute info only (no student photo here) */}
@@ -309,12 +300,12 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
               <View style={s.infoRow}>
                 <View style={[s.infoCellWrap, s.infoCellDivider]}>
                   <Text style={s.infoLabel}>Enrollment No</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{student.registration_no}</Text>
                 </View>
                 <View style={s.infoCellWrap}>
                   <Text style={s.infoLabel}>Roll No</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{roll_no || '—'}</Text>
                 </View>
               </View>
@@ -322,12 +313,12 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
               <View style={s.infoRow}>
                 <View style={[s.infoCellWrap, s.infoCellDivider]}>
                   <Text style={s.infoLabel}>Training Center</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{center.name || '—'}</Text>
                 </View>
                 <View style={s.infoCellWrap}>
                   <Text style={s.infoLabel}>Center Code</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{center.code || '—'}</Text>
                 </View>
               </View>
@@ -335,12 +326,12 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
               <View style={s.infoRow}>
                 <View style={[s.infoCellWrap, s.infoCellDivider]}>
                   <Text style={s.infoLabel}>Course Name</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{student.course_name || '—'}</Text>
                 </View>
                 <View style={s.infoCellWrap}>
                   <Text style={s.infoLabel}>Course Duration</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{student.course_duration || '—'}</Text>
                 </View>
               </View>
@@ -348,12 +339,12 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
               <View style={s.infoRow}>
                 <View style={[s.infoCellWrap, s.infoCellDivider]}>
                   <Text style={s.infoLabel}>Student Name</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{student.name}</Text>
                 </View>
                 <View style={s.infoCellWrap}>
                   <Text style={s.infoLabel}>Father&#39;s Name</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{student.father_name || '—'}</Text>
                 </View>
               </View>
@@ -361,12 +352,12 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
               <View style={s.infoRowLast}>
                 <View style={[s.infoCellWrap, s.infoCellDivider]}>
                   <Text style={s.infoLabel}>Date of Registration</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{fmtDate(student.enrollment_date)}</Text>
                 </View>
                 <View style={s.infoCellWrap}>
                   <Text style={s.infoLabel}>Center Address</Text>
-                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoColon}>:</Text>
                   <Text style={s.infoValue}>{center.address || '—'}</Text>
                 </View>
               </View>
@@ -486,18 +477,19 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
               {settings.left_signature_url
                 ? <PdfImage src={settings.left_signature_url} style={s.sigImg} />
                 : <View style={s.sigPlaceholder} />}
+              <View style={s.sigLine} />
               <Text style={s.sigName}>{settings.left_signer_name || '—'}</Text>
               {settings.left_signer_title ? <Text style={s.sigTitle}>{settings.left_signer_title}</Text> : null}
               {settings.left_signer_org ? <Text style={s.sigTitle}>{settings.left_signer_org}</Text> : null}
             </View>
           </View>
 
-          {/* Certification logos strip (ISO / Skill India / NSDC / MSME composite) */}
-          {isoLogoDataUrl ? (
-            <View style={s.certStrip}>
-              <PdfImage src={isoLogoDataUrl} style={s.certLogo} />
-            </View>
-          ) : null}
+          {/* Certification logos strip — ISO / MSME / Skill India / NSDC / Digital India / ANSI / IAF */}
+          <View style={s.certStrip}>
+            {certLogos.filter(Boolean).map((src, i) => (
+              <PdfImage key={i} src={src} style={s.certLogo} />
+            ))}
+          </View>
 
           {/* Footer */}
           <View style={s.footerLine}>
