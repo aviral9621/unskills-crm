@@ -91,9 +91,39 @@ async function registerFonts() {
   fontsRegistered = true
 }
 
+// ─── Design tokens ──────────────────────────────────────────────────────────
+const colors = {
+  pageBg: '#FDFBF5',            // cream ivory (page paper tone)
+  blockTint: '#FBF7EC',         // subtle cream for grouped blocks
+  borderPrimary: '#8B1A2B',     // deep maroon (frame, section bands)
+  borderAccent: '#C8102E',      // bright red (SKILLS, inner accent)
+  borderSoft: '#D4C9B0',        // muted gold-beige (table/field lines)
+  accentGold: '#B8860B',        // decorative gold
+  gradeHighlight: '#F4C430',    // bright gold for the Grade letter
+  textPrimary: '#0A0A0A',
+  textSecondary: '#4A4A4A',
+  textLabel: '#6B5E3C',         // warm brown-gold for labels
+  semesterTint: '#F4E8D0',      // warm gold-tint for semester dividers
+  white: '#FFFFFF',
+  // Grade legend dots
+  green: '#16A34A',
+  greenLight: '#22C55E',
+  amber: '#EAB308',
+  orange: '#F97316',
+  red: '#DC2626',
+}
+
+const LEGEND_DOT_COLORS = [
+  colors.green,
+  colors.greenLight,
+  colors.amber,
+  colors.orange,
+  colors.red,
+]
+
 export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise<Blob> {
   await registerFonts()
-  const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
+  const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet, Svg, Path, Line, Circle } = await import('@react-pdf/renderer')
 
   const {
     student, center, rows, roll_no, issue_date, serial_no,
@@ -101,422 +131,553 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
   } = input
 
-  const RED = '#C8102E'
-  const BLACK = '#0F172A'
-  const BORDER = '#111827'
-  const BORDER_LIGHT = '#D1D5DB'
-  const MUTED = '#4B5563'
-  const LIGHT = '#F3F4F6'
-
   const s = StyleSheet.create({
     page: {
       fontFamily: 'DMSans', fontWeight: 400,
       fontSize: 9,
-      color: BLACK,
-      backgroundColor: '#FFFFFF',
-      padding: 0,
+      color: colors.textPrimary,
+      backgroundColor: colors.pageBg,
+      padding: 24,
     },
 
-    // Thick decorative border — two strips: red outer + black inner
-    frameRed:   { position: 'absolute', top: 10, left: 10, right: 10, bottom: 10, borderWidth: 2.8, borderColor: RED },
-    frameBlack: { position: 'absolute', top: 15, left: 15, right: 15, bottom: 15, borderWidth: 1.2, borderColor: BLACK },
+    // Outer + inner frames (double-border, nested Views)
+    frameOuter: {
+      borderWidth: 2,
+      borderStyle: 'solid',
+      borderColor: colors.borderPrimary,
+      padding: 4,
+    },
+    frameInner: {
+      borderWidth: 1,
+      borderStyle: 'solid',
+      borderColor: colors.borderAccent,
+      padding: 14,
+    },
 
-    content: { paddingTop: 22, paddingHorizontal: 24, paddingBottom: 26 },
+    // ─── Header ───────────────────────────────────────────────────────────
+    headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
+    logoCol: { width: 64, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
+    logo: { width: 54, height: 54, objectFit: 'contain' },
+    middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
+    brandTitle: {
+      fontSize: 22, fontFamily: 'DMSans', fontWeight: 700,
+      textAlign: 'center', letterSpacing: 2, textTransform: 'uppercase',
+    },
+    subLine: {
+      fontSize: 8.5, color: colors.textSecondary,
+      textAlign: 'center', lineHeight: 1.5,
+      fontFamily: 'DMSans', fontWeight: 400,
+    },
+    rightCol: { width: 92, alignItems: 'flex-end', paddingTop: 4 },
+    regLine: {
+      fontSize: 8.5, color: colors.textPrimary, textAlign: 'right',
+      fontFamily: 'DMSans', fontWeight: 700,
+    },
 
-    // Header
-    headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 2 },
-    logoCol: { width: 66, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
-    logo: { width: 56, height: 56, objectFit: 'contain' },
-    middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 4, paddingTop: 2 },
-    brand: { fontSize: 16.5, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center', letterSpacing: 0.6 },
-    subLine: { fontSize: 8, color: BLACK, textAlign: 'center', marginTop: 1.2, fontFamily: 'DMSans', fontWeight: 400 },
-    rightCol: { width: 86, alignItems: 'flex-end', paddingTop: 4 },
-    regLine: { fontSize: 8, color: BLACK, textAlign: 'right', fontFamily: 'DMSans', fontWeight: 700 },
+    // ─── Title band ───────────────────────────────────────────────────────
+    titleBand: { alignItems: 'center', marginTop: 10 },
+    titleText: {
+      fontSize: 16, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.textPrimary, letterSpacing: 4, textTransform: 'uppercase',
+      marginBottom: 4,
+    },
+    sessionText: {
+      fontSize: 10, color: colors.textSecondary,
+      textAlign: 'center', marginTop: 2,
+      fontFamily: 'DMSans', fontWeight: 400,
+    },
 
-    divider: { marginTop: 6, height: 0.6, backgroundColor: MUTED },
-
-    // Title
-    titleBand: { alignItems: 'center', marginTop: 6 },
-    titleText: { fontSize: 16, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, letterSpacing: 2.4 },
-    sessionText: { fontSize: 9, color: BLACK, marginTop: 2, fontFamily: 'DMSans', fontWeight: 400 },
-
-    // Student info — bordered grid with photo on right
-    infoWrap: { marginTop: 7, flexDirection: 'row', borderWidth: 0.8, borderColor: BORDER },
+    // ─── Student info block ──────────────────────────────────────────────
+    infoWrap: {
+      marginTop: 10, flexDirection: 'row',
+      borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft,
+      backgroundColor: colors.blockTint,
+    },
     infoLeft: { flex: 1 },
-    infoPhoto: {
-      width: 86, alignItems: 'center', justifyContent: 'center',
-      padding: 4, borderLeftWidth: 0.8, borderLeftColor: BORDER, backgroundColor: '#FFFFFF',
+    infoPhotoCell: {
+      width: 92, alignItems: 'center', justifyContent: 'center',
+      padding: 6, borderLeftWidth: 1, borderLeftColor: colors.borderSoft,
+      backgroundColor: colors.pageBg,
     },
-    infoPhotoImg: { width: 76, height: 88, objectFit: 'cover', borderWidth: 0.6, borderColor: BLACK },
+    infoPhotoImg: {
+      width: 80, height: 92, objectFit: 'cover',
+      borderWidth: 2, borderStyle: 'solid', borderColor: colors.borderPrimary,
+      borderRadius: 2,
+    },
     infoPhotoPlaceholder: {
-      width: 76, height: 88, backgroundColor: '#E5E7EB',
-      borderWidth: 0.6, borderColor: BLACK, alignItems: 'center', justifyContent: 'center',
+      width: 80, height: 92, backgroundColor: '#EDE5D0',
+      borderWidth: 2, borderStyle: 'solid', borderColor: colors.borderPrimary,
+      borderRadius: 2, alignItems: 'center', justifyContent: 'center',
     },
-    infoRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: BORDER, minHeight: 16 },
-    infoRowLast: { flexDirection: 'row', minHeight: 16 },
-    infoCellWrap: { flex: 1, flexDirection: 'row', paddingVertical: 2.5, paddingHorizontal: 5, alignItems: 'baseline' },
-    infoCellDivider: { borderRightWidth: 0.5, borderRightColor: BORDER },
-    infoLabel: { fontSize: 8.8, color: BLACK, fontFamily: 'DMSans', fontWeight: 700 },
-    infoColon: { fontSize: 8.8, color: BLACK, marginHorizontal: 4, fontFamily: 'DMSans', fontWeight: 700 },
-    infoValue: { fontSize: 8.8, color: BLACK, flex: 1 },
+    infoRow: {
+      flexDirection: 'row',
+      borderBottomWidth: 1, borderBottomColor: colors.borderSoft,
+    },
+    infoRowLast: { flexDirection: 'row' },
+    infoCellWrap: {
+      flex: 1, flexDirection: 'row',
+      paddingVertical: 5, paddingHorizontal: 9,
+      alignItems: 'baseline',
+    },
+    infoCellDivider: { borderRightWidth: 1, borderRightColor: colors.borderSoft },
+    infoLabel: { fontSize: 9, color: colors.textLabel, fontFamily: 'DMSans', fontWeight: 700 },
+    infoColon: { fontSize: 9, color: colors.textLabel, marginHorizontal: 4, fontFamily: 'DMSans', fontWeight: 700 },
+    infoValue: { fontSize: 10, color: colors.textPrimary, flex: 1, fontFamily: 'DMSans', fontWeight: 700 },
 
-    // Marks table
-    tableWrap: { marginTop: 6, borderWidth: 0.8, borderColor: BORDER },
-    tHeadRow: { flexDirection: 'row', backgroundColor: LIGHT, borderBottomWidth: 0.8, borderBottomColor: BORDER, minHeight: 24 },
+    // ─── Marks table ─────────────────────────────────────────────────────
+    tableWrap: {
+      marginTop: 10,
+      borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft,
+    },
+    tHeadRow: {
+      flexDirection: 'row', backgroundColor: colors.borderPrimary,
+      minHeight: 26,
+    },
     tHeadSubject: {
-      flex: 3.2, paddingVertical: 4, paddingHorizontal: 5,
-      borderRightWidth: 0.5, borderRightColor: BORDER,
+      flex: 3.2, paddingVertical: 6, paddingHorizontal: 8,
+      borderRightWidth: 0.6, borderRightColor: '#FFFFFF66',
       alignItems: 'center', justifyContent: 'center',
     },
     tHeadGroup: {
-      flex: 2, borderRightWidth: 0.5, borderRightColor: BORDER,
-      alignItems: 'center', justifyContent: 'center', paddingVertical: 2,
+      flex: 2, borderRightWidth: 0.6, borderRightColor: '#FFFFFF66',
+      alignItems: 'center', justifyContent: 'center', paddingVertical: 4,
     },
     tHeadTotal: {
-      flex: 1, paddingVertical: 4, paddingHorizontal: 4,
+      flex: 1, paddingVertical: 6, paddingHorizontal: 6,
       alignItems: 'center', justifyContent: 'center',
     },
-    tHeadText: { fontSize: 9, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center' },
-    tHeadSub: { fontSize: 7, color: MUTED, textAlign: 'center', marginTop: 1, fontFamily: 'DMSans', fontWeight: 400 },
+    tHeadText: {
+      fontSize: 10, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.white, textAlign: 'center',
+      textTransform: 'uppercase', letterSpacing: 0.8,
+    },
+    tHeadSub: {
+      fontSize: 7.5, color: '#FFFFFFCC', textAlign: 'center', marginTop: 1.5,
+      fontFamily: 'DMSans', fontWeight: 400,
+    },
 
     tSemRow: {
-      flexDirection: 'row', backgroundColor: '#E5E7EB',
-      borderBottomWidth: 0.5, borderBottomColor: BORDER,
-      borderTopWidth: 0.5, borderTopColor: BORDER,
+      flexDirection: 'row',
+      backgroundColor: colors.semesterTint,
+      borderTopWidth: 1, borderTopColor: colors.borderSoft,
+      borderBottomWidth: 1, borderBottomColor: colors.borderSoft,
     },
     tSemCell: {
-      flex: 1, paddingVertical: 2.5, paddingHorizontal: 6,
-      fontSize: 8.8, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center',
+      flex: 1, paddingVertical: 5, paddingHorizontal: 8,
+      fontSize: 10, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.textLabel, textAlign: 'center',
     },
 
-    tRow: { flexDirection: 'row', borderBottomWidth: 0.3, borderBottomColor: BORDER_LIGHT, minHeight: 15 },
-    tCell: {
-      paddingVertical: 2.5, paddingHorizontal: 5, fontSize: 8.2, color: BLACK,
-      borderRightWidth: 0.5, borderRightColor: BORDER,
+    tRow: {
+      flexDirection: 'row',
+      borderBottomWidth: 1, borderBottomColor: colors.borderSoft,
+      minHeight: 18,
     },
-    tCellRight: { paddingVertical: 2.5, paddingHorizontal: 5, fontSize: 8.2, color: BLACK, textAlign: 'center' },
+    tCellSubject: {
+      flex: 3.2, paddingVertical: 5, paddingHorizontal: 8,
+      fontSize: 9, color: '#1A1A1A',
+      fontFamily: 'DMSans', fontWeight: 400, textAlign: 'left',
+      borderRightWidth: 0.6, borderRightColor: colors.borderSoft,
+    },
+    tCellNum: {
+      flex: 1, paddingVertical: 5, paddingHorizontal: 8,
+      fontSize: 9, color: colors.textPrimary,
+      fontFamily: 'DMSans', fontWeight: 700, textAlign: 'right',
+      borderRightWidth: 0.6, borderRightColor: colors.borderSoft,
+    },
+    tCellNumLast: {
+      flex: 1, paddingVertical: 5, paddingHorizontal: 8,
+      fontSize: 9, color: colors.textPrimary,
+      fontFamily: 'DMSans', fontWeight: 700, textAlign: 'right',
+    },
 
     tTotalRow: {
-      flexDirection: 'row', borderTopWidth: 0.8, borderTopColor: BORDER,
-      backgroundColor: LIGHT,
+      flexDirection: 'row', backgroundColor: colors.borderPrimary,
+      minHeight: 22,
     },
-    tTotalCell: {
-      paddingVertical: 3.5, paddingHorizontal: 5, fontSize: 8.8, fontFamily: 'DMSans', fontWeight: 700,
-      color: BLACK, borderRightWidth: 0.5, borderRightColor: BORDER, textAlign: 'center',
+    tTotalCellLabel: {
+      flex: 3.2, paddingVertical: 7, paddingHorizontal: 10,
+      fontSize: 11, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.white, textAlign: 'left',
+      textTransform: 'uppercase', letterSpacing: 0.8,
+      borderRightWidth: 0.6, borderRightColor: '#FFFFFF66',
+    },
+    tTotalCellNum: {
+      flex: 1, paddingVertical: 7, paddingHorizontal: 8,
+      fontSize: 11, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.white, textAlign: 'right',
+      borderRightWidth: 0.6, borderRightColor: '#FFFFFF66',
+    },
+    tTotalCellNumLast: {
+      flex: 1, paddingVertical: 7, paddingHorizontal: 8,
+      fontSize: 11, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.white, textAlign: 'right',
     },
 
-    // Grading scheme strip
-    gradeWrap: { marginTop: 6, borderWidth: 0.8, borderColor: BORDER, flexDirection: 'row' },
-    gradeCol: { flex: 1, borderRightWidth: 0.5, borderRightColor: BORDER, alignItems: 'center' },
-    gradeColLast: { flex: 1, alignItems: 'center' },
-    gradeLbl: {
-      fontSize: 8.8, fontFamily: 'DMSans', fontWeight: 700, color: BLACK,
-      paddingVertical: 2.5, width: '100%', textAlign: 'center',
-      backgroundColor: LIGHT, borderBottomWidth: 0.5, borderBottomColor: BORDER,
+    // ─── Grade legend ────────────────────────────────────────────────────
+    legendWrap: {
+      marginTop: 10,
+      borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft,
+      backgroundColor: colors.blockTint,
+      flexDirection: 'row', justifyContent: 'space-between',
+      paddingVertical: 8, paddingHorizontal: 10,
     },
-    gradeVal: { fontSize: 8.4, color: BLACK, paddingVertical: 3 },
+    legendCol: { flex: 1, alignItems: 'center' },
+    legendLabelRow: { flexDirection: 'row', alignItems: 'center' },
+    legendLabelText: {
+      fontSize: 9, fontFamily: 'DMSans', fontWeight: 700, color: colors.textPrimary,
+      marginLeft: 4,
+    },
+    legendRange: {
+      fontSize: 8, color: colors.textSecondary,
+      fontFamily: 'DMSans', fontWeight: 400, marginTop: 2,
+    },
 
-    // Final grade band
+    // ─── Final grade banner ──────────────────────────────────────────────
     finalWrap: {
-      marginTop: 5, borderWidth: 0.8, borderColor: BORDER, backgroundColor: LIGHT,
-      paddingVertical: 4.5, alignItems: 'center',
+      marginTop: 10, backgroundColor: colors.borderPrimary,
+      paddingVertical: 12, alignItems: 'center',
+      flexDirection: 'row', justifyContent: 'center',
     },
-    finalText: { fontSize: 11.5, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, letterSpacing: 0.5 },
-
-    notes: { marginTop: 3, fontSize: 7.5, color: MUTED, textAlign: 'center' },
-
-    // Bottom: QR left, signature right
-    bottomRow: { flexDirection: 'row', marginTop: 8, alignItems: 'flex-start', justifyContent: 'space-between' },
-    qrBox: { width: 140 },
-    qrImg: { width: 64, height: 64, borderWidth: 0.6, borderColor: BLACK, objectFit: 'contain' },
-    qrPlaceholder: {
-      width: 64, height: 64, borderWidth: 0.6, borderColor: BLACK,
-      alignItems: 'center', justifyContent: 'center',
+    finalLabel: {
+      fontSize: 15, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.white, letterSpacing: 2, textTransform: 'uppercase',
     },
-    qrLabel: { fontSize: 7, color: MUTED, textAlign: 'center', marginTop: 2, width: 64 },
-    dateIssue: { fontSize: 8, color: BLACK, marginTop: 5 },
+    finalValue: {
+      fontSize: 20, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.gradeHighlight, marginLeft: 8,
+    },
 
-    // Signature block — right-anchored with a fixed line width so the name sits centered on it
-    sigBox: { width: 190, alignItems: 'center' },
-    sigImg: { height: 28, width: 170, objectFit: 'contain' },
-    sigPlaceholder: { height: 28, width: 170 },
-    sigLine: { width: 190, height: 0.7, backgroundColor: BLACK, marginTop: 2 },
+    notes: { marginTop: 5, fontSize: 8, color: colors.textSecondary, textAlign: 'center' },
+
+    // ─── QR + Signature row ──────────────────────────────────────────────
+    bottomRow: {
+      flexDirection: 'row', marginTop: 12,
+      alignItems: 'flex-start', justifyContent: 'space-between',
+    },
+    qrBox: { width: 150 },
+    qrFrame: {
+      padding: 4,
+      borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderSoft,
+      backgroundColor: colors.white,
+      width: 78, alignItems: 'center', justifyContent: 'center',
+    },
+    qrImg: { width: 70, height: 70, objectFit: 'contain' },
+    qrPlaceholder: { width: 70, height: 70, alignItems: 'center', justifyContent: 'center' },
+    qrLabel: {
+      fontSize: 8.5, color: colors.textLabel,
+      fontFamily: 'DMSans', fontWeight: 700,
+      marginTop: 4, width: 78, textAlign: 'center',
+    },
+    dateIssue: {
+      fontSize: 8.5, color: colors.textLabel,
+      fontFamily: 'DMSans', fontWeight: 700, marginTop: 6,
+    },
+
+    sigBox: { width: 200, alignItems: 'flex-end' },
+    sigImg: { height: 32, width: 160, objectFit: 'contain' },
+    sigPlaceholder: { height: 32, width: 160 },
+    sigLine: {
+      width: 140, borderTopWidth: 1, borderTopStyle: 'solid',
+      borderTopColor: colors.borderPrimary,
+      marginBottom: 4, alignSelf: 'flex-end',
+    },
     sigName: {
-      fontSize: 9.2, fontFamily: 'DMSans', fontWeight: 700, color: BLACK,
-      paddingTop: 2, width: 190, textAlign: 'center',
+      fontSize: 10.5, fontFamily: 'DMSans', fontWeight: 700,
+      color: colors.textPrimary, textAlign: 'right', width: 200,
     },
-    sigTitle: { fontSize: 8, color: BLACK, textAlign: 'center', width: 190 },
+    sigTitle: {
+      fontSize: 9, fontFamily: 'DMSans', fontWeight: 400,
+      color: colors.textSecondary, textAlign: 'right', width: 200,
+    },
 
-    // Bottom block — absolutely positioned so cert strip + footer always
-    // hug the bottom of the A4 page regardless of content above.
-    bottomBlock: {
-      position: 'absolute', bottom: 22, left: 24, right: 24,
-    },
+    // ─── Certification strip ─────────────────────────────────────────────
     certStrip: {
+      marginTop: 14,
       flexDirection: 'row',
-      alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 4,
+      alignItems: 'center', justifyContent: 'space-around',
+      paddingVertical: 10, paddingHorizontal: 16,
+      backgroundColor: colors.blockTint,
+      borderTopWidth: 1, borderTopColor: colors.borderSoft,
+      borderBottomWidth: 1, borderBottomColor: colors.borderSoft,
     },
-    certLogo: { height: 28, width: 50, objectFit: 'contain' },
+    certLogo: { height: 30, width: 54, objectFit: 'contain' },
 
-    // Footer
+    // ─── Footer ──────────────────────────────────────────────────────────
     footerLine: {
-      marginTop: 6, paddingTop: 4,
-      borderTopWidth: 0.5, borderTopColor: BORDER_LIGHT, alignItems: 'center',
+      marginTop: 10, alignItems: 'center',
     },
-    footerText: { fontSize: 7.5, color: BLACK, textAlign: 'center' },
-    footerTextBold: { fontSize: 7.5, color: BLACK, textAlign: 'center', fontFamily: 'DMSans', fontWeight: 700 },
-
-    issueRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-    issueLabel: { fontSize: 8, color: BLACK, fontFamily: 'DMSans', fontWeight: 700 },
-    issueValue: { fontSize: 8, color: BLACK },
+    footerText: {
+      fontSize: 8.5, color: colors.textSecondary,
+      fontFamily: 'DMSans', fontWeight: 400,
+      textAlign: 'center', lineHeight: 1.5,
+    },
+    footerBold: {
+      fontFamily: 'DMSans', fontWeight: 700, color: colors.textPrimary,
+    },
+    footerBullet: {
+      fontFamily: 'DMSans', fontWeight: 700, color: colors.borderPrimary,
+    },
   })
 
+  // Build a flat zebra counter so subject rows alternate regardless of
+  // semester boundaries (spec requirement §8).
+  let zebraIdx = 0
   const semesters = Array.from(new Set(rows.map(r => r.semester ?? 0))).sort((a, b) => a - b)
 
   return await pdf(
     <Document>
       <Page size="A4" style={s.page}>
-        <View style={s.frameRed} fixed />
-        <View style={s.frameBlack} fixed />
+        {/* Double-border frame: outer maroon (2pt) → 4pt cream gap → inner red (1pt) → 14pt content padding */}
+        <View style={s.frameOuter}>
+          <View style={s.frameInner}>
 
-        <View style={s.content} wrap={false}>
-          {/* Header — institute info only (no student photo here) */}
-          <View style={s.headerRow}>
-            <View style={s.logoCol}>
-              {logoDataUrl ? <PdfImage src={logoDataUrl} style={s.logo} /> : null}
-            </View>
-            <View style={s.middleCol}>
-              <Text style={s.brand}>{settings.header_title}</Text>
-              {settings.header_subtitle ? <Text style={s.subLine}>{settings.header_subtitle}</Text> : null}
-              {settings.header_tagline
-                ? settings.header_tagline.split('\n').map((line, i) => (
-                    <Text key={i} style={s.subLine}>{line}</Text>
-                  ))
-                : null}
-              {settings.reg_line ? <Text style={s.subLine}>{settings.reg_line}</Text> : null}
-            </View>
-            <View style={s.rightCol}>
-              <Text style={s.regLine}>Reg. No.: {serial_no || '—'}</Text>
-            </View>
-          </View>
-
-          <View style={s.divider} />
-
-          {/* Title */}
-          <View style={s.titleBand}>
-            <Text style={s.titleText}>STATEMENT OF MARKS</Text>
-            {student.session ? <Text style={s.sessionText}>Session: {student.session}</Text> : null}
-          </View>
-
-          {/* Student info section — photo on right, no photo in header */}
-          <View style={s.infoWrap}>
-            <View style={s.infoLeft}>
-              <View style={s.infoRow}>
-                <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                  <Text style={s.infoLabel}>Enrollment No</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{student.registration_no}</Text>
-                </View>
-                <View style={s.infoCellWrap}>
-                  <Text style={s.infoLabel}>Roll No</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{roll_no || '—'}</Text>
-                </View>
+            {/* Header — institute info only */}
+            <View style={s.headerRow}>
+              <View style={s.logoCol}>
+                {logoDataUrl ? <PdfImage src={logoDataUrl} style={s.logo} /> : null}
               </View>
-
-              <View style={s.infoRow}>
-                <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                  <Text style={s.infoLabel}>Training Center</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{center.name || '—'}</Text>
-                </View>
-                <View style={s.infoCellWrap}>
-                  <Text style={s.infoLabel}>Center Code</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{center.code || '—'}</Text>
-                </View>
+              <View style={s.middleCol}>
+                <Text style={s.brandTitle}>
+                  <Text style={{ color: colors.textPrimary }}>UN</Text>
+                  <Text style={{ color: colors.borderAccent }}>SKILLS</Text>
+                  <Text style={{ color: colors.textPrimary }}> COMPUTER EDUCATION</Text>
+                </Text>
+                {settings.header_subtitle ? <Text style={s.subLine}>{settings.header_subtitle}</Text> : null}
+                {settings.header_tagline
+                  ? settings.header_tagline.split('\n').map((line, i) => (
+                      <Text key={i} style={s.subLine}>{line}</Text>
+                    ))
+                  : null}
+                {settings.reg_line ? <Text style={s.subLine}>{settings.reg_line}</Text> : null}
               </View>
-
-              <View style={s.infoRow}>
-                <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                  <Text style={s.infoLabel}>Course Name</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{student.course_name || '—'}</Text>
-                </View>
-                <View style={s.infoCellWrap}>
-                  <Text style={s.infoLabel}>Course Duration</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{student.course_duration || '—'}</Text>
-                </View>
-              </View>
-
-              <View style={s.infoRow}>
-                <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                  <Text style={s.infoLabel}>Student Name</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{student.name}</Text>
-                </View>
-                <View style={s.infoCellWrap}>
-                  <Text style={s.infoLabel}>Father&#39;s Name</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{student.father_name || '—'}</Text>
-                </View>
-              </View>
-
-              <View style={s.infoRowLast}>
-                <View style={[s.infoCellWrap, s.infoCellDivider]}>
-                  <Text style={s.infoLabel}>Date of Registration</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{fmtDate(student.enrollment_date)}</Text>
-                </View>
-                <View style={s.infoCellWrap}>
-                  <Text style={s.infoLabel}>Center Address</Text>
-                  <Text style={s.infoColon}>:</Text>
-                  <Text style={s.infoValue}>{center.address || '—'}</Text>
-                </View>
+              <View style={s.rightCol}>
+                <Text style={s.regLine}>Reg. No.:</Text>
+                <Text style={s.regLine}>{serial_no || '—'}</Text>
               </View>
             </View>
 
-            <View style={s.infoPhoto}>
-              {photoDataUrl
-                ? <PdfImage src={photoDataUrl} style={s.infoPhotoImg} />
-                : <View style={s.infoPhotoPlaceholder}>
-                    <Text style={{ fontSize: 20, color: '#9CA3AF', fontFamily: 'DMSans', fontWeight: 700 }}>
-                      {student.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>}
-            </View>
-          </View>
-
-          {/* Marks table */}
-          <View style={s.tableWrap}>
-            <View style={s.tHeadRow}>
-              <View style={s.tHeadSubject}>
-                <Text style={s.tHeadText}>Subject</Text>
-              </View>
-              <View style={s.tHeadGroup}>
-                <Text style={s.tHeadText}>Theory</Text>
-                <Text style={s.tHeadSub}>(Max | Obtained)</Text>
-              </View>
-              <View style={s.tHeadGroup}>
-                <Text style={s.tHeadText}>Practical</Text>
-                <Text style={s.tHeadSub}>(Max | Obtained)</Text>
-              </View>
-              <View style={s.tHeadTotal}>
-                <Text style={s.tHeadText}>Total</Text>
-              </View>
+            {/* Title band + diamond divider */}
+            <View style={s.titleBand}>
+              <Text style={s.titleText}>Statement of Marks</Text>
+              <Svg width={100} height={10} style={{ alignSelf: 'center', marginBottom: 6 }}>
+                <Line x1="0" y1="5" x2="40" y2="5" stroke={colors.borderPrimary} strokeWidth={1} />
+                <Path d="M 50 1 L 55 5 L 50 9 L 45 5 Z" fill={colors.borderPrimary} />
+                <Line x1="60" y1="5" x2="100" y2="5" stroke={colors.borderPrimary} strokeWidth={1} />
+              </Svg>
+              {student.session ? <Text style={s.sessionText}>Session: {student.session}</Text> : null}
             </View>
 
-            {semesters.map(sem => {
-              const list = rows.filter(r => (r.semester ?? 0) === sem)
-              if (list.length === 0) return null
-              return (
-                <View key={`sem-${sem}`}>
-                  {sem > 0 ? (
-                    <View style={s.tSemRow}>
-                      <Text style={s.tSemCell}>{semesterLabel(sem)}</Text>
-                    </View>
-                  ) : null}
-                  {list.map(row => (
-                    <View key={row.subject_id} style={s.tRow}>
-                      <Text style={[s.tCell, { flex: 3.2 }]}>
-                        {row.code ? `${row.code} — ${row.name}` : row.name}
-                      </Text>
-                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>
-                        {row.theory_max || '—'}
-                      </Text>
-                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>
-                        {row.theory_obtained ?? '—'}
-                      </Text>
-                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>
-                        {row.practical_max || '—'}
-                      </Text>
-                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>
-                        {row.practical_obtained ?? '—'}
-                      </Text>
-                      <Text style={[s.tCellRight, { flex: 1 }]}>
-                        {row.total || '—'}
-                      </Text>
-                    </View>
-                  ))}
+            {/* Student info */}
+            <View style={s.infoWrap}>
+              <View style={s.infoLeft}>
+                <View style={s.infoRow}>
+                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                    <Text style={s.infoLabel}>Enrollment No</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{student.registration_no}</Text>
+                  </View>
+                  <View style={s.infoCellWrap}>
+                    <Text style={s.infoLabel}>Roll No</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{roll_no || '—'}</Text>
+                  </View>
                 </View>
-              )
-            })}
 
-            {/* Totals row */}
-            <View style={s.tTotalRow}>
-              <Text style={[s.tTotalCell, { flex: 3.2, textAlign: 'left' }]}>Total</Text>
-              <Text style={[s.tTotalCell, { flex: 1 }]}>—</Text>
-              <Text style={[s.tTotalCell, { flex: 1 }]}>—</Text>
-              <Text style={[s.tTotalCell, { flex: 1 }]}>—</Text>
-              <Text style={[s.tTotalCell, { flex: 1 }]}>—</Text>
-              <Text style={[s.tTotalCell, { flex: 1, borderRightWidth: 0 }]}>
-                {totals.totalObtained}
+                <View style={s.infoRow}>
+                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                    <Text style={s.infoLabel}>Training Center</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{center.name || '—'}</Text>
+                  </View>
+                  <View style={s.infoCellWrap}>
+                    <Text style={s.infoLabel}>Center Code</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{center.code || '—'}</Text>
+                  </View>
+                </View>
+
+                <View style={s.infoRow}>
+                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                    <Text style={s.infoLabel}>Course Name</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{student.course_name || '—'}</Text>
+                  </View>
+                  <View style={s.infoCellWrap}>
+                    <Text style={s.infoLabel}>Course Duration</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{student.course_duration || '—'}</Text>
+                  </View>
+                </View>
+
+                <View style={s.infoRow}>
+                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                    <Text style={s.infoLabel}>Student Name</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{student.name}</Text>
+                  </View>
+                  <View style={s.infoCellWrap}>
+                    <Text style={s.infoLabel}>Father&#39;s Name</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{student.father_name || '—'}</Text>
+                  </View>
+                </View>
+
+                <View style={s.infoRowLast}>
+                  <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                    <Text style={s.infoLabel}>Date of Registration</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{fmtDate(student.enrollment_date)}</Text>
+                  </View>
+                  <View style={s.infoCellWrap}>
+                    <Text style={s.infoLabel}>Center Address</Text>
+                    <Text style={s.infoColon}>:</Text>
+                    <Text style={s.infoValue}>{center.address || '—'}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={s.infoPhotoCell}>
+                {photoDataUrl
+                  ? <PdfImage src={photoDataUrl} style={s.infoPhotoImg} />
+                  : <View style={s.infoPhotoPlaceholder}>
+                      <Text style={{ fontSize: 22, color: colors.textLabel, fontFamily: 'DMSans', fontWeight: 700 }}>
+                        {student.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>}
+              </View>
+            </View>
+
+            {/* Marks table */}
+            <View style={s.tableWrap}>
+              <View style={s.tHeadRow}>
+                <View style={s.tHeadSubject}>
+                  <Text style={s.tHeadText}>Subject</Text>
+                </View>
+                <View style={s.tHeadGroup}>
+                  <Text style={s.tHeadText}>Theory</Text>
+                  <Text style={s.tHeadSub}>(Max | Obtained)</Text>
+                </View>
+                <View style={s.tHeadGroup}>
+                  <Text style={s.tHeadText}>Practical</Text>
+                  <Text style={s.tHeadSub}>(Max | Obtained)</Text>
+                </View>
+                <View style={s.tHeadTotal}>
+                  <Text style={s.tHeadText}>Total</Text>
+                </View>
+              </View>
+
+              {semesters.map(sem => {
+                const list = rows.filter(r => (r.semester ?? 0) === sem)
+                if (list.length === 0) return null
+                return (
+                  <View key={`sem-${sem}`}>
+                    {sem > 0 ? (
+                      <View style={s.tSemRow}>
+                        <Text style={s.tSemCell}>{semesterLabel(sem)}</Text>
+                      </View>
+                    ) : null}
+                    {list.map(row => {
+                      const bg = zebraIdx % 2 === 0 ? colors.white : colors.blockTint
+                      zebraIdx++
+                      return (
+                        <View key={row.subject_id} style={[s.tRow, { backgroundColor: bg }]}>
+                          <Text style={s.tCellSubject}>
+                            {row.code ? `${row.code} — ${row.name}` : row.name}
+                          </Text>
+                          <Text style={s.tCellNum}>{row.theory_max || '—'}</Text>
+                          <Text style={s.tCellNum}>{row.theory_obtained ?? '—'}</Text>
+                          <Text style={s.tCellNum}>{row.practical_max || '—'}</Text>
+                          <Text style={s.tCellNum}>{row.practical_obtained ?? '—'}</Text>
+                          <Text style={s.tCellNumLast}>{row.total || '—'}</Text>
+                        </View>
+                      )
+                    })}
+                  </View>
+                )
+              })}
+
+              {/* Totals row */}
+              <View style={s.tTotalRow}>
+                <Text style={s.tTotalCellLabel}>Total</Text>
+                <Text style={s.tTotalCellNum}>—</Text>
+                <Text style={s.tTotalCellNum}>—</Text>
+                <Text style={s.tTotalCellNum}>—</Text>
+                <Text style={s.tTotalCellNum}>—</Text>
+                <Text style={s.tTotalCellNumLast}>{totals.totalObtained}</Text>
+              </View>
+            </View>
+
+            {/* Grade legend row — colored dots (SVG Circle) */}
+            <View style={s.legendWrap}>
+              {gradingScheme.map((band, i) => (
+                <View key={band.label} style={s.legendCol}>
+                  <View style={s.legendLabelRow}>
+                    <Svg width={8} height={8}>
+                      <Circle cx={4} cy={4} r={3} fill={LEGEND_DOT_COLORS[i] || colors.green} />
+                    </Svg>
+                    <Text style={s.legendLabelText}>{band.label}</Text>
+                  </View>
+                  <Text style={s.legendRange}>{band.min}%–{band.max}% – {band.grade}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Final grade banner */}
+            <View style={s.finalWrap}>
+              <Text style={s.finalLabel}>Final Grade:</Text>
+              <Text style={s.finalValue}>{finalGrade}</Text>
+            </View>
+
+            {settings.notes ? <Text style={s.notes}>{settings.notes}</Text> : null}
+
+            {/* QR + Signature row */}
+            <View style={s.bottomRow}>
+              <View style={s.qrBox}>
+                <View style={s.qrFrame}>
+                  {qrDataUrl
+                    ? <PdfImage src={qrDataUrl} style={s.qrImg} />
+                    : <View style={s.qrPlaceholder}><Text style={{ fontSize: 7, color: colors.textLabel }}>QR</Text></View>}
+                </View>
+                <Text style={s.qrLabel}>Scan to verify</Text>
+                <Text style={s.dateIssue}>Date of Issue: {fmtDate(issue_date)}</Text>
+              </View>
+
+              <View style={s.sigBox}>
+                {settings.left_signature_url
+                  ? <PdfImage src={settings.left_signature_url} style={s.sigImg} />
+                  : <View style={s.sigPlaceholder} />}
+                <View style={s.sigLine} />
+                <Text style={s.sigName}>{settings.left_signer_name || '—'}</Text>
+                {settings.left_signer_title ? <Text style={s.sigTitle}>{settings.left_signer_title}</Text> : null}
+                {settings.left_signer_org ? <Text style={s.sigTitle}>{settings.left_signer_org}</Text> : null}
+              </View>
+            </View>
+
+            {/* Certification strip */}
+            <View style={s.certStrip}>
+              {certLogos.filter(Boolean).map((src, i) => (
+                <PdfImage key={i} src={src} style={s.certLogo} />
+              ))}
+            </View>
+
+            {/* Footer */}
+            <View style={s.footerLine}>
+              <Text style={s.footerText}>
+                <Text style={s.footerBold}>Head Office: </Text>
+                {settings.footer_address}
+              </Text>
+              <Text style={s.footerText}>
+                Website for verification: <Text style={s.footerBold}>{settings.website}</Text>
+                {settings.email ? (
+                  <>
+                    <Text style={s.footerBullet}>  •  </Text>
+                    Email: <Text style={s.footerBold}>{settings.email}</Text>
+                  </>
+                ) : null}
               </Text>
             </View>
-          </View>
 
-          {/* Grading scheme */}
-          <View style={s.gradeWrap}>
-            {gradingScheme.map((band, i) => (
-              <View key={band.label} style={i === gradingScheme.length - 1 ? s.gradeColLast : s.gradeCol}>
-                <Text style={s.gradeLbl}>{band.label}</Text>
-                <Text style={s.gradeVal}>{band.min}%–{band.max}% – {band.grade}</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Final grade */}
-          <View style={s.finalWrap}>
-            <Text style={s.finalText}>Final Grade: {finalGrade}</Text>
-          </View>
-
-          {settings.notes ? <Text style={s.notes}>{settings.notes}</Text> : null}
-
-          {/* QR + Signature row */}
-          <View style={s.bottomRow}>
-            <View style={s.qrBox}>
-              {qrDataUrl
-                ? <PdfImage src={qrDataUrl} style={s.qrImg} />
-                : <View style={s.qrPlaceholder}>
-                    <Text style={{ fontSize: 7, color: MUTED }}>QR</Text>
-                  </View>}
-              <Text style={s.qrLabel}>Scan to verify</Text>
-              <Text style={s.dateIssue}>
-                Date of Issue: <Text style={{ fontFamily: 'DMSans', fontWeight: 700 }}>{fmtDate(issue_date)}</Text>
-              </Text>
-            </View>
-
-            <View style={s.sigBox}>
-              {settings.left_signature_url
-                ? <PdfImage src={settings.left_signature_url} style={s.sigImg} />
-                : <View style={s.sigPlaceholder} />}
-              <View style={s.sigLine} />
-              <Text style={s.sigName}>{settings.left_signer_name || '—'}</Text>
-              {settings.left_signer_title ? <Text style={s.sigTitle}>{settings.left_signer_title}</Text> : null}
-              {settings.left_signer_org ? <Text style={s.sigTitle}>{settings.left_signer_org}</Text> : null}
-            </View>
-          </View>
-
-        </View>
-
-        {/* Bottom block: cert logos + footer pinned to the bottom of the page */}
-        <View style={s.bottomBlock} fixed>
-          <View style={s.certStrip}>
-            {certLogos.filter(Boolean).map((src, i) => (
-              <PdfImage key={i} src={src} style={s.certLogo} />
-            ))}
-          </View>
-
-          <View style={s.footerLine}>
-            <Text style={s.footerTextBold}>
-              Head Office Address, <Text style={{ fontFamily: 'DMSans', fontWeight: 400 }}>{settings.footer_address}</Text>
-            </Text>
-            <Text style={s.footerText}>
-              Website for verification: <Text style={{ fontFamily: 'DMSans', fontWeight: 700 }}>{settings.website}</Text>
-              {settings.email ? <>  |  Email: <Text style={{ fontFamily: 'DMSans', fontWeight: 700 }}>{settings.email}</Text></> : null}
-            </Text>
           </View>
         </View>
       </Page>
