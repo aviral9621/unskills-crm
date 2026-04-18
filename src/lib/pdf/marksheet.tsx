@@ -247,9 +247,13 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     },
     sigTitle: { fontSize: 8, color: BLACK, textAlign: 'center', width: 190 },
 
-    // Certification logos strip — seven individual logos, evenly spaced
+    // Bottom block — absolutely positioned so cert strip + footer always
+    // hug the bottom of the A4 page regardless of content above.
+    bottomBlock: {
+      position: 'absolute', bottom: 22, left: 24, right: 24,
+    },
     certStrip: {
-      marginTop: 6, flexDirection: 'row',
+      flexDirection: 'row',
       alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: 4,
     },
@@ -257,7 +261,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
 
     // Footer
     footerLine: {
-      marginTop: 5, paddingTop: 4,
+      marginTop: 6, paddingTop: 4,
       borderTopWidth: 0.5, borderTopColor: BORDER_LIGHT, alignItems: 'center',
     },
     footerText: { fontSize: 7.5, color: BLACK, textAlign: 'center' },
@@ -495,14 +499,16 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
             </View>
           </View>
 
-          {/* Certification logos strip — ISO / MSME / Skill India / NSDC / Digital India / ANSI / IAF */}
+        </View>
+
+        {/* Bottom block: cert logos + footer pinned to the bottom of the page */}
+        <View style={s.bottomBlock} fixed>
           <View style={s.certStrip}>
             {certLogos.filter(Boolean).map((src, i) => (
               <PdfImage key={i} src={src} style={s.certLogo} />
             ))}
           </View>
 
-          {/* Footer */}
           <View style={s.footerLine}>
             <Text style={s.footerTextBold}>
               Head Office Address, <Text style={{ fontFamily: 'DMSans', fontWeight: 400 }}>{settings.footer_address}</Text>
