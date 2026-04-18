@@ -17,6 +17,7 @@ interface StudentRow {
   photo_url: string | null
   is_active: boolean
   course?: { name: string } | null
+  branch?: { name: string | null; center_logo_url: string | null } | null
 }
 
 export default function StudentIdCardPage() {
@@ -34,16 +35,19 @@ export default function StudentIdCardPage() {
   const [selected, setSelected] = useState<StudentRow | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
   const [photoDataUrl, setPhotoDataUrl] = useState<string>('')
-  const [logoDataUrl, setLogoDataUrl] = useState<string>('')
+  /** Master logo used as the default/fallback when a student's branch has no logo. */
+  const [masterLogoDataUrl, setMasterLogoDataUrl] = useState<string>('')
+  /** Resolved logo for the currently-selected student (branch logo or master fallback). */
+  const [selectedLogoDataUrl, setSelectedLogoDataUrl] = useState<string>('')
   const [generating, setGenerating] = useState(false)
   const [bulkIds, setBulkIds] = useState<Set<string>>(new Set())
   const [bulkDownloading, setBulkDownloading] = useState(false)
 
   useEffect(() => { fetchAll() }, [])
 
-  // preload logo once as data URL so PDF + preview both use the embedded copy
+  // preload master logo once (used as fallback when a branch has no logo)
   useEffect(() => {
-    toDataUrl('/MAIN LOGO FOR ALL CARDS.png').then(setLogoDataUrl).catch(() => setLogoDataUrl(''))
+    toDataUrl('/MAIN LOGO FOR ALL CARDS.png').then(setMasterLogoDataUrl).catch(() => setMasterLogoDataUrl(''))
   }, [])
 
   // Handle deep link ?student=<id>
@@ -55,9 +59,12 @@ export default function StudentIdCardPage() {
     }
   }, [searchParams, students])
 
-  // Generate QR and re-fetch photo-as-data-URL whenever selection or settings change
+  // Generate QR and re-fetch photo + branch logo whenever selection/settings change
   useEffect(() => {
-    if (!selected || !settings) { setQrDataUrl(''); setPhotoDataUrl(''); return }
+    if (!selected || !settings) {
+      setQrDataUrl(''); setPhotoDataUrl(''); setSelectedLogoDataUrl('')
+      return
+    }
     const url = idCardVerifyUrl(settings.verify_base_url, selected.registration_no)
     QRCode.toDataURL(url, { margin: 1, width: 320, color: { dark: '#111827', light: '#ffffff' } })
       .then(setQrDataUrl)
@@ -68,7 +75,15 @@ export default function StudentIdCardPage() {
     } else {
       setPhotoDataUrl('')
     }
-  }, [selected, settings])
+
+    // Resolve the branch logo (fallback to master logo if the branch has none)
+    const branchLogo = selected.branch?.center_logo_url
+    if (branchLogo) {
+      toDataUrl(branchLogo).then(setSelectedLogoDataUrl).catch(() => setSelectedLogoDataUrl(masterLogoDataUrl))
+    } else {
+      setSelectedLogoDataUrl(masterLogoDataUrl)
+    }
+  }, [selected, settings, masterLogoDataUrl])
 
   async function fetchAll() {
     setLoading(true)
@@ -76,7 +91,7 @@ export default function StudentIdCardPage() {
       const [studentsRes, settingsRes] = await Promise.all([
         (async () => {
           let q = supabase.from('uce_students')
-            .select('id, registration_no, name, father_name, dob, photo_url, is_active, course:uce_courses(name)')
+            .select('id, registration_no, name, father_name, dob, photo_url, is_active, course:uce_courses(name), branch:uce_branches(name, center_logo_url)')
             .eq('is_active', true)
           if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
           return q.order('name')
@@ -105,8 +120,8 @@ export default function StudentIdCardPage() {
     setSearchParams({ student: s.id }, { replace: true })
   }
 
-  async function resolveCardAssets(student: StudentRow): Promise<{ qr: string; photo: string }> {
-    if (!settings) return { qr: '', photo: '' }
+  async function resolveCardAssets(student: StudentRow): Promise<{ qr: string; photo: string; logo: string; title: string }> {
+    if (!settings) return { qr: '', photo: '', logo: masterLogoDataUrl, title: '' }
     const qr = await QRCode
       .toDataURL(idCardVerifyUrl(settings.verify_base_url, student.registration_no), {
         margin: 1, width: 320, color: { dark: '#111827', light: '#ffffff' },
@@ -115,14 +130,19 @@ export default function StudentIdCardPage() {
     const photo = student.photo_url && !student.photo_url.startsWith('blob:')
       ? await toDataUrl(student.photo_url).catch(() => '')
       : ''
-    return { qr, photo }
+    const branchLogoUrl = student.branch?.center_logo_url
+    const logo = branchLogoUrl
+      ? await toDataUrl(branchLogoUrl).catch(() => masterLogoDataUrl)
+      : masterLogoDataUrl
+    const title = student.branch?.name || settings.header_title
+    return { qr, photo, logo, title }
   }
 
   /** Build the ID-card PDF blob. One Page per card; guaranteed single-page per
    *  student via wrap={false}. Uses Helvetica (react-pdf built-in) to avoid the
    *  Buffer-polyfill code path triggered by external TTF fonts. */
   async function buildPdfBlob(
-    cards: Array<{ student: StudentRow; qr: string; photo: string }>,
+    cards: Array<{ student: StudentRow; qr: string; photo: string; logo: string; title: string }>,
   ): Promise<Blob | null> {
     if (!settings || cards.length === 0) return null
     const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
@@ -162,17 +182,17 @@ export default function StudentIdCardPage() {
 
     const Doc = (
       <Document>
-        {cards.map(({ student, qr, photo }) => {
+        {cards.map(({ student, qr, photo, logo, title }) => {
           const course = (student.course as { name: string } | null)?.name || '—'
           return (
             <Page key={student.id} size={[W, H]} wrap={false} style={s.page}>
               <View style={s.header}>
                 <View style={s.headerRed}>
-                  <Text style={s.headerTitle}>{settings.header_title}</Text>
+                  <Text style={s.headerTitle}>{title || settings.header_title}</Text>
                   <Text style={s.headerSub}>{settings.header_subtitle}</Text>
                 </View>
                 <View style={s.headerLogo}>
-                  {logoDataUrl ? <PdfImage src={logoDataUrl} style={s.logoImg} /> : null}
+                  {logo ? <PdfImage src={logo} style={s.logoImg} /> : null}
                 </View>
               </View>
 
@@ -229,11 +249,17 @@ export default function StudentIdCardPage() {
   }
 
   async function handleDownloadPdf() {
-    if (!selected) return
+    if (!selected || !settings) return
     setGenerating(true)
     try {
-      // Reuse the already-resolved qr + photo for the live preview
-      const blob = await buildPdfBlob([{ student: selected, qr: qrDataUrl, photo: photoDataUrl }])
+      const title = selected.branch?.name || settings.header_title
+      const blob = await buildPdfBlob([{
+        student: selected,
+        qr: qrDataUrl,
+        photo: photoDataUrl,
+        logo: selectedLogoDataUrl || masterLogoDataUrl,
+        title,
+      }])
       if (!blob) return
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = `ID-Card-${selected.registration_no.replace(/\//g, '-')}.pdf`; a.click()
@@ -401,7 +427,14 @@ export default function StudentIdCardPage() {
           ) : !settings ? null : (
             <>
               <div className="mx-auto">
-                <IdCardPreview student={selected} settings={settings} qrDataUrl={qrDataUrl} photoUrl={photoDataUrl || selected.photo_url} logoUrl={logoDataUrl || '/MAIN LOGO FOR ALL CARDS.png'} />
+                <IdCardPreview
+                  student={selected}
+                  settings={settings}
+                  qrDataUrl={qrDataUrl}
+                  photoUrl={photoDataUrl || selected.photo_url}
+                  logoUrl={selectedLogoDataUrl || masterLogoDataUrl || '/MAIN LOGO FOR ALL CARDS.png'}
+                  title={selected.branch?.name || settings.header_title}
+                />
               </div>
 
               <button onClick={handleDownloadPdf} disabled={generating}
@@ -418,13 +451,14 @@ export default function StudentIdCardPage() {
 
 /* ─── On-screen card preview (visual match of the PDF) ─── */
 function IdCardPreview({
-  student, settings, qrDataUrl, photoUrl, logoUrl,
+  student, settings, qrDataUrl, photoUrl, logoUrl, title,
 }: {
   student: StudentRow
   settings: CardSettings
   qrDataUrl: string
   photoUrl: string | null
   logoUrl: string
+  title: string
 }) {
   const course = (student.course as { name: string } | null)?.name || '—'
   const safePhoto = photoUrl && !photoUrl.startsWith('blob:') ? photoUrl : ''
@@ -434,7 +468,7 @@ function IdCardPreview({
       {/* Header — two columns: red (title) + black (logo) */}
       <div className="flex items-stretch bg-black" style={{ height: 86 }}>
         <div className="flex-1 bg-[#B91C1C] px-3 flex flex-col justify-center">
-          <p className="text-white text-[13px] font-bold leading-tight">{settings.header_title}</p>
+          <p className="text-white text-[13px] font-bold leading-tight">{title}</p>
           <p className="text-white/90 text-[8px] leading-snug mt-1">{settings.header_subtitle}</p>
         </div>
         <div className="w-[70px] flex items-center justify-center">
