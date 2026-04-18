@@ -210,6 +210,9 @@ export default function MarksheetSettingsPage() {
           <FormField label="Verification Website"><input value={s.website} onChange={e => update('website', e.target.value)} className={inputClass} /></FormField>
           <FormField label="Contact Email"><input value={s.email} onChange={e => update('email', e.target.value)} className={inputClass} /></FormField>
         </div>
+        <FormField label="QR Verification Base URL" hint="Scanning the PDF QR code will open this domain, e.g. https://www.unskillseducation.org">
+          <input value={s.verify_base_url} onChange={e => update('verify_base_url', e.target.value)} className={inputClass} placeholder="https://www.unskillseducation.org" />
+        </FormField>
         <FormField label="Optional Note on PDF" hint="Small line shown below the final grade banner">
           <input value={s.notes} onChange={e => update('notes', e.target.value)} className={inputClass} placeholder="e.g. This certificate is subject to verification via QR code" />
         </FormField>

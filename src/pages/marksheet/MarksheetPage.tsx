@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, ScrollText, Download, Loader2, Settings, History, Trash2, AlertTriangle, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
+import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase'
 import FormField, { inputClass } from '../../components/FormField'
 import { useAuth } from '../../contexts/AuthContext'
@@ -9,12 +10,25 @@ import {
   getMarksheetSettings,
   parseGradingScheme,
   resolveGrade,
+  marksheetVerifyUrl,
 } from '../../lib/marksheetSettings'
 import {
   buildMarksheetPdfBlob,
   toDataUrl,
   type MarksheetSubjectRow,
 } from '../../lib/pdf/marksheet'
+
+async function buildQrDataUrl(url: string): Promise<string> {
+  try {
+    return await QRCode.toDataURL(url, {
+      margin: 1,
+      width: 320,
+      color: { dark: '#111827', light: '#ffffff' },
+    })
+  } catch {
+    return ''
+  }
+}
 
 interface StudentData {
   id: string; registration_no: string; name: string; father_name: string
@@ -297,6 +311,7 @@ export default function MarksheetPage() {
         toDataUrl(encodeURI('/ISO LOGOs.png')).catch(() => ''),
       ])
       const photoDataUrl = student.photo_url ? await toDataUrl(student.photo_url).catch(() => '') : ''
+      const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, student.registration_no))
 
       const bands = parseGradingScheme(settings.grading_scheme_json)
       const { grade, isPass } = resolveGrade(totals.percentage, bands)
@@ -326,7 +341,7 @@ export default function MarksheetPage() {
         result: resultStr,
         gradingScheme: bands,
         settings,
-        logoDataUrl, isoLogoDataUrl, photoDataUrl,
+        logoDataUrl, isoLogoDataUrl, photoDataUrl, qrDataUrl,
       })
 
       const marksData: MarksheetMarksData = {
@@ -377,6 +392,7 @@ export default function MarksheetPage() {
       ])
       const sdc = sd as unknown as StudentData
       const photoDataUrl = sdc.photo_url ? await toDataUrl(sdc.photo_url).catch(() => '') : ''
+      const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, sdc.registration_no))
       const bands = rec.marks_data.grading_scheme ?? parseGradingScheme(settings.grading_scheme_json)
       const br = sdc.branch
       const centerCode = br?.b_code || br?.code || ''
@@ -401,7 +417,7 @@ export default function MarksheetPage() {
         result: rec.result || '-',
         gradingScheme: bands,
         settings,
-        logoDataUrl, isoLogoDataUrl, photoDataUrl,
+        logoDataUrl, isoLogoDataUrl, photoDataUrl, qrDataUrl,
       })
 
       const url = URL.createObjectURL(blob)

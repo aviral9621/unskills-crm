@@ -16,6 +16,7 @@ export interface MarksheetSettings {
   footer_address: string        // head office address in footer
   website: string               // verification website
   email: string                 // contact email
+  verify_base_url: string       // base URL the QR code should point to (e.g. https://www.unskillseducation.org)
   left_signer_name: string      // e.g. "Er. Ankit Vishwakarma"
   left_signer_title: string     // e.g. "Chief Executive Officer"
   left_signer_org: string       // e.g. "UnSkills FuturePath Tech Pvt. Ltd."
@@ -36,6 +37,7 @@ const KEYS: Record<keyof MarksheetSettings, string> = {
   footer_address:      'marksheet_footer_address',
   website:             'marksheet_website',
   email:               'marksheet_email',
+  verify_base_url:     'marksheet_verify_base_url',
   left_signer_name:    'marksheet_left_signer_name',
   left_signer_title:   'marksheet_left_signer_title',
   left_signer_org:     'marksheet_left_signer_org',
@@ -62,8 +64,9 @@ export const MARKSHEET_DEFAULTS: MarksheetSettings = {
   reg_line:            'Registered under Company Act 2013',
   iso_line:            'ISO 9001:2015\nCertified',
   footer_address:      'Nomlarr Sector Noida, UnSkills FuturePath Tech Pvt. Ltd.',
-  website:             'www.skils.com',
-  email:               'unfo@skils.com',
+  website:             'www.unskillseducation.org',
+  email:               'info@unskillseducation.org',
+  verify_base_url:     'https://www.unskillseducation.org',
   left_signer_name:    'Er. Ankit Vishwakarma',
   left_signer_title:   'Chief Executive Officer',
   left_signer_org:     'UnSkills FuturePath Tech Pvt. Ltd.',
@@ -110,4 +113,10 @@ export function resolveGrade(percentage: number, bands: GradeBand[]): { grade: s
   if (!band) return { grade: 'F', label: 'Fail', isPass: false }
   const isPass = band.label.toLowerCase() !== 'fail' && band.grade.toUpperCase() !== 'F'
   return { grade: band.grade, label: band.label, isPass }
+}
+
+/** QR URL for marksheet verification — scanners land on the student verify page. */
+export function marksheetVerifyUrl(baseUrl: string, registrationNo: string): string {
+  const b = (baseUrl || '').replace(/\/+$/, '')
+  return `${b}/verify/id-card/${encodeURIComponent(registrationNo)}`
 }

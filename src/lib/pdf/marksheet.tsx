@@ -46,20 +46,7 @@ export interface BuildMarksheetInput {
   logoDataUrl: string
   isoLogoDataUrl: string
   photoDataUrl: string
-}
-
-let fontsRegistered = false
-async function registerFonts() {
-  if (fontsRegistered) return
-  const { Font } = await import('@react-pdf/renderer')
-  Font.register({
-    family: 'DMSans',
-    fonts: [
-      { src: '/fonts/dm-sans-400.woff', fontWeight: 400 },
-      { src: '/fonts/dm-sans-700.woff', fontWeight: 700 },
-    ],
-  })
-  fontsRegistered = true
+  qrDataUrl: string
 }
 
 export async function toDataUrl(url: string): Promise<string> {
@@ -90,134 +77,205 @@ function semesterLabel(n: number): string {
 }
 
 export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise<Blob> {
-  await registerFonts()
   const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
 
-  const { student, center, rows, roll_no, issue_date, serial_no, totals, finalGrade, result, gradingScheme, settings, logoDataUrl, isoLogoDataUrl, photoDataUrl } = input
+  const {
+    student, center, rows, roll_no, issue_date, serial_no,
+    totals, finalGrade, gradingScheme, settings,
+    logoDataUrl, isoLogoDataUrl, photoDataUrl, qrDataUrl,
+  } = input
 
   const ORANGE = '#F97316'
-  const DARK = '#111827'
-  const BLACK = '#0F0F0F'
-  const BORDER = '#D1D5DB'
-  const MUTED = '#6B7280'
+  const BLACK = '#0F172A'
+  const BORDER = '#111827'
+  const BORDER_LIGHT = '#D1D5DB'
+  const MUTED = '#4B5563'
   const LIGHT = '#F3F4F6'
-  const RED = '#C8102E'
 
   const s = StyleSheet.create({
     page: {
-      paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,
-      fontFamily: 'DMSans', fontSize: 9, color: BLACK, backgroundColor: '#FFFFFF',
+      fontFamily: 'Helvetica',
+      fontSize: 9,
+      color: BLACK,
+      backgroundColor: '#FFFFFF',
+      padding: 0,
     },
 
-    pageBorder: {
-      position: 'absolute', top: 8, left: 8, right: 8, bottom: 8,
-      borderWidth: 1, borderColor: '#111',
+    // Outer frame + orange top corners (symmetric)
+    outerFrame: {
+      position: 'absolute', top: 14, left: 14, right: 14, bottom: 14,
+      borderWidth: 1, borderColor: BORDER,
+    },
+    cornerTL: { position: 'absolute', top: 14, left: 14, width: 36, height: 36, backgroundColor: ORANGE },
+    cornerTLMask: {
+      position: 'absolute', top: 14, left: 14,
+      borderTopWidth: 0, borderRightWidth: 36, borderBottomWidth: 36, borderLeftWidth: 0,
+      borderTopColor: 'transparent', borderRightColor: '#FFFFFF',
+      borderBottomColor: '#FFFFFF', borderLeftColor: 'transparent',
+    },
+    cornerTR: { position: 'absolute', top: 14, right: 14, width: 36, height: 36, backgroundColor: ORANGE },
+    cornerTRMask: {
+      position: 'absolute', top: 14, right: 14,
+      borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 36, borderLeftWidth: 36,
+      borderTopColor: 'transparent', borderRightColor: 'transparent',
+      borderBottomColor: '#FFFFFF', borderLeftColor: '#FFFFFF',
     },
 
-    // Corner triangles
-    cornerTL: { position: 'absolute', top: 8, left: 8, width: 44, height: 44, backgroundColor: ORANGE },
-    cornerTR: { position: 'absolute', top: 8, right: 8, width: 44, height: 44, backgroundColor: ORANGE },
-    cornerTLMask: { position: 'absolute', top: 8, left: 8, width: 0, height: 0, borderStyle: 'solid', borderTopWidth: 0, borderRightWidth: 44, borderBottomWidth: 44, borderLeftWidth: 0, borderTopColor: 'transparent', borderRightColor: '#FFFFFF', borderBottomColor: '#FFFFFF', borderLeftColor: 'transparent' },
-    cornerTRMask: { position: 'absolute', top: 8, right: 8, width: 0, height: 0, borderStyle: 'solid', borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 44, borderLeftWidth: 44, borderTopColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#FFFFFF', borderLeftColor: '#FFFFFF' },
-
-    content: { paddingTop: 22, paddingHorizontal: 24, paddingBottom: 18 },
+    content: { paddingTop: 22, paddingHorizontal: 22, paddingBottom: 14 },
 
     // Header
-    headerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-    logoCol: { width: 70, alignItems: 'center', justifyContent: 'center' },
-    logo: { width: 60, height: 60, objectFit: 'contain' },
-    middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
-    brand: { fontSize: 16, fontWeight: 700, color: DARK, textAlign: 'center', letterSpacing: 0.3 },
+    headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 },
+    logoCol: { width: 74, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
+    logo: { width: 64, height: 64, objectFit: 'contain' },
+    middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 6, paddingTop: 2 },
+    brand: { fontSize: 17, fontFamily: 'Helvetica-Bold', color: BLACK, textAlign: 'center', letterSpacing: 0.6 },
     subLine: { fontSize: 8.5, color: BLACK, textAlign: 'center', marginTop: 1.5 },
-    isoCol: { width: 86, alignItems: 'flex-end', justifyContent: 'flex-start', paddingTop: 2 },
-    regLine: { fontSize: 8, color: BLACK, textAlign: 'right' },
+    rightCol: { width: 96, alignItems: 'flex-end', paddingTop: 6 },
+    regLine: { fontSize: 8.5, color: BLACK, textAlign: 'right', fontFamily: 'Helvetica-Bold' },
+
+    divider: { marginTop: 8, height: 0.8, backgroundColor: MUTED },
 
     // Title
     titleBand: { alignItems: 'center', marginTop: 10 },
-    titleText: { fontSize: 17, fontWeight: 700, color: BLACK, letterSpacing: 2 },
-    sessionText: { fontSize: 9, color: BLACK, marginTop: 2 },
+    titleText: { fontSize: 17, fontFamily: 'Helvetica-Bold', color: BLACK, letterSpacing: 2.4 },
+    sessionText: { fontSize: 9.5, color: BLACK, marginTop: 3 },
 
-    // Student info table
-    infoWrap: { marginTop: 10, flexDirection: 'row', borderWidth: 1, borderColor: BORDER, borderRadius: 2 },
+    // Student info — bordered grid with photo on right
+    infoWrap: { marginTop: 10, flexDirection: 'row', borderWidth: 0.8, borderColor: BORDER },
     infoLeft: { flex: 1 },
-    infoPhoto: { width: 88, alignItems: 'center', justifyContent: 'center', padding: 6, borderLeftWidth: 1, borderLeftColor: BORDER, backgroundColor: LIGHT },
-    infoPhotoImg: { width: 72, height: 82, objectFit: 'cover', borderWidth: 1, borderColor: BORDER },
-    infoPhotoPlaceholder: { width: 72, height: 82, backgroundColor: '#E5E7EB', borderWidth: 1, borderColor: BORDER, alignItems: 'center', justifyContent: 'center' },
-    infoRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER, minHeight: 18 },
+    infoPhoto: {
+      width: 98, alignItems: 'center', justifyContent: 'center',
+      padding: 6, borderLeftWidth: 0.8, borderLeftColor: BORDER, backgroundColor: '#FFFFFF',
+    },
+    infoPhotoImg: { width: 84, height: 98, objectFit: 'cover', borderWidth: 0.6, borderColor: BLACK },
+    infoPhotoPlaceholder: {
+      width: 84, height: 98, backgroundColor: '#E5E7EB',
+      borderWidth: 0.6, borderColor: BLACK, alignItems: 'center', justifyContent: 'center',
+    },
+    infoRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: BORDER, minHeight: 18 },
     infoRowLast: { flexDirection: 'row', minHeight: 18 },
-    infoCell: { flex: 1, paddingVertical: 3, paddingHorizontal: 6, fontSize: 8.5 },
-    infoCellDivider: { borderRightWidth: 1, borderRightColor: BORDER },
-    infoLabel: { color: MUTED, fontWeight: 700 },
-    infoValue: { color: BLACK, fontWeight: 700 },
+    infoCellWrap: { flex: 1, flexDirection: 'row', paddingVertical: 3.5, paddingHorizontal: 6 },
+    infoCellDivider: { borderRightWidth: 0.5, borderRightColor: BORDER },
+    infoLabel: { fontSize: 8.8, color: BLACK, fontFamily: 'Helvetica-Bold' },
+    infoArrow: { fontSize: 8.8, color: BLACK, marginHorizontal: 3 },
+    infoValue: { fontSize: 8.8, color: BLACK, flex: 1 },
 
     // Marks table
-    tableWrap: { marginTop: 10, borderWidth: 1, borderColor: BORDER },
-    tHeadRow: { flexDirection: 'row', backgroundColor: LIGHT, borderBottomWidth: 1, borderBottomColor: BORDER },
-    tHeadCell: { paddingVertical: 5, paddingHorizontal: 5, fontSize: 8.5, fontWeight: 700, color: BLACK, textAlign: 'center', borderRightWidth: 1, borderRightColor: BORDER },
-    tHeadCellLast: { paddingVertical: 5, paddingHorizontal: 5, fontSize: 8.5, fontWeight: 700, color: BLACK, textAlign: 'center' },
-    tSubHead: { fontSize: 7.5, color: MUTED, fontWeight: 400 },
+    tableWrap: { marginTop: 9, borderWidth: 0.8, borderColor: BORDER },
+    tHeadRow: { flexDirection: 'row', backgroundColor: LIGHT, borderBottomWidth: 0.8, borderBottomColor: BORDER, minHeight: 28 },
+    tHeadSubject: {
+      flex: 3.2, paddingVertical: 5, paddingHorizontal: 5,
+      borderRightWidth: 0.5, borderRightColor: BORDER,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    tHeadGroup: {
+      flex: 2, borderRightWidth: 0.5, borderRightColor: BORDER,
+      alignItems: 'center', justifyContent: 'center', paddingVertical: 3,
+    },
+    tHeadTotal: {
+      flex: 1, paddingVertical: 5, paddingHorizontal: 4,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    tHeadText: { fontSize: 9.2, fontFamily: 'Helvetica-Bold', color: BLACK, textAlign: 'center' },
+    tHeadSub: { fontSize: 7.4, color: MUTED, textAlign: 'center', marginTop: 1.5 },
 
-    tSemRow: { flexDirection: 'row', backgroundColor: LIGHT, borderBottomWidth: 1, borderBottomColor: BORDER, borderTopWidth: 1, borderTopColor: BORDER },
-    tSemCell: { flex: 1, paddingVertical: 4, paddingHorizontal: 8, fontSize: 9, fontWeight: 700, color: BLACK, textAlign: 'center' },
+    tSemRow: {
+      flexDirection: 'row', backgroundColor: '#E5E7EB',
+      borderBottomWidth: 0.5, borderBottomColor: BORDER,
+      borderTopWidth: 0.5, borderTopColor: BORDER,
+    },
+    tSemCell: {
+      flex: 1, paddingVertical: 3.5, paddingHorizontal: 6,
+      fontSize: 9.2, fontFamily: 'Helvetica-Bold', color: BLACK, textAlign: 'center',
+    },
 
-    tRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER, minHeight: 20 },
-    tRowLast: { flexDirection: 'row', minHeight: 20 },
-    tCell: { paddingVertical: 4, paddingHorizontal: 5, fontSize: 8.5, color: BLACK, borderRightWidth: 1, borderRightColor: BORDER },
-    tCellLast: { paddingVertical: 4, paddingHorizontal: 5, fontSize: 8.5, color: BLACK, textAlign: 'center' },
-    tTotalRow: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: BORDER, backgroundColor: LIGHT },
-    tTotalCell: { paddingVertical: 4, paddingHorizontal: 5, fontSize: 8.5, fontWeight: 700, color: BLACK, borderRightWidth: 1, borderRightColor: BORDER, textAlign: 'center' },
+    tRow: { flexDirection: 'row', borderBottomWidth: 0.3, borderBottomColor: BORDER_LIGHT, minHeight: 18 },
+    tCell: {
+      paddingVertical: 3.5, paddingHorizontal: 5, fontSize: 8.5, color: BLACK,
+      borderRightWidth: 0.5, borderRightColor: BORDER,
+    },
+    tCellRight: { paddingVertical: 3.5, paddingHorizontal: 5, fontSize: 8.5, color: BLACK, textAlign: 'center' },
 
-    // Grading scheme
-    gradeWrap: { marginTop: 10, borderWidth: 1, borderColor: BORDER, flexDirection: 'row' },
-    gradeCol: { flex: 1, borderRightWidth: 1, borderRightColor: BORDER, alignItems: 'center' },
+    tTotalRow: {
+      flexDirection: 'row', borderTopWidth: 0.8, borderTopColor: BORDER,
+      backgroundColor: LIGHT,
+    },
+    tTotalCell: {
+      paddingVertical: 4.5, paddingHorizontal: 5, fontSize: 9, fontFamily: 'Helvetica-Bold',
+      color: BLACK, borderRightWidth: 0.5, borderRightColor: BORDER, textAlign: 'center',
+    },
+
+    // Grading scheme strip
+    gradeWrap: { marginTop: 9, borderWidth: 0.8, borderColor: BORDER, flexDirection: 'row' },
+    gradeCol: { flex: 1, borderRightWidth: 0.5, borderRightColor: BORDER, alignItems: 'center' },
     gradeColLast: { flex: 1, alignItems: 'center' },
-    gradeLbl: { fontSize: 8.5, fontWeight: 700, color: BLACK, paddingVertical: 3, borderBottomWidth: 1, borderBottomColor: BORDER, width: '100%', textAlign: 'center', backgroundColor: LIGHT },
-    gradeVal: { fontSize: 8.5, color: BLACK, paddingVertical: 4 },
+    gradeLbl: {
+      fontSize: 9, fontFamily: 'Helvetica-Bold', color: BLACK,
+      paddingVertical: 3.5, width: '100%', textAlign: 'center',
+      backgroundColor: LIGHT, borderBottomWidth: 0.5, borderBottomColor: BORDER,
+    },
+    gradeVal: { fontSize: 8.8, color: BLACK, paddingVertical: 4 },
 
-    // Final grade banner
-    finalWrap: { marginTop: 8, borderWidth: 1, borderColor: BORDER, backgroundColor: LIGHT, paddingVertical: 6, alignItems: 'center' },
-    finalText: { fontSize: 12, fontWeight: 700, color: BLACK, letterSpacing: 1 },
+    // Final grade band
+    finalWrap: {
+      marginTop: 7, borderWidth: 0.8, borderColor: BORDER, backgroundColor: LIGHT,
+      paddingVertical: 6, alignItems: 'center',
+    },
+    finalText: { fontSize: 12, fontFamily: 'Helvetica-Bold', color: BLACK, letterSpacing: 0.6 },
 
-    notes: { marginTop: 6, fontSize: 8, color: MUTED, textAlign: 'center' },
+    notes: { marginTop: 5, fontSize: 8, color: MUTED, textAlign: 'center' },
 
-    // Bottom row: QR + signature
-    bottomRow: { flexDirection: 'row', marginTop: 14, alignItems: 'flex-end', justifyContent: 'space-between' },
-    qrBox: { alignItems: 'flex-start', width: 140 },
-    qrPlaceholder: { width: 86, height: 86, borderWidth: 1, borderColor: BLACK, alignItems: 'center', justifyContent: 'center' },
-    qrLabel: { fontSize: 8, color: MUTED, textAlign: 'center', marginTop: 2 },
-    issueLabel: { fontSize: 8.5, color: BLACK, marginTop: 8 },
-    sigBox: { alignItems: 'center', width: 220 },
-    sigImg: { height: 32, width: 150, objectFit: 'contain' },
-    sigPlaceholder: { height: 32, width: 150 },
-    sigItalic: { fontSize: 10.5, fontWeight: 700, color: BLACK, marginTop: -4, marginBottom: 4 },
-    sigName: { fontSize: 9, fontWeight: 700, color: BLACK, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 3, width: 200, textAlign: 'center' },
-    sigTitle: { fontSize: 8, color: BLACK, textAlign: 'center' },
+    // Bottom: QR left, signature right
+    bottomRow: { flexDirection: 'row', marginTop: 12, alignItems: 'flex-start', justifyContent: 'space-between' },
+    qrBox: { width: 150 },
+    qrImg: { width: 76, height: 76, borderWidth: 0.6, borderColor: BLACK, objectFit: 'contain' },
+    qrPlaceholder: {
+      width: 76, height: 76, borderWidth: 0.6, borderColor: BLACK,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    qrLabel: { fontSize: 7, color: MUTED, textAlign: 'center', marginTop: 2, width: 76 },
+    dateIssue: { fontSize: 8.5, color: BLACK, marginTop: 8 },
 
-    // Cert strip + footer
-    certStrip: { flexDirection: 'row', marginTop: 14, alignItems: 'center', justifyContent: 'flex-start', gap: 10 },
-    certLogo: { height: 28, width: 60, objectFit: 'contain' },
+    sigBox: { alignItems: 'center', width: 230 },
+    sigImg: { height: 30, width: 150, objectFit: 'contain' },
+    sigPlaceholder: { height: 30, width: 150 },
+    sigScriptName: { fontSize: 11, fontFamily: 'Helvetica-Bold', color: BLACK, marginBottom: 2 },
+    sigName: {
+      fontSize: 9.4, fontFamily: 'Helvetica-Bold', color: BLACK,
+      borderTopWidth: 0.6, borderTopColor: BLACK, paddingTop: 3, minWidth: 190, textAlign: 'center',
+    },
+    sigTitle: { fontSize: 8.2, color: BLACK, textAlign: 'center' },
 
-    footerLine: { marginTop: 8, paddingTop: 6, borderTopWidth: 1, borderTopColor: BORDER, alignItems: 'center' },
+    // Certification logos strip — single row, centered
+    certStrip: { marginTop: 10, alignItems: 'center' },
+    certLogo: { height: 36, width: 320, objectFit: 'contain' },
+
+    // Footer
+    footerLine: {
+      marginTop: 8, paddingTop: 6,
+      borderTopWidth: 0.5, borderTopColor: BORDER_LIGHT, alignItems: 'center',
+    },
     footerText: { fontSize: 8, color: BLACK, textAlign: 'center' },
-    footerTextBold: { fontSize: 8, color: BLACK, textAlign: 'center', fontWeight: 700 },
+    footerTextBold: { fontSize: 8, color: BLACK, textAlign: 'center', fontFamily: 'Helvetica-Bold' },
+
+    issueRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+    issueLabel: { fontSize: 8, color: BLACK, fontFamily: 'Helvetica-Bold' },
+    issueValue: { fontSize: 8, color: BLACK },
   })
 
-  // Group rows by semester, stable order
   const semesters = Array.from(new Set(rows.map(r => r.semester ?? 0))).sort((a, b) => a - b)
 
   return await pdf(
     <Document>
       <Page size="A4" style={s.page}>
-        <View style={s.pageBorder} fixed />
-
-        {/* Corner triangles (orange squares masked by a white triangle) */}
+        <View style={s.outerFrame} fixed />
         <View style={s.cornerTL} fixed />
         <View style={s.cornerTLMask} fixed />
         <View style={s.cornerTR} fixed />
         <View style={s.cornerTRMask} fixed />
 
         <View style={s.content}>
-          {/* Header */}
+          {/* Header — institute info only (no student photo here) */}
           <View style={s.headerRow}>
             <View style={s.logoCol}>
               {logoDataUrl ? <PdfImage src={logoDataUrl} style={s.logo} /> : null}
@@ -232,10 +290,12 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                 : null}
               {settings.reg_line ? <Text style={s.subLine}>{settings.reg_line}</Text> : null}
             </View>
-            <View style={s.isoCol}>
-              <Text style={s.regLine}>Reg. No.: {serial_no}</Text>
+            <View style={s.rightCol}>
+              <Text style={s.regLine}>Reg. No.: {serial_no || '—'}</Text>
             </View>
           </View>
+
+          <View style={s.divider} />
 
           {/* Title */}
           <View style={s.titleBand}>
@@ -243,45 +303,82 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
             {student.session ? <Text style={s.sessionText}>Session: {student.session}</Text> : null}
           </View>
 
-          {/* Student info table */}
+          {/* Student info section — photo on right, no photo in header */}
           <View style={s.infoWrap}>
             <View style={s.infoLeft}>
               <View style={s.infoRow}>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Enrollment No</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoValue]}>{student.registration_no}</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Roll No</Text>
-                <Text style={[s.infoCell, s.infoValue]}>{roll_no || '—'}</Text>
+                <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                  <Text style={s.infoLabel}>Enrollment No</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{student.registration_no}</Text>
+                </View>
+                <View style={s.infoCellWrap}>
+                  <Text style={s.infoLabel}>Roll No</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{roll_no || '—'}</Text>
+                </View>
               </View>
+
               <View style={s.infoRow}>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Training Center</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoValue]}>{center.name || '—'}</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Center Code</Text>
-                <Text style={[s.infoCell, s.infoValue]}>{center.code || '—'}</Text>
+                <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                  <Text style={s.infoLabel}>Training Center</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{center.name || '—'}</Text>
+                </View>
+                <View style={s.infoCellWrap}>
+                  <Text style={s.infoLabel}>Center Code</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{center.code || '—'}</Text>
+                </View>
               </View>
+
               <View style={s.infoRow}>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Course Name</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoValue]}>{student.course_name || '—'}</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Course Duration</Text>
-                <Text style={[s.infoCell, s.infoValue]}>{student.course_duration || '—'}</Text>
+                <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                  <Text style={s.infoLabel}>Course Name</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{student.course_name || '—'}</Text>
+                </View>
+                <View style={s.infoCellWrap}>
+                  <Text style={s.infoLabel}>Course Duration</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{student.course_duration || '—'}</Text>
+                </View>
               </View>
+
               <View style={s.infoRow}>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Student Name</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoValue]}>{student.name}</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Father&#39;s Name</Text>
-                <Text style={[s.infoCell, s.infoValue]}>{student.father_name || '—'}</Text>
+                <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                  <Text style={s.infoLabel}>Student Name</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{student.name}</Text>
+                </View>
+                <View style={s.infoCellWrap}>
+                  <Text style={s.infoLabel}>Father&#39;s Name</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{student.father_name || '—'}</Text>
+                </View>
               </View>
+
               <View style={s.infoRowLast}>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Date of Registration</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoValue]}>{fmtDate(student.enrollment_date)}</Text>
-                <Text style={[s.infoCell, s.infoCellDivider, s.infoLabel]}>Center Address</Text>
-                <Text style={[s.infoCell, s.infoValue]}>{center.address || '—'}</Text>
+                <View style={[s.infoCellWrap, s.infoCellDivider]}>
+                  <Text style={s.infoLabel}>Date of Registration</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{fmtDate(student.enrollment_date)}</Text>
+                </View>
+                <View style={s.infoCellWrap}>
+                  <Text style={s.infoLabel}>Center Address</Text>
+                  <Text style={s.infoArrow}>→</Text>
+                  <Text style={s.infoValue}>{center.address || '—'}</Text>
+                </View>
               </View>
             </View>
+
             <View style={s.infoPhoto}>
               {photoDataUrl
                 ? <PdfImage src={photoDataUrl} style={s.infoPhotoImg} />
                 : <View style={s.infoPhotoPlaceholder}>
-                    <Text style={{ fontSize: 18, color: '#9CA3AF', fontWeight: 700 }}>{student.name.charAt(0).toUpperCase()}</Text>
+                    <Text style={{ fontSize: 20, color: '#9CA3AF', fontFamily: 'Helvetica-Bold' }}>
+                      {student.name.charAt(0).toUpperCase()}
+                    </Text>
                   </View>}
             </View>
           </View>
@@ -289,16 +386,20 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
           {/* Marks table */}
           <View style={s.tableWrap}>
             <View style={s.tHeadRow}>
-              <Text style={[s.tHeadCell, { flex: 3, textAlign: 'left' }]}>Subject</Text>
-              <View style={[{ flex: 2, borderRightWidth: 1, borderRightColor: BORDER }]}>
-                <Text style={[s.tHeadCell, { borderRightWidth: 0, borderBottomWidth: 0 }]}>Theory</Text>
-                <Text style={s.tSubHead}>(Max | Obtained)</Text>
+              <View style={s.tHeadSubject}>
+                <Text style={s.tHeadText}>Subject</Text>
               </View>
-              <View style={[{ flex: 2, borderRightWidth: 1, borderRightColor: BORDER }]}>
-                <Text style={[s.tHeadCell, { borderRightWidth: 0, borderBottomWidth: 0 }]}>Practical</Text>
-                <Text style={s.tSubHead}>(Max | Obtained)</Text>
+              <View style={s.tHeadGroup}>
+                <Text style={s.tHeadText}>Theory</Text>
+                <Text style={s.tHeadSub}>(Max | Obtained)</Text>
               </View>
-              <Text style={[s.tHeadCellLast, { flex: 1 }]}>Total</Text>
+              <View style={s.tHeadGroup}>
+                <Text style={s.tHeadText}>Practical</Text>
+                <Text style={s.tHeadSub}>(Max | Obtained)</Text>
+              </View>
+              <View style={s.tHeadTotal}>
+                <Text style={s.tHeadText}>Total</Text>
+              </View>
             </View>
 
             {semesters.map(sem => {
@@ -311,14 +412,26 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                       <Text style={s.tSemCell}>{semesterLabel(sem)}</Text>
                     </View>
                   ) : null}
-                  {list.map((row, idx) => (
-                    <View key={row.subject_id} style={idx === list.length - 1 ? s.tRowLast : s.tRow}>
-                      <Text style={[s.tCell, { flex: 3 }]}>{row.code ? `${row.code} — ${row.name}` : row.name}</Text>
-                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>{row.theory_max || '—'}</Text>
-                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>{row.theory_obtained ?? '—'}</Text>
-                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>{row.practical_max || '—'}</Text>
-                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>{row.practical_obtained ?? '—'}</Text>
-                      <Text style={[s.tCellLast, { flex: 1 }]}>{row.total || '—'}</Text>
+                  {list.map(row => (
+                    <View key={row.subject_id} style={s.tRow}>
+                      <Text style={[s.tCell, { flex: 3.2 }]}>
+                        {row.code ? `${row.code} — ${row.name}` : row.name}
+                      </Text>
+                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>
+                        {row.theory_max || '—'}
+                      </Text>
+                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>
+                        {row.theory_obtained ?? '—'}
+                      </Text>
+                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>
+                        {row.practical_max || '—'}
+                      </Text>
+                      <Text style={[s.tCell, { flex: 1, textAlign: 'center' }]}>
+                        {row.practical_obtained ?? '—'}
+                      </Text>
+                      <Text style={[s.tCellRight, { flex: 1 }]}>
+                        {row.total || '—'}
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -327,16 +440,18 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
 
             {/* Totals row */}
             <View style={s.tTotalRow}>
-              <Text style={[s.tTotalCell, { flex: 3, textAlign: 'left' }]}>Total</Text>
+              <Text style={[s.tTotalCell, { flex: 3.2, textAlign: 'left' }]}>Total</Text>
               <Text style={[s.tTotalCell, { flex: 1 }]}>—</Text>
               <Text style={[s.tTotalCell, { flex: 1 }]}>—</Text>
               <Text style={[s.tTotalCell, { flex: 1 }]}>—</Text>
               <Text style={[s.tTotalCell, { flex: 1 }]}>—</Text>
-              <Text style={[s.tTotalCell, { flex: 1, borderRightWidth: 0 }]}>{totals.totalObtained}</Text>
+              <Text style={[s.tTotalCell, { flex: 1, borderRightWidth: 0 }]}>
+                {totals.totalObtained}
+              </Text>
             </View>
           </View>
 
-          {/* Grading scheme strip */}
+          {/* Grading scheme */}
           <View style={s.gradeWrap}>
             {gradingScheme.map((band, i) => (
               <View key={band.label} style={i === gradingScheme.length - 1 ? s.gradeColLast : s.gradeCol}>
@@ -346,51 +461,56 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
             ))}
           </View>
 
-          {/* Final grade banner */}
+          {/* Final grade */}
           <View style={s.finalWrap}>
-            <Text style={s.finalText}>Final Grade: {finalGrade}  ·  Result: {result}  ·  {totals.percentage.toFixed(2)}%</Text>
+            <Text style={s.finalText}>Final Grade: {finalGrade}</Text>
           </View>
 
           {settings.notes ? <Text style={s.notes}>{settings.notes}</Text> : null}
 
-          {/* Bottom: QR + Signature */}
+          {/* QR + Signature row */}
           <View style={s.bottomRow}>
             <View style={s.qrBox}>
-              <View style={s.qrPlaceholder}>
-                <Text style={{ fontSize: 7, color: MUTED, textAlign: 'center' }}>{'QR\nCode'}</Text>
-              </View>
-              <Text style={s.issueLabel}>Date of Issue: <Text style={{ fontWeight: 700 }}>{fmtDate(issue_date)}</Text></Text>
+              {qrDataUrl
+                ? <PdfImage src={qrDataUrl} style={s.qrImg} />
+                : <View style={s.qrPlaceholder}>
+                    <Text style={{ fontSize: 7, color: MUTED }}>QR</Text>
+                  </View>}
+              <Text style={s.qrLabel}>Scan to verify</Text>
+              <Text style={s.dateIssue}>
+                Date of Issue: <Text style={{ fontFamily: 'Helvetica-Bold' }}>{fmtDate(issue_date)}</Text>
+              </Text>
             </View>
 
             <View style={s.sigBox}>
               {settings.left_signature_url
                 ? <PdfImage src={settings.left_signature_url} style={s.sigImg} />
-                : <Text style={s.sigItalic}>{settings.left_signer_name}</Text>}
+                : <View style={s.sigPlaceholder} />}
               <Text style={s.sigName}>{settings.left_signer_name || '—'}</Text>
               {settings.left_signer_title ? <Text style={s.sigTitle}>{settings.left_signer_title}</Text> : null}
               {settings.left_signer_org ? <Text style={s.sigTitle}>{settings.left_signer_org}</Text> : null}
             </View>
           </View>
 
-          {/* Cert strip */}
+          {/* Certification logos strip (ISO / Skill India / NSDC / MSME composite) */}
           {isoLogoDataUrl ? (
             <View style={s.certStrip}>
               <PdfImage src={isoLogoDataUrl} style={s.certLogo} />
             </View>
           ) : null}
 
-          {/* Footer lines */}
+          {/* Footer */}
           <View style={s.footerLine}>
             <Text style={s.footerTextBold}>
-              Head Office Address, <Text style={{ fontWeight: 400 }}>{settings.footer_address}</Text>
+              Head Office Address, <Text style={{ fontFamily: 'Helvetica' }}>{settings.footer_address}</Text>
             </Text>
             <Text style={s.footerText}>
-              Website for verification: <Text style={{ color: RED }}>{settings.website}</Text>
-              {settings.email ? <>  |  Email: <Text style={{ color: RED }}>{settings.email}</Text></> : null}
+              Website for verification: <Text style={{ fontFamily: 'Helvetica-Bold' }}>{settings.website}</Text>
+              {settings.email ? <>  |  Email: <Text style={{ fontFamily: 'Helvetica-Bold' }}>{settings.email}</Text></> : null}
             </Text>
           </View>
         </View>
       </Page>
-    </Document>
+    </Document>,
   ).toBlob()
 }
