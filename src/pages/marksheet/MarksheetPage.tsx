@@ -182,6 +182,9 @@ export default function MarksheetPage() {
       const initialRows = buildRowsForSemesters(defs, new Set(sems))
       setRows(initialRows)
 
+      // Auto-populate roll number (user can still override)
+      buildNextRollNo().then(setRollNo).catch(() => { /* leave blank */ })
+
       // Best-effort auto-fill from declared exam results
       await autoFillFromResults(s.id, s.course_id, initialRows)
     } catch { toast.error('Search failed') }
@@ -309,15 +312,27 @@ export default function MarksheetPage() {
     return { totalObtained, totalMax, percentage }
   }, [rows])
 
-  async function buildSerialNo(): Promise<string> {
+  async function currentYearMarksheetCount(): Promise<number> {
     const year = new Date().getFullYear()
     const { count } = await supabase
       .from('uce_marksheets')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', `${year}-01-01`)
       .lt('created_at', `${year + 1}-01-01`)
-    const n = (count ?? 0) + 1
+    return count ?? 0
+  }
+
+  async function buildSerialNo(): Promise<string> {
+    const year = new Date().getFullYear()
+    const n = (await currentYearMarksheetCount()) + 1
     return `UCE/MS/${year}/${String(n).padStart(4, '0')}`
+  }
+
+  /** Roll number format: YYYY + 3-digit sequence (e.g. 2026001, 2026272). */
+  async function buildNextRollNo(): Promise<string> {
+    const year = new Date().getFullYear()
+    const n = (await currentYearMarksheetCount()) + 1
+    return `${year}${String(n).padStart(3, '0')}`
   }
 
   async function handleGenerate() {
@@ -548,8 +563,8 @@ export default function MarksheetPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <FormField label="Roll No" required>
-                <input value={rollNo} onChange={e => setRollNo(e.target.value)} className={inputClass} placeholder="e.g., 678910" />
+              <FormField label="Roll No" hint="Auto-generated as YYYY + sequence (e.g. 2026272). Edit if needed." required>
+                <input value={rollNo} onChange={e => setRollNo(e.target.value)} className={inputClass} placeholder="e.g., 2026001" />
               </FormField>
               <FormField label="Date of Issue">
                 <input type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)} className={inputClass} />

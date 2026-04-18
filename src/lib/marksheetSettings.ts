@@ -66,7 +66,7 @@ export const MARKSHEET_DEFAULTS: MarksheetSettings = {
   footer_address:      'Nomlarr Sector Noida, UnSkills FuturePath Tech Pvt. Ltd.',
   website:             'www.unskillseducation.org',
   email:               'info@unskillseducation.org',
-  verify_base_url:     'https://www.unskillseducation.org',
+  verify_base_url:     'https://unskill-computer-education-psi.vercel.app',
   left_signer_name:    'Er. Ankit Vishwakarma',
   left_signer_title:   'Chief Executive Officer',
   left_signer_org:     'UnSkills FuturePath Tech Pvt. Ltd.',

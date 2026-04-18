@@ -77,7 +77,22 @@ function semesterLabel(n: number): string {
   return `${n}${suffix} Semester`
 }
 
+let fontsRegistered = false
+async function registerFonts() {
+  if (fontsRegistered) return
+  const { Font } = await import('@react-pdf/renderer')
+  Font.register({
+    family: 'DMSans',
+    fonts: [
+      { src: '/fonts/dm-sans-400.woff', fontWeight: 400 },
+      { src: '/fonts/dm-sans-700.woff', fontWeight: 700 },
+    ],
+  })
+  fontsRegistered = true
+}
+
 export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise<Blob> {
+  await registerFonts()
   const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
 
   const {
@@ -95,7 +110,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
 
   const s = StyleSheet.create({
     page: {
-      fontFamily: 'Helvetica',
+      fontFamily: 'DMSans', fontWeight: 400,
       fontSize: 9,
       color: BLACK,
       backgroundColor: '#FFFFFF',
@@ -115,17 +130,17 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     logoCol: { width: 74, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
     logo: { width: 64, height: 64, objectFit: 'contain' },
     middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 6, paddingTop: 2 },
-    brand: { fontSize: 17, fontFamily: 'Helvetica-Bold', color: BLACK, textAlign: 'center', letterSpacing: 0.6 },
-    subLine: { fontSize: 8.5, color: BLACK, textAlign: 'center', marginTop: 1.5 },
+    brand: { fontSize: 18, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center', letterSpacing: 0.8 },
+    subLine: { fontSize: 8.5, color: BLACK, textAlign: 'center', marginTop: 2, fontFamily: 'DMSans', fontWeight: 400 },
     rightCol: { width: 96, alignItems: 'flex-end', paddingTop: 6 },
-    regLine: { fontSize: 8.5, color: BLACK, textAlign: 'right', fontFamily: 'Helvetica-Bold' },
+    regLine: { fontSize: 8.5, color: BLACK, textAlign: 'right', fontFamily: 'DMSans', fontWeight: 700 },
 
-    divider: { marginTop: 8, height: 0.8, backgroundColor: MUTED },
+    divider: { marginTop: 9, height: 0.8, backgroundColor: MUTED },
 
     // Title
-    titleBand: { alignItems: 'center', marginTop: 10 },
-    titleText: { fontSize: 17, fontFamily: 'Helvetica-Bold', color: BLACK, letterSpacing: 2.4 },
-    sessionText: { fontSize: 9.5, color: BLACK, marginTop: 3 },
+    titleBand: { alignItems: 'center', marginTop: 11 },
+    titleText: { fontSize: 18, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, letterSpacing: 3 },
+    sessionText: { fontSize: 9.5, color: BLACK, marginTop: 3, fontFamily: 'DMSans', fontWeight: 400 },
 
     // Student info — bordered grid with photo on right
     infoWrap: { marginTop: 10, flexDirection: 'row', borderWidth: 0.8, borderColor: BORDER },
@@ -143,8 +158,8 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     infoRowLast: { flexDirection: 'row', minHeight: 18 },
     infoCellWrap: { flex: 1, flexDirection: 'row', paddingVertical: 3.5, paddingHorizontal: 6, alignItems: 'baseline' },
     infoCellDivider: { borderRightWidth: 0.5, borderRightColor: BORDER },
-    infoLabel: { fontSize: 8.8, color: BLACK, fontFamily: 'Helvetica-Bold' },
-    infoColon: { fontSize: 8.8, color: BLACK, marginHorizontal: 4, fontFamily: 'Helvetica-Bold' },
+    infoLabel: { fontSize: 8.8, color: BLACK, fontFamily: 'DMSans', fontWeight: 700 },
+    infoColon: { fontSize: 8.8, color: BLACK, marginHorizontal: 4, fontFamily: 'DMSans', fontWeight: 700 },
     infoValue: { fontSize: 8.8, color: BLACK, flex: 1 },
 
     // Marks table
@@ -163,8 +178,8 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       flex: 1, paddingVertical: 5, paddingHorizontal: 4,
       alignItems: 'center', justifyContent: 'center',
     },
-    tHeadText: { fontSize: 9.2, fontFamily: 'Helvetica-Bold', color: BLACK, textAlign: 'center' },
-    tHeadSub: { fontSize: 7.4, color: MUTED, textAlign: 'center', marginTop: 1.5 },
+    tHeadText: { fontSize: 9.2, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center' },
+    tHeadSub: { fontSize: 7.4, color: MUTED, textAlign: 'center', marginTop: 1.5, fontFamily: 'DMSans', fontWeight: 400 },
 
     tSemRow: {
       flexDirection: 'row', backgroundColor: '#E5E7EB',
@@ -173,7 +188,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     },
     tSemCell: {
       flex: 1, paddingVertical: 3.5, paddingHorizontal: 6,
-      fontSize: 9.2, fontFamily: 'Helvetica-Bold', color: BLACK, textAlign: 'center',
+      fontSize: 9.2, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center',
     },
 
     tRow: { flexDirection: 'row', borderBottomWidth: 0.3, borderBottomColor: BORDER_LIGHT, minHeight: 18 },
@@ -188,7 +203,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       backgroundColor: LIGHT,
     },
     tTotalCell: {
-      paddingVertical: 4.5, paddingHorizontal: 5, fontSize: 9, fontFamily: 'Helvetica-Bold',
+      paddingVertical: 4.5, paddingHorizontal: 5, fontSize: 9, fontFamily: 'DMSans', fontWeight: 700,
       color: BLACK, borderRightWidth: 0.5, borderRightColor: BORDER, textAlign: 'center',
     },
 
@@ -197,7 +212,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     gradeCol: { flex: 1, borderRightWidth: 0.5, borderRightColor: BORDER, alignItems: 'center' },
     gradeColLast: { flex: 1, alignItems: 'center' },
     gradeLbl: {
-      fontSize: 9, fontFamily: 'Helvetica-Bold', color: BLACK,
+      fontSize: 9, fontFamily: 'DMSans', fontWeight: 700, color: BLACK,
       paddingVertical: 3.5, width: '100%', textAlign: 'center',
       backgroundColor: LIGHT, borderBottomWidth: 0.5, borderBottomColor: BORDER,
     },
@@ -208,7 +223,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       marginTop: 7, borderWidth: 0.8, borderColor: BORDER, backgroundColor: LIGHT,
       paddingVertical: 6, alignItems: 'center',
     },
-    finalText: { fontSize: 12, fontFamily: 'Helvetica-Bold', color: BLACK, letterSpacing: 0.6 },
+    finalText: { fontSize: 12, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, letterSpacing: 0.6 },
 
     notes: { marginTop: 5, fontSize: 8, color: MUTED, textAlign: 'center' },
 
@@ -229,7 +244,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     sigPlaceholder: { height: 32, width: 180 },
     sigLine: { width: 200, height: 0.7, backgroundColor: BLACK, marginTop: 2 },
     sigName: {
-      fontSize: 9.6, fontFamily: 'Helvetica-Bold', color: BLACK,
+      fontSize: 9.6, fontFamily: 'DMSans', fontWeight: 700, color: BLACK,
       paddingTop: 3, width: 200, textAlign: 'center',
     },
     sigTitle: { fontSize: 8.2, color: BLACK, textAlign: 'center', width: 200 },
@@ -248,10 +263,10 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       borderTopWidth: 0.5, borderTopColor: BORDER_LIGHT, alignItems: 'center',
     },
     footerText: { fontSize: 8, color: BLACK, textAlign: 'center' },
-    footerTextBold: { fontSize: 8, color: BLACK, textAlign: 'center', fontFamily: 'Helvetica-Bold' },
+    footerTextBold: { fontSize: 8, color: BLACK, textAlign: 'center', fontFamily: 'DMSans', fontWeight: 700 },
 
     issueRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-    issueLabel: { fontSize: 8, color: BLACK, fontFamily: 'Helvetica-Bold' },
+    issueLabel: { fontSize: 8, color: BLACK, fontFamily: 'DMSans', fontWeight: 700 },
     issueValue: { fontSize: 8, color: BLACK },
   })
 
@@ -367,7 +382,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
               {photoDataUrl
                 ? <PdfImage src={photoDataUrl} style={s.infoPhotoImg} />
                 : <View style={s.infoPhotoPlaceholder}>
-                    <Text style={{ fontSize: 20, color: '#9CA3AF', fontFamily: 'Helvetica-Bold' }}>
+                    <Text style={{ fontSize: 20, color: '#9CA3AF', fontFamily: 'DMSans', fontWeight: 700 }}>
                       {student.name.charAt(0).toUpperCase()}
                     </Text>
                   </View>}
@@ -469,7 +484,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                   </View>}
               <Text style={s.qrLabel}>Scan to verify</Text>
               <Text style={s.dateIssue}>
-                Date of Issue: <Text style={{ fontFamily: 'Helvetica-Bold' }}>{fmtDate(issue_date)}</Text>
+                Date of Issue: <Text style={{ fontFamily: 'DMSans', fontWeight: 700 }}>{fmtDate(issue_date)}</Text>
               </Text>
             </View>
 
@@ -494,11 +509,11 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
           {/* Footer */}
           <View style={s.footerLine}>
             <Text style={s.footerTextBold}>
-              Head Office Address, <Text style={{ fontFamily: 'Helvetica' }}>{settings.footer_address}</Text>
+              Head Office Address, <Text style={{ fontFamily: 'DMSans', fontWeight: 400 }}>{settings.footer_address}</Text>
             </Text>
             <Text style={s.footerText}>
-              Website for verification: <Text style={{ fontFamily: 'Helvetica-Bold' }}>{settings.website}</Text>
-              {settings.email ? <>  |  Email: <Text style={{ fontFamily: 'Helvetica-Bold' }}>{settings.email}</Text></> : null}
+              Website for verification: <Text style={{ fontFamily: 'DMSans', fontWeight: 700 }}>{settings.website}</Text>
+              {settings.email ? <>  |  Email: <Text style={{ fontFamily: 'DMSans', fontWeight: 700 }}>{settings.email}</Text></> : null}
             </Text>
           </View>
         </View>
