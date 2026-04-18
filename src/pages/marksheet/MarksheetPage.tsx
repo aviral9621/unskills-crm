@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, ScrollText, Download, Loader2, Settings, History, Trash2, AlertTriangle, Sparkles } from 'lucide-react'
+import { Search, ScrollText, Download, Loader2, Settings, History, Trash2, AlertTriangle, Sparkles, Pencil, X } from 'lucide-react'
 import { toast } from 'sonner'
 import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase'
@@ -108,6 +108,11 @@ export default function MarksheetPage() {
   const [downloading, setDownloading] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
+  // When non-null, the generate button performs an UPDATE on this existing
+  // marksheet record instead of creating a new one. Reset to null via cancelEdit.
+  const [editingRecord, setEditingRecord] = useState<MarksheetRecord | null>(null)
+  const [loadingEdit, setLoadingEdit] = useState<string | null>(null)
+
   useEffect(() => { loadHistory() }, [])
   useEffect(() => {
     if (searchParams.get('student')) handleSearch()
@@ -131,6 +136,50 @@ export default function MarksheetPage() {
   function resetStudentState() {
     setStudent(null); setAllSubjects([]); setAvailableSemesters([])
     setSelectedSemesters(new Set()); setRows([]); setRollNo(''); setAutoFilled(null)
+  }
+
+  function cancelEdit() {
+    setEditingRecord(null)
+    resetStudentState()
+    setIssueDate(todayISO())
+  }
+
+  async function handleEditRecord(rec: MarksheetRecord) {
+    setLoadingEdit(rec.id)
+    try {
+      const { data: sd, error } = await supabase
+        .from('uce_students')
+        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode)')
+        .eq('id', rec.student_id).single()
+
+      if (error || !sd) { toast.error('Could not load student for edit'); return }
+
+      const sdc = sd as unknown as StudentData
+      setStudent(sdc)
+
+      // Re-fetch the course's subject catalog so max-mark inputs still work
+      const { data: subs } = await supabase
+        .from('uce_subjects')
+        .select('id, code, name, semester, theory_max_marks, practical_max_marks, display_order')
+        .eq('course_id', sdc.course_id).eq('is_active', true)
+        .order('semester', { nullsFirst: false }).order('display_order')
+      const defs = (subs ?? []) as SubjectDef[]
+      setAllSubjects(defs)
+
+      const semNums = Array.from(new Set(defs.map(d => d.semester).filter((n): n is number => n != null))).sort((a, b) => a - b)
+      setAvailableSemesters(semNums)
+      setSelectedSemesters(new Set(rec.marks_data.semesters || semNums))
+      setRows(rec.marks_data.subjects || [])
+      setRollNo(rec.marks_data.roll_no || '')
+      setIssueDate(rec.issue_date || todayISO())
+      setEditingRecord(rec)
+      setAutoFilled(null)
+
+      // Scroll up so the user sees the editing banner + form
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      toast.success(`Editing marksheet ${rec.serial_no || ''}`)
+    } catch { toast.error('Failed to open for editing') }
+    finally { setLoadingEdit(null) }
   }
 
   async function handleSearch() {
@@ -354,7 +403,9 @@ export default function MarksheetPage() {
       const { grade, isPass } = resolveGrade(totals.percentage, bands)
       const resultStr: 'pass' | 'fail' = isPass ? 'pass' : 'fail'
 
-      const serial_no = await buildSerialNo()
+      // When editing, preserve the original serial so the QR + existing
+      // verification links keep resolving to the same record.
+      const serial_no = editingRecord?.serial_no || (await buildSerialNo())
       const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, serial_no))
       const br = student.branch
       const centerCode = br?.b_code || br?.code || ''
@@ -389,19 +440,35 @@ export default function MarksheetPage() {
         grading_scheme: bands,
       }
 
-      const { error: insertError } = await supabase.from('uce_marksheets').insert({
-        student_id: student.id,
-        course_id: student.course_id,
-        serial_no,
-        marks_data: marksData,
-        total_obtained: totals.totalObtained,
-        total_max: totals.totalMax,
-        percentage: Number(totals.percentage.toFixed(2)),
-        grade,
-        result: resultStr,
-        issue_date: issueDate,
-      })
-      if (insertError) { console.error(insertError); toast.error(`Save failed: ${insertError.message}`); return }
+      if (editingRecord) {
+        const { error: updateError } = await supabase.from('uce_marksheets')
+          .update({
+            marks_data: marksData,
+            total_obtained: totals.totalObtained,
+            total_max: totals.totalMax,
+            percentage: Number(totals.percentage.toFixed(2)),
+            grade,
+            result: resultStr,
+            issue_date: issueDate,
+          })
+          .eq('id', editingRecord.id)
+        if (updateError) { console.error(updateError); toast.error(`Update failed: ${updateError.message}`); return }
+      } else {
+        const { error: insertError } = await supabase.from('uce_marksheets').insert({
+          student_id: student.id,
+          course_id: student.course_id,
+          serial_no,
+          marks_data: marksData,
+          total_obtained: totals.totalObtained,
+          total_max: totals.totalMax,
+          percentage: Number(totals.percentage.toFixed(2)),
+          grade,
+          result: resultStr,
+          issue_date: issueDate,
+        })
+        if (insertError) { console.error(insertError); toast.error(`Save failed: ${insertError.message}`); return }
+      }
+      const wasEditing = !!editingRecord
       loadHistory()
 
       const url = URL.createObjectURL(blob)
@@ -410,7 +477,8 @@ export default function MarksheetPage() {
       a.download = `Marksheet-${student.registration_no.replace(/\//g, '-')}.pdf`
       a.click()
       URL.revokeObjectURL(url)
-      toast.success('Marksheet downloaded!')
+      toast.success(wasEditing ? 'Marksheet updated & re-downloaded!' : 'Marksheet downloaded!')
+      if (wasEditing) setEditingRecord(null)
     } catch (err) { console.error(err); toast.error('Failed to generate marksheet') }
     finally { setGenerating(false) }
   }
@@ -511,6 +579,24 @@ export default function MarksheetPage() {
           <Settings size={14} /> Settings
         </button>
       </div>
+
+      {editingRecord && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <Pencil size={16} className="text-amber-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-900">
+              Editing marksheet <span className="font-mono">{editingRecord.serial_no || '—'}</span>
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5">Saving will update the existing record and re-download the PDF (same serial & QR).</p>
+          </div>
+          <button
+            onClick={cancelEdit}
+            className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-amber-900 bg-white border border-amber-300 rounded-lg hover:bg-amber-50"
+          >
+            <X size={14} /> Cancel edit
+          </button>
+        </div>
+      )}
 
       {/* Search */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6">
@@ -682,8 +768,12 @@ export default function MarksheetPage() {
             disabled={generating || rows.length === 0}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 shadow-sm"
           >
-            {generating ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-            {generating ? 'Generating…' : 'Save & Download Marksheet (PDF)'}
+            {generating
+              ? <Loader2 size={18} className="animate-spin" />
+              : editingRecord ? <Pencil size={18} /> : <Download size={18} />}
+            {generating
+              ? (editingRecord ? 'Updating…' : 'Generating…')
+              : editingRecord ? 'Update & Re-Download Marksheet (PDF)' : 'Save & Download Marksheet (PDF)'}
           </button>
         </>
       )}
@@ -711,7 +801,7 @@ export default function MarksheetPage() {
               const st = rec.student as { name: string; registration_no: string } | null
               const co = rec.course as { name: string; code: string } | null
               return (
-                <div key={rec.id} className="flex items-center justify-between py-3 gap-3">
+                <div key={rec.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-3 gap-2 sm:gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900 truncate">{st?.name ?? '—'}</p>
                     <p className="text-xs text-gray-400 truncate">
@@ -721,7 +811,16 @@ export default function MarksheetPage() {
                       &nbsp;&middot;&nbsp;{fmtHistoryDate(rec.created_at)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                    <button
+                      onClick={() => handleEditRecord(rec)}
+                      disabled={loadingEdit === rec.id || editingRecord?.id === rec.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg hover:bg-amber-100 disabled:opacity-50"
+                      title="Edit & re-download"
+                    >
+                      {loadingEdit === rec.id ? <Loader2 size={12} className="animate-spin" /> : <Pencil size={12} />}
+                      {editingRecord?.id === rec.id ? 'Editing' : 'Edit'}
+                    </button>
                     <button
                       onClick={() => handleDownloadHistory(rec)}
                       disabled={downloading === rec.id}
