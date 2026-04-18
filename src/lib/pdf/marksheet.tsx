@@ -117,69 +117,67 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       padding: 0,
     },
 
-    // Thick decorative border — four concentric strips: red, black, red, black
-    frameRed1:   { position: 'absolute', top: 10, left: 10, right: 10, bottom: 10, borderWidth: 2.2, borderColor: RED },
-    frameBlack1: { position: 'absolute', top: 14, left: 14, right: 14, bottom: 14, borderWidth: 1.5, borderColor: BLACK },
-    frameRed2:   { position: 'absolute', top: 18, left: 18, right: 18, bottom: 18, borderWidth: 1.2, borderColor: RED },
-    frameBlack2: { position: 'absolute', top: 21, left: 21, right: 21, bottom: 21, borderWidth: 0.8, borderColor: BLACK },
+    // Thick decorative border — two strips: red outer + black inner
+    frameRed:   { position: 'absolute', top: 10, left: 10, right: 10, bottom: 10, borderWidth: 2.8, borderColor: RED },
+    frameBlack: { position: 'absolute', top: 15, left: 15, right: 15, bottom: 15, borderWidth: 1.2, borderColor: BLACK },
 
-    content: { paddingTop: 28, paddingHorizontal: 28, paddingBottom: 20 },
+    content: { paddingTop: 22, paddingHorizontal: 24, paddingBottom: 26 },
 
     // Header
-    headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 },
-    logoCol: { width: 74, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
-    logo: { width: 64, height: 64, objectFit: 'contain' },
-    middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 6, paddingTop: 2 },
-    brand: { fontSize: 18, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center', letterSpacing: 0.8 },
-    subLine: { fontSize: 8.5, color: BLACK, textAlign: 'center', marginTop: 2, fontFamily: 'DMSans', fontWeight: 400 },
-    rightCol: { width: 96, alignItems: 'flex-end', paddingTop: 6 },
-    regLine: { fontSize: 8.5, color: BLACK, textAlign: 'right', fontFamily: 'DMSans', fontWeight: 700 },
+    headerRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 2 },
+    logoCol: { width: 66, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 2 },
+    logo: { width: 56, height: 56, objectFit: 'contain' },
+    middleCol: { flex: 1, alignItems: 'center', paddingHorizontal: 4, paddingTop: 2 },
+    brand: { fontSize: 16.5, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center', letterSpacing: 0.6 },
+    subLine: { fontSize: 8, color: BLACK, textAlign: 'center', marginTop: 1.2, fontFamily: 'DMSans', fontWeight: 400 },
+    rightCol: { width: 86, alignItems: 'flex-end', paddingTop: 4 },
+    regLine: { fontSize: 8, color: BLACK, textAlign: 'right', fontFamily: 'DMSans', fontWeight: 700 },
 
-    divider: { marginTop: 9, height: 0.8, backgroundColor: MUTED },
+    divider: { marginTop: 6, height: 0.6, backgroundColor: MUTED },
 
     // Title
-    titleBand: { alignItems: 'center', marginTop: 11 },
-    titleText: { fontSize: 18, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, letterSpacing: 3 },
-    sessionText: { fontSize: 9.5, color: BLACK, marginTop: 3, fontFamily: 'DMSans', fontWeight: 400 },
+    titleBand: { alignItems: 'center', marginTop: 6 },
+    titleText: { fontSize: 16, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, letterSpacing: 2.4 },
+    sessionText: { fontSize: 9, color: BLACK, marginTop: 2, fontFamily: 'DMSans', fontWeight: 400 },
 
     // Student info — bordered grid with photo on right
-    infoWrap: { marginTop: 10, flexDirection: 'row', borderWidth: 0.8, borderColor: BORDER },
+    infoWrap: { marginTop: 7, flexDirection: 'row', borderWidth: 0.8, borderColor: BORDER },
     infoLeft: { flex: 1 },
     infoPhoto: {
-      width: 98, alignItems: 'center', justifyContent: 'center',
-      padding: 6, borderLeftWidth: 0.8, borderLeftColor: BORDER, backgroundColor: '#FFFFFF',
+      width: 86, alignItems: 'center', justifyContent: 'center',
+      padding: 4, borderLeftWidth: 0.8, borderLeftColor: BORDER, backgroundColor: '#FFFFFF',
     },
-    infoPhotoImg: { width: 84, height: 98, objectFit: 'cover', borderWidth: 0.6, borderColor: BLACK },
+    infoPhotoImg: { width: 76, height: 88, objectFit: 'cover', borderWidth: 0.6, borderColor: BLACK },
     infoPhotoPlaceholder: {
-      width: 84, height: 98, backgroundColor: '#E5E7EB',
+      width: 76, height: 88, backgroundColor: '#E5E7EB',
       borderWidth: 0.6, borderColor: BLACK, alignItems: 'center', justifyContent: 'center',
     },
-    infoRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: BORDER, minHeight: 18 },
-    infoRowLast: { flexDirection: 'row', minHeight: 18 },
-    infoCellWrap: { flex: 1, flexDirection: 'row', paddingVertical: 3.5, paddingHorizontal: 6, alignItems: 'baseline' },
+    infoRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: BORDER, minHeight: 16 },
+    infoRowLast: { flexDirection: 'row', minHeight: 16 },
+    infoCellWrap: { flex: 1, flexDirection: 'row', paddingVertical: 2.5, paddingHorizontal: 5, alignItems: 'baseline' },
     infoCellDivider: { borderRightWidth: 0.5, borderRightColor: BORDER },
     infoLabel: { fontSize: 8.8, color: BLACK, fontFamily: 'DMSans', fontWeight: 700 },
     infoColon: { fontSize: 8.8, color: BLACK, marginHorizontal: 4, fontFamily: 'DMSans', fontWeight: 700 },
     infoValue: { fontSize: 8.8, color: BLACK, flex: 1 },
 
     // Marks table
-    tableWrap: { marginTop: 9, borderWidth: 0.8, borderColor: BORDER },
-    tHeadRow: { flexDirection: 'row', backgroundColor: LIGHT, borderBottomWidth: 0.8, borderBottomColor: BORDER, minHeight: 28 },
+    tableWrap: { marginTop: 6, borderWidth: 0.8, borderColor: BORDER },
+    tHeadRow: { flexDirection: 'row', backgroundColor: LIGHT, borderBottomWidth: 0.8, borderBottomColor: BORDER, minHeight: 24 },
     tHeadSubject: {
-      flex: 3.2, paddingVertical: 5, paddingHorizontal: 5,
+      flex: 3.2, paddingVertical: 4, paddingHorizontal: 5,
       borderRightWidth: 0.5, borderRightColor: BORDER,
       alignItems: 'center', justifyContent: 'center',
     },
     tHeadGroup: {
       flex: 2, borderRightWidth: 0.5, borderRightColor: BORDER,
-      alignItems: 'center', justifyContent: 'center', paddingVertical: 3,
+      alignItems: 'center', justifyContent: 'center', paddingVertical: 2,
     },
     tHeadTotal: {
-      flex: 1, paddingVertical: 5, paddingHorizontal: 4,
+      flex: 1, paddingVertical: 4, paddingHorizontal: 4,
       alignItems: 'center', justifyContent: 'center',
     },
-    tHeadText: { fontSize: 9.2, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center' },
-    tHeadSub: { fontSize: 7.4, color: MUTED, textAlign: 'center', marginTop: 1.5, fontFamily: 'DMSans', fontWeight: 400 },
+    tHeadText: { fontSize: 9, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center' },
+    tHeadSub: { fontSize: 7, color: MUTED, textAlign: 'center', marginTop: 1, fontFamily: 'DMSans', fontWeight: 400 },
 
     tSemRow: {
       flexDirection: 'row', backgroundColor: '#E5E7EB',
@@ -187,83 +185,83 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       borderTopWidth: 0.5, borderTopColor: BORDER,
     },
     tSemCell: {
-      flex: 1, paddingVertical: 3.5, paddingHorizontal: 6,
-      fontSize: 9.2, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center',
+      flex: 1, paddingVertical: 2.5, paddingHorizontal: 6,
+      fontSize: 8.8, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, textAlign: 'center',
     },
 
-    tRow: { flexDirection: 'row', borderBottomWidth: 0.3, borderBottomColor: BORDER_LIGHT, minHeight: 18 },
+    tRow: { flexDirection: 'row', borderBottomWidth: 0.3, borderBottomColor: BORDER_LIGHT, minHeight: 15 },
     tCell: {
-      paddingVertical: 3.5, paddingHorizontal: 5, fontSize: 8.5, color: BLACK,
+      paddingVertical: 2.5, paddingHorizontal: 5, fontSize: 8.2, color: BLACK,
       borderRightWidth: 0.5, borderRightColor: BORDER,
     },
-    tCellRight: { paddingVertical: 3.5, paddingHorizontal: 5, fontSize: 8.5, color: BLACK, textAlign: 'center' },
+    tCellRight: { paddingVertical: 2.5, paddingHorizontal: 5, fontSize: 8.2, color: BLACK, textAlign: 'center' },
 
     tTotalRow: {
       flexDirection: 'row', borderTopWidth: 0.8, borderTopColor: BORDER,
       backgroundColor: LIGHT,
     },
     tTotalCell: {
-      paddingVertical: 4.5, paddingHorizontal: 5, fontSize: 9, fontFamily: 'DMSans', fontWeight: 700,
+      paddingVertical: 3.5, paddingHorizontal: 5, fontSize: 8.8, fontFamily: 'DMSans', fontWeight: 700,
       color: BLACK, borderRightWidth: 0.5, borderRightColor: BORDER, textAlign: 'center',
     },
 
     // Grading scheme strip
-    gradeWrap: { marginTop: 9, borderWidth: 0.8, borderColor: BORDER, flexDirection: 'row' },
+    gradeWrap: { marginTop: 6, borderWidth: 0.8, borderColor: BORDER, flexDirection: 'row' },
     gradeCol: { flex: 1, borderRightWidth: 0.5, borderRightColor: BORDER, alignItems: 'center' },
     gradeColLast: { flex: 1, alignItems: 'center' },
     gradeLbl: {
-      fontSize: 9, fontFamily: 'DMSans', fontWeight: 700, color: BLACK,
-      paddingVertical: 3.5, width: '100%', textAlign: 'center',
+      fontSize: 8.8, fontFamily: 'DMSans', fontWeight: 700, color: BLACK,
+      paddingVertical: 2.5, width: '100%', textAlign: 'center',
       backgroundColor: LIGHT, borderBottomWidth: 0.5, borderBottomColor: BORDER,
     },
-    gradeVal: { fontSize: 8.8, color: BLACK, paddingVertical: 4 },
+    gradeVal: { fontSize: 8.4, color: BLACK, paddingVertical: 3 },
 
     // Final grade band
     finalWrap: {
-      marginTop: 7, borderWidth: 0.8, borderColor: BORDER, backgroundColor: LIGHT,
-      paddingVertical: 6, alignItems: 'center',
+      marginTop: 5, borderWidth: 0.8, borderColor: BORDER, backgroundColor: LIGHT,
+      paddingVertical: 4.5, alignItems: 'center',
     },
-    finalText: { fontSize: 12, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, letterSpacing: 0.6 },
+    finalText: { fontSize: 11.5, fontFamily: 'DMSans', fontWeight: 700, color: BLACK, letterSpacing: 0.5 },
 
-    notes: { marginTop: 5, fontSize: 8, color: MUTED, textAlign: 'center' },
+    notes: { marginTop: 3, fontSize: 7.5, color: MUTED, textAlign: 'center' },
 
     // Bottom: QR left, signature right
-    bottomRow: { flexDirection: 'row', marginTop: 12, alignItems: 'flex-start', justifyContent: 'space-between' },
-    qrBox: { width: 150 },
-    qrImg: { width: 76, height: 76, borderWidth: 0.6, borderColor: BLACK, objectFit: 'contain' },
+    bottomRow: { flexDirection: 'row', marginTop: 8, alignItems: 'flex-start', justifyContent: 'space-between' },
+    qrBox: { width: 140 },
+    qrImg: { width: 64, height: 64, borderWidth: 0.6, borderColor: BLACK, objectFit: 'contain' },
     qrPlaceholder: {
-      width: 76, height: 76, borderWidth: 0.6, borderColor: BLACK,
+      width: 64, height: 64, borderWidth: 0.6, borderColor: BLACK,
       alignItems: 'center', justifyContent: 'center',
     },
-    qrLabel: { fontSize: 7, color: MUTED, textAlign: 'center', marginTop: 2, width: 76 },
-    dateIssue: { fontSize: 8.5, color: BLACK, marginTop: 8 },
+    qrLabel: { fontSize: 7, color: MUTED, textAlign: 'center', marginTop: 2, width: 64 },
+    dateIssue: { fontSize: 8, color: BLACK, marginTop: 5 },
 
     // Signature block — right-anchored with a fixed line width so the name sits centered on it
-    sigBox: { width: 200, alignItems: 'center' },
-    sigImg: { height: 32, width: 180, objectFit: 'contain' },
-    sigPlaceholder: { height: 32, width: 180 },
-    sigLine: { width: 200, height: 0.7, backgroundColor: BLACK, marginTop: 2 },
+    sigBox: { width: 190, alignItems: 'center' },
+    sigImg: { height: 28, width: 170, objectFit: 'contain' },
+    sigPlaceholder: { height: 28, width: 170 },
+    sigLine: { width: 190, height: 0.7, backgroundColor: BLACK, marginTop: 2 },
     sigName: {
-      fontSize: 9.6, fontFamily: 'DMSans', fontWeight: 700, color: BLACK,
-      paddingTop: 3, width: 200, textAlign: 'center',
+      fontSize: 9.2, fontFamily: 'DMSans', fontWeight: 700, color: BLACK,
+      paddingTop: 2, width: 190, textAlign: 'center',
     },
-    sigTitle: { fontSize: 8.2, color: BLACK, textAlign: 'center', width: 200 },
+    sigTitle: { fontSize: 8, color: BLACK, textAlign: 'center', width: 190 },
 
     // Certification logos strip — seven individual logos, evenly spaced
     certStrip: {
-      marginTop: 10, flexDirection: 'row',
+      marginTop: 6, flexDirection: 'row',
       alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 6,
+      paddingHorizontal: 4,
     },
-    certLogo: { height: 34, width: 56, objectFit: 'contain' },
+    certLogo: { height: 28, width: 50, objectFit: 'contain' },
 
     // Footer
     footerLine: {
-      marginTop: 8, paddingTop: 6,
+      marginTop: 5, paddingTop: 4,
       borderTopWidth: 0.5, borderTopColor: BORDER_LIGHT, alignItems: 'center',
     },
-    footerText: { fontSize: 8, color: BLACK, textAlign: 'center' },
-    footerTextBold: { fontSize: 8, color: BLACK, textAlign: 'center', fontFamily: 'DMSans', fontWeight: 700 },
+    footerText: { fontSize: 7.5, color: BLACK, textAlign: 'center' },
+    footerTextBold: { fontSize: 7.5, color: BLACK, textAlign: 'center', fontFamily: 'DMSans', fontWeight: 700 },
 
     issueRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
     issueLabel: { fontSize: 8, color: BLACK, fontFamily: 'DMSans', fontWeight: 700 },
@@ -275,12 +273,10 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
   return await pdf(
     <Document>
       <Page size="A4" style={s.page}>
-        <View style={s.frameRed1} fixed />
-        <View style={s.frameBlack1} fixed />
-        <View style={s.frameRed2} fixed />
-        <View style={s.frameBlack2} fixed />
+        <View style={s.frameRed} fixed />
+        <View style={s.frameBlack} fixed />
 
-        <View style={s.content}>
+        <View style={s.content} wrap={false}>
           {/* Header — institute info only (no student photo here) */}
           <View style={s.headerRow}>
             <View style={s.logoCol}>
