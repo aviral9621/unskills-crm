@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Award, Plus, Search, Loader2, Settings, Download, Eye, Ban } from 'lucide-react'
+import { Award, Plus, Search, Loader2, Settings, Download, Eye, Ban, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -26,6 +26,8 @@ export default function CertificateListPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'revoked'>('all')
+  const [deleteTarget, setDeleteTarget] = useState<CertRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { void load() }, [])
 
@@ -43,6 +45,25 @@ export default function CertificateListPage() {
       toast.error(e instanceof Error ? e.message : 'Failed to load')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const { error } = await supabase
+        .from('uce_certificates')
+        .delete()
+        .eq('id', deleteTarget.id)
+      if (error) throw error
+      toast.success('Certificate deleted')
+      setRows(prev => prev.filter(r => r.id !== deleteTarget.id))
+      setDeleteTarget(null)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -175,6 +196,15 @@ export default function CertificateListPage() {
                             <Ban size={14} />
                           </button>
                         ) : null}
+                        {isSuperAdmin ? (
+                          <button
+                            onClick={() => setDeleteTarget(r)}
+                            className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -184,6 +214,34 @@ export default function CertificateListPage() {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full space-y-3">
+            <h3 className="text-lg font-semibold text-red-700">Delete certificate</h3>
+            <p className="text-sm text-gray-600">
+              Delete certificate <strong>{deleteTarget.certificate_number}</strong>? This permanently removes the record and cannot be undone.
+              Use <strong>Revoke</strong> instead if you want to keep an audit trail.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

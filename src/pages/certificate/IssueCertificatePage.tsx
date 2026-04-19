@@ -20,6 +20,7 @@ import {
   buildComputerBasedTypingBlob,
 } from '../../lib/pdf/certificate-typing'
 import { generateQRDataUrl } from '../../lib/pdf/generate-qr'
+import { toDataUrl } from '../../lib/pdf/marksheet'
 import { formatDateDDMMYYYY } from '../../lib/utils'
 import type {
   CertificateSettings,
@@ -98,7 +99,13 @@ export default function IssueCertificatePage() {
 
   // Step 4
   const [qrPreview, setQrPreview] = useState('')
+  const [certLogos, setCertLogos] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
+
+  const CERT_LOGO_URLS = [
+    '/ISO LOGOs.png', '/MSME loogo.png', '/Skill India Logo.png',
+    '/NSDC logo.png', '/Digital India logo.png', '/ANSI logo.png', '/IAF LOGO.png',
+  ]
 
   useEffect(() => {
     Promise.all([getCertificateSettings(), listCertificateTemplates()])
@@ -112,7 +119,13 @@ export default function IssueCertificatePage() {
   useEffect(() => {
     if (step === 4 && settings) {
       generateQRDataUrl(`${settings.verification_url_base}/PREVIEW`).then(setQrPreview)
+      if (certLogos.length === 0) {
+        Promise.all(CERT_LOGO_URLS.map(u => toDataUrl(encodeURI(u)).catch(() => '')))
+          .then(logos => setCertLogos(logos.filter(Boolean)))
+          .catch(() => { /* non-fatal */ })
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, settings])
 
   const selectedTemplate = useMemo(
@@ -275,6 +288,7 @@ export default function IssueCertificatePage() {
           grade,
           typingSubjects: showTyping ? typingSubjects : null,
           trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
+          certificationLogoUrls: certLogos,
         })
       } else {
         blob = await buildComputerBasedTypingBlob({
@@ -293,6 +307,7 @@ export default function IssueCertificatePage() {
           trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
           typingSubjects,
           grade,
+          certificationLogoUrls: certLogos,
         })
       }
 
@@ -566,6 +581,7 @@ export default function IssueCertificatePage() {
                   grade={grade}
                   typingSubjects={selectedMapping?.show_typing_fields ? typingSubjects : null}
                   trainingCenterLogoUrl={student.branch?.center_logo_url ?? null}
+                  certificationLogoUrls={certLogos}
                 />
               ) : (
                 <ComputerBasedTypingCertificate
@@ -584,6 +600,7 @@ export default function IssueCertificatePage() {
                   trainingCenterLogoUrl={student.branch?.center_logo_url ?? null}
                   typingSubjects={typingSubjects}
                   grade={grade}
+                  certificationLogoUrls={certLogos}
                 />
               )}
             </PDFViewer>

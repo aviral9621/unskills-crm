@@ -6,12 +6,13 @@ import {
   Image as PdfImage,
   Svg,
   Path,
+  Rect,
+  Line,
   StyleSheet,
   pdf,
 } from '@react-pdf/renderer'
 import type { CertificateSettings, TypingSubject } from '../../types/certificate'
 import { registerPdfFonts } from './fonts'
-import { certColors as C } from './certificate-tokens'
 
 export interface CertificateOfQualificationProps {
   settings: CertificateSettings
@@ -27,217 +28,269 @@ export interface CertificateOfQualificationProps {
   courseCode: string
   courseName: string
   trainingCenterName: string
+  trainingCenterLocation?: string
   performanceText: string
   marksScored: number
+  percentage?: number
   grade: string
+  rollNumber?: string
+  courseDuration?: string
   typingSubjects?: TypingSubject[] | null
   trainingCenterLogoUrl?: string | null
+  /** Badge logos (ISO, MSME, Skill India, NSDC, Digital India, ANSI, IAF) as data URLs */
+  certificationLogoUrls?: string[]
+  /** @deprecated use certificationLogoUrls */
   partnerLogoUrls?: string[]
 }
+
+const NAVY = '#0B2447'
+const RED = '#C8102E'
 
 const s = StyleSheet.create({
   page: {
     fontFamily: 'DMSans',
     fontSize: 10,
-    color: C.textPrimary,
-    backgroundColor: C.frameHorizontalBlue,
+    color: '#1A1A1A',
+    backgroundColor: '#FFFFFF',
     padding: 6,
   },
-  whitePad: { backgroundColor: '#FFFFFF', flexGrow: 1, padding: 2 },
-  bronzeFrame: {
+  outerFrame: {
+    flex: 1,
     borderWidth: 1,
-    borderColor: C.frameInnerBronze,
-    flexGrow: 1,
+    borderColor: NAVY,
     padding: 14,
-    backgroundColor: '#FFFFFF',
+  },
+  innerFrame: {
+    flex: 1,
+    borderWidth: 0.75,
+    borderColor: NAVY,
+    padding: 22,
+    flexDirection: 'column',
     position: 'relative',
   },
 
-  cornerStar: { position: 'absolute', width: 46, height: 46 },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  topText: { fontSize: 9, fontWeight: 700, color: '#1A1A1A' },
 
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  topText: { fontSize: 9, fontWeight: 700, color: '#000' },
-
-  brandRow: { alignItems: 'center', marginTop: 2 },
-  brandTitle: {
-    fontSize: 28,
-    fontWeight: 700,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    color: '#000',
-  },
+  brandRow: { alignItems: 'center', marginBottom: 4 },
 
   blackBar: {
     alignSelf: 'center',
-    backgroundColor: C.titleBlackBar,
-    paddingVertical: 4,
-    paddingHorizontal: 18,
-    marginTop: 4,
+    backgroundColor: '#000000',
+    paddingVertical: 3,
+    paddingHorizontal: 14,
+    marginBottom: 5,
+  },
+  blackBarText: { fontSize: 10, fontWeight: 700, color: '#FFFFFF' },
+
+  subHeader: { fontSize: 8.5, textAlign: 'center', color: '#1A1A1A', lineHeight: 1.4 },
+
+  certTitleScript: {
+    fontFamily: 'GreatVibes',
+    fontSize: 44,
+    color: NAVY,
+    textAlign: 'center',
+    marginTop: 10,
     marginBottom: 4,
   },
-  blackBarText: { fontSize: 11, fontWeight: 700, color: '#FFFFFF' },
 
-  subHeader: { fontSize: 8.5, textAlign: 'center', color: C.textPrimary, lineHeight: 1.4 },
-
-  body: { flexDirection: 'row', marginTop: 8, flexGrow: 1 },
-  bodyLeft: { width: '18%', alignItems: 'center', justifyContent: 'center' },
-  bodyCenter: { width: '64%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  bodyRight: { width: '18%', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 6 },
-
-  trainingLogo: { width: 90, height: 90, objectFit: 'contain', borderRadius: 45 },
-  studentPhoto: { width: 85, height: 100, objectFit: 'cover', borderWidth: 1, borderColor: '#000' },
-  studentPhotoPlaceholder: {
-    width: 85,
-    height: 100,
-    borderWidth: 1,
-    borderColor: '#000',
-    backgroundColor: '#F3F4F6',
+  presentedRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
+    marginTop: 2,
   },
+  presentedText: { fontSize: 11, color: '#1A1A1A' },
 
-  certTitle: {
-    fontFamily: 'GreatVibes',
-    fontSize: 38,
-    color: C.titleBlack,
+  studentName: {
+    fontSize: 24,
+    fontWeight: 700,
+    color: NAVY,
     textAlign: 'center',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
     marginBottom: 8,
   },
-  line: { fontSize: 11, textAlign: 'center', marginBottom: 4 },
-  lineBold: { fontSize: 12, fontWeight: 700, textAlign: 'center', marginBottom: 4 },
-  lineName: { fontSize: 14, fontWeight: 700, textAlign: 'center', marginBottom: 2 },
-  lineUnderline: { textDecoration: 'underline', fontWeight: 700 },
+
+  bodyBlock: { alignItems: 'center', marginBottom: 6 },
+  bodyLine: { fontSize: 11, textAlign: 'center', lineHeight: 1.7, color: '#1A1A1A' },
+  bodyCourseLine: { fontSize: 13, fontWeight: 700, color: NAVY, textAlign: 'center', marginVertical: 2 },
 
   typingMini: {
     marginTop: 4,
-    marginBottom: 2,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: '#000',
-    width: '92%',
+    width: '80%',
     alignSelf: 'center',
   },
   typingRow: { flexDirection: 'row' },
   typingHeadCell: {
-    flex: 1,
-    fontSize: 8,
-    fontWeight: 700,
-    padding: 2,
-    textAlign: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#000',
-    backgroundColor: C.tableHeaderBg,
+    flex: 1, fontSize: 8, fontWeight: 700, padding: 2, textAlign: 'center',
+    borderRightWidth: 1, borderRightColor: '#000', backgroundColor: '#F5F5F5',
   },
   typingHeadCellLast: {
-    flex: 1,
-    fontSize: 8,
-    fontWeight: 700,
-    padding: 2,
-    textAlign: 'center',
-    backgroundColor: C.tableHeaderBg,
+    flex: 1, fontSize: 8, fontWeight: 700, padding: 2, textAlign: 'center', backgroundColor: '#F5F5F5',
   },
   typingCell: {
-    flex: 1,
-    fontSize: 8,
-    padding: 2,
-    textAlign: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#000',
-    borderTopWidth: 1,
-    borderTopColor: '#000',
+    flex: 1, fontSize: 8, padding: 2, textAlign: 'center',
+    borderRightWidth: 1, borderRightColor: '#000', borderTopWidth: 1, borderTopColor: '#000',
   },
   typingCellLast: {
-    flex: 1,
-    fontSize: 8,
-    padding: 2,
-    textAlign: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#000',
+    flex: 1, fontSize: 8, padding: 2, textAlign: 'center', borderTopWidth: 1, borderTopColor: '#000',
   },
 
-  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, alignItems: 'flex-end' },
+  body3col: { flexDirection: 'row', marginBottom: 4 },
+  bodyLeft: { width: 70, alignItems: 'center', justifyContent: 'center' },
+  bodyCenter: { flex: 1, alignItems: 'center' },
+  bodyRight: { width: 80, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 4 },
+  trainingLogo: { width: 60, height: 60, objectFit: 'contain', borderRadius: 30 },
+  studentPhoto: { width: 72, height: 86, objectFit: 'cover', borderWidth: 1, borderColor: '#000' },
+  studentPhotoPlaceholder: {
+    width: 72, height: 86, borderWidth: 1, borderColor: '#000',
+    backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',
+  },
 
-  bottomLeft: { alignItems: 'flex-start', width: 170 },
-  qrImg: { width: 60, height: 60 },
-  pillRow: { flexDirection: 'row', marginTop: 4, alignItems: 'center' },
+  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, alignItems: 'flex-end' },
+  bottomLeft: { width: 180 },
+  pillRow: { flexDirection: 'row', marginBottom: 3 },
   pillRed: {
-    backgroundColor: C.gradeBadgeRed,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    fontSize: 7.5,
-    fontWeight: 700,
-    color: '#FFFFFF',
+    backgroundColor: RED, paddingHorizontal: 7, paddingVertical: 2,
+    fontSize: 7.5, fontWeight: 700, color: '#FFFFFF',
   },
   pillBlack: {
-    backgroundColor: '#000',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    fontSize: 7.5,
-    fontWeight: 700,
-    color: '#FFFFFF',
+    backgroundColor: '#000', paddingHorizontal: 7, paddingVertical: 2,
+    fontSize: 7.5, fontWeight: 700, color: '#FFFFFF',
   },
+  certNumLabel: { fontSize: 8, fontWeight: 700, color: '#1A1A1A', marginBottom: 1, marginTop: 3 },
+  certNum: { fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 4 },
+  qrContactRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  qrImg: { width: 58, height: 58, borderWidth: 1, borderColor: '#000' },
+  contactBlock: { flex: 1 },
+  contactLine: { fontSize: 7.5, color: '#1A1A1A', lineHeight: 1.4 },
+  socialRow: { flexDirection: 'row', marginTop: 3 },
 
-  bottomCenter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 8 },
-  partnerLogo: { width: 50, height: 30, objectFit: 'contain' },
+  bottomCenter: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 8, paddingHorizontal: 16 },
+  partnerLogo: { height: 34, width: 40, objectFit: 'contain' },
 
-  bottomRight: { alignItems: 'center', width: 200 },
-  sigImg: { width: 120, height: 30, objectFit: 'contain' },
-  sigSig: { fontFamily: 'GreatVibes', fontSize: 18, color: '#000', marginTop: -2 },
-  sigName: { fontSize: 9, fontWeight: 700, color: '#000', borderTopWidth: 1, borderTopColor: '#000', paddingTop: 2, width: 180, textAlign: 'center', marginTop: 2 },
-  sigLine: { fontSize: 8, color: '#000', textAlign: 'center' },
+  bottomRight: { width: 190, alignItems: 'center' },
+  sigImg: { width: 130, height: 35, objectFit: 'contain' },
+  sigLine: { width: 160, borderTopWidth: 1, borderTopColor: '#000', marginTop: 3, marginBottom: 2 },
+  sigTitle: { fontSize: 10, fontWeight: 700, color: '#000', textAlign: 'center' },
+  sigCompany: { fontSize: 9, color: '#000', textAlign: 'center' },
   sigReg: { fontSize: 7, color: '#555', textAlign: 'center', marginTop: 1 },
 
-  footer: { marginTop: 6, alignItems: 'center' },
-  footerText: { fontSize: 8.5, textAlign: 'center', lineHeight: 1.4, color: C.footerText },
+  spacer: { flexGrow: 1 },
+
+  certStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#D4C9B0',
+    borderBottomWidth: 1,
+    borderBottomColor: '#D4C9B0',
+    marginBottom: 5,
+  },
+  certLogo: { height: 22, objectFit: 'contain' },
+
+  footer: { alignItems: 'center' },
+  footerText: { fontSize: 8.5, textAlign: 'center', lineHeight: 1.4, color: '#1A1A1A' },
 })
 
-function Star({ style }: { style: any }) {
+function CornerAccent({
+  top, right, bottom, left, flipX, flipY,
+}: {
+  top?: number; right?: number; bottom?: number; left?: number
+  flipX?: boolean; flipY?: boolean
+}) {
+  const style: Record<string, number | string> = { position: 'absolute', width: 24, height: 24 }
+  if (top !== undefined) style.top = top
+  if (right !== undefined) style.right = right
+  if (bottom !== undefined) style.bottom = bottom
+  if (left !== undefined) style.left = left
+
+  const bigX = flipX ? 18 : 0
+  const bigY = flipY ? 18 : 0
+  const smallX = 10
+  const smallY = 10
+
   return (
-    <Svg viewBox="0 0 100 100" style={style}>
-      <Path
-        d="M50 5 L61 38 L95 38 L67 58 L78 92 L50 72 L22 92 L33 58 L5 38 L39 38 Z"
-        fill={C.cornerAccent}
-      />
+    <Svg width="24" height="24" style={style}>
+      <Rect x={bigX} y={bigY} width="6" height="6" fill={NAVY} />
+      <Rect x={smallX} y={smallY} width="4" height="4" fill={RED} />
+    </Svg>
+  )
+}
+
+function LeftMidEdge() {
+  return (
+    <Svg width="55" height="170" style={{ position: 'absolute', left: 0, top: 185 }}>
+      <Path d="M 0 0 L 45 25 L 45 85 L 0 110 Z" fill={NAVY} />
+      <Path d="M 0 28 L 28 46 L 28 64 L 0 82 Z" fill={RED} opacity="0.9" />
+    </Svg>
+  )
+}
+
+function RightMidEdge() {
+  return (
+    <Svg width="55" height="170" style={{ position: 'absolute', right: 0, top: 185 }}>
+      <Path d="M 55 0 L 10 25 L 10 85 L 55 110 Z" fill={NAVY} />
+      <Path d="M 55 28 L 27 46 L 27 64 L 55 82 Z" fill={RED} opacity="0.9" />
+    </Svg>
+  )
+}
+
+function NavySquare({ size = 6 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} style={{ marginHorizontal: 6 }}>
+      <Rect x="0" y="0" width={size} height={size} fill={NAVY} />
+    </Svg>
+  )
+}
+
+function SocialDot() {
+  return (
+    <Svg width="10" height="10" style={{ marginRight: 3 }}>
+      <Rect x="0" y="0" width="10" height="10" rx="2" fill={NAVY} />
     </Svg>
   )
 }
 
 export function CertificateOfQualification(p: CertificateOfQualificationProps) {
   const showTyping = Array.isArray(p.typingSubjects) && p.typingSubjects.length > 0
+  const logoUrls = p.certificationLogoUrls ?? p.partnerLogoUrls ?? []
+  const displayPct = p.percentage != null ? p.percentage : p.marksScored
+
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={s.page}>
-        <View style={s.whitePad}>
-          <View style={s.bronzeFrame}>
-            <Star style={[s.cornerStar, { top: -8, left: -8 }]} />
-            <Star style={[s.cornerStar, { top: -8, right: -8 }]} />
-            <Star style={[s.cornerStar, { bottom: -8, left: -8 }]} />
-            <Star style={[s.cornerStar, { bottom: -8, right: -8 }]} />
+        <View style={s.outerFrame}>
+          <View style={s.innerFrame}>
 
+            {/* Corner accents */}
+            <CornerAccent top={4} left={4} />
+            <CornerAccent top={4} right={4} flipX />
+            <CornerAccent bottom={4} left={4} flipY />
+            <CornerAccent bottom={4} right={4} flipX flipY />
+
+            {/* Mid-edge decorations */}
+            <LeftMidEdge />
+            <RightMidEdge />
+
+            {/* Top row */}
             <View style={s.topRow}>
               <Text style={s.topText}>Reg. by Govt. of India</Text>
-              <Text style={s.topText}>Reg. No.-{p.settings.institute_reg_number || '—'}</Text>
+              {p.settings.institute_reg_number ? (
+                <Text style={s.topText}>Reg. No.-{p.settings.institute_reg_number}</Text>
+              ) : null}
             </View>
 
-            <View style={s.brandRow}>
-              <Text style={s.brandTitle}>
-                <Text style={{ color: '#000' }}>UN</Text>
-                <Text style={{ color: C.headerRed }}>SKILLS</Text>
-                <Text style={{ color: '#000' }}> COMPUTER EDUCATION</Text>
-                <Text style={{ fontSize: 12 }}>™</Text>
-              </Text>
-            </View>
-
-            {p.settings.tagline ? (
-              <View style={s.blackBar}>
-                <Text style={s.blackBarText}>{p.settings.tagline}</Text>
-              </View>
-            ) : null}
-
-            {p.settings.sub_header_line_1 ? <Text style={s.subHeader}>{p.settings.sub_header_line_1}</Text> : null}
-            {p.settings.sub_header_line_2 ? <Text style={s.subHeader}>{p.settings.sub_header_line_2}</Text> : null}
-            {p.settings.sub_header_line_3 ? <Text style={s.subHeader}>{p.settings.sub_header_line_3}</Text> : null}
-
-            <View style={s.body}>
+            {/* 3-column header: training logo | brand | student photo */}
+            <View style={s.body3col}>
               <View style={s.bodyLeft}>
                 {p.trainingCenterLogoUrl ? (
                   <PdfImage src={p.trainingCenterLogoUrl} style={s.trainingLogo} />
@@ -247,30 +300,73 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
               </View>
 
               <View style={s.bodyCenter}>
-                <Text style={s.certTitle}>Certificate of Qualification</Text>
-                <Text style={s.line}>This is to certify that</Text>
-                <Text style={s.lineName}>
-                  {p.salutation} {p.studentName}
-                </Text>
-                <Text style={s.lineBold}>
-                  {p.fatherPrefix} {p.fatherName}
-                </Text>
-                <Text style={s.line}>
-                  has successfully completed the{' '}
-                  {p.courseLevel ? <Text style={{ fontWeight: 700 }}>{p.courseLevel}</Text> : null}
-                </Text>
-                <Text style={s.lineBold}>
-                  {p.courseCode} - {p.courseName}
-                </Text>
-                <Text style={s.line}>
-                  his/her performance during the course{' '}
-                  <Text style={s.lineUnderline}>{p.performanceText}</Text>
-                </Text>
-                <Text style={s.line}>
-                  He/She scored <Text style={{ fontWeight: 700 }}>{p.marksScored}</Text> marks &amp;
-                  secured the Grade &ldquo;<Text style={{ fontWeight: 700 }}>{p.grade}</Text>&rdquo;
-                </Text>
+                {/* Brand title */}
+                <View style={s.brandRow}>
+                  <Text>
+                    <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 26, color: '#000', letterSpacing: 1 }}>UN</Text>
+                    <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 26, color: RED, letterSpacing: 1 }}>SKILLS</Text>
+                    <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 26, color: '#000', letterSpacing: 1 }}> COMPUTER EDUCATION</Text>
+                    <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 13, color: '#000' }}>™</Text>
+                  </Text>
+                </View>
 
+                {/* ISO black bar */}
+                {p.settings.tagline ? (
+                  <View style={s.blackBar}>
+                    <Text style={s.blackBarText}>{p.settings.tagline}</Text>
+                  </View>
+                ) : null}
+
+                {/* Sub-headers */}
+                {p.settings.sub_header_line_1 ? (
+                  <Text style={s.subHeader}>{p.settings.sub_header_line_1}</Text>
+                ) : null}
+                {p.settings.sub_header_line_2 ? (
+                  <Text style={s.subHeader}>{p.settings.sub_header_line_2}</Text>
+                ) : null}
+                {p.settings.sub_header_line_3 ? (
+                  <Text style={s.subHeader}>{p.settings.sub_header_line_3}</Text>
+                ) : null}
+
+                {/* Certificate title */}
+                <Text style={s.certTitleScript}>Certificate of Qualification</Text>
+
+                {/* Decorative underline flourish */}
+                <Svg width="220" height="8" style={{ alignSelf: 'center', marginBottom: 8 }}>
+                  <Rect x="0" y="2" width="4" height="4" fill={NAVY} />
+                  <Line x1="8" y1="4" x2="212" y2="4" stroke={NAVY} strokeWidth="0.8" />
+                  <Rect x="216" y="2" width="4" height="4" fill={NAVY} />
+                </Svg>
+
+                {/* "This Certificate Is Proudly Presented To" */}
+                <View style={s.presentedRow}>
+                  <NavySquare />
+                  <Text style={s.presentedText}>This Certificate Is Proudly Presented To</Text>
+                  <NavySquare />
+                </View>
+
+                {/* Student name */}
+                <Text style={s.studentName}>{p.salutation} {p.studentName}</Text>
+
+                {/* Body copy */}
+                <View style={s.bodyBlock}>
+                  <Text style={s.bodyLine}>has successfully attended the</Text>
+                  <Text style={s.bodyCourseLine}>{p.courseCode} – {p.courseName}</Text>
+                  <Text style={s.bodyLine}>
+                    learning at UnSkills Computer Education
+                    {p.trainingCenterLocation ? ` located in ${p.trainingCenterLocation}` : (p.trainingCenterName ? ` at ${p.trainingCenterName}` : '')}
+                  </Text>
+                  <Text style={s.bodyLine}>
+                    and entitled to all honors and privileges associated with this achievement
+                  </Text>
+                  <Text style={s.bodyLine}>
+                    on {p.issueDate} with Secured{' '}
+                    <Text style={{ fontWeight: 700 }}>{displayPct}%</Text> marks and achieved Grade{' '}
+                    <Text style={{ fontWeight: 700 }}>{p.grade}</Text>
+                  </Text>
+                </View>
+
+                {/* Typing table (if applicable) */}
                 {showTyping ? (
                   <View style={s.typingMini}>
                     <View style={s.typingRow}>
@@ -291,9 +387,6 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
                     ))}
                   </View>
                 ) : null}
-
-                <Text style={s.line}>We wish him/her for bright future</Text>
-                <Text style={s.line}>Held at {p.trainingCenterName}</Text>
               </View>
 
               <View style={s.bodyRight}>
@@ -301,7 +394,7 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
                   <PdfImage src={p.studentPhotoUrl} style={s.studentPhoto} />
                 ) : (
                   <View style={s.studentPhotoPlaceholder}>
-                    <Text style={{ fontSize: 24, color: '#9CA3AF' }}>
+                    <Text style={{ fontSize: 22, color: '#9CA3AF' }}>
                       {p.studentName.charAt(0).toUpperCase()}
                     </Text>
                   </View>
@@ -309,48 +402,102 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
               </View>
             </View>
 
+            {/* Bottom row */}
             <View style={s.bottomRow}>
+
+              {/* Bottom-left: pills + cert number + QR */}
               <View style={s.bottomLeft}>
-                {p.qrCodeDataUrl ? <PdfImage src={p.qrCodeDataUrl} style={s.qrImg} /> : null}
-                <View style={s.pillRow}>
-                  <Text style={s.pillRed}>Certificate No.</Text>
-                  <Text style={s.pillBlack}>{p.certificateNumber}</Text>
-                </View>
-                <View style={s.pillRow}>
-                  <Text style={s.pillRed}>Date of Issue</Text>
-                  <Text style={s.pillBlack}>{p.issueDate}</Text>
+                {p.courseDuration ? (
+                  <View style={s.pillRow}>
+                    <View style={{ backgroundColor: RED, paddingHorizontal: 7, paddingVertical: 2 }}>
+                      <Text style={{ fontSize: 7.5, fontWeight: 700, color: '#fff' }}>
+                        Duration: {p.courseDuration}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+                {p.rollNumber ? (
+                  <View style={s.pillRow}>
+                    <View style={{ backgroundColor: '#000', paddingHorizontal: 7, paddingVertical: 2 }}>
+                      <Text style={{ fontSize: 7.5, fontWeight: 700, color: '#fff' }}>
+                        Roll Number: {p.rollNumber}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                <Text style={s.certNumLabel}>CERTIFICATE NUMBER</Text>
+                <Text style={s.certNum}>{p.certificateNumber}</Text>
+
+                <View style={s.qrContactRow}>
+                  {p.qrCodeDataUrl ? (
+                    <PdfImage src={p.qrCodeDataUrl} style={s.qrImg} />
+                  ) : null}
+                  <View style={s.contactBlock}>
+                    <Text style={s.contactLine}>info@unskillseducation.com</Text>
+                    <Text style={s.contactLine}>www.unskillseducation.com</Text>
+                    <View style={s.socialRow}>
+                      <SocialDot /><SocialDot /><SocialDot />
+                    </View>
+                  </View>
                 </View>
               </View>
 
+              {/* Bottom-center: partner logos */}
               <View style={s.bottomCenter}>
-                {(p.partnerLogoUrls ?? []).slice(0, 3).map((url, i) => (
+                {logoUrls.slice(0, 5).map((url, i) => (
                   <PdfImage key={i} src={url} style={s.partnerLogo} />
                 ))}
               </View>
 
+              {/* Bottom-right: signature */}
               <View style={s.bottomRight}>
                 {p.settings.signature_image_url ? (
                   <PdfImage src={p.settings.signature_image_url} style={s.sigImg} />
+                ) : (
+                  <View style={{ height: 35 }} />
+                )}
+                <View style={s.sigLine} />
+                <Text style={s.sigTitle}>
+                  {p.settings.signatory_designation || 'Chief Executive Officer'}
+                </Text>
+                {p.settings.signatory_company_line ? (
+                  <Text style={s.sigCompany}>{p.settings.signatory_company_line}</Text>
                 ) : null}
-                <Text style={s.sigSig}>{p.settings.signatory_name || ''}</Text>
-                <Text style={s.sigName}>{p.settings.signatory_name || '—'}</Text>
-                {p.settings.signatory_designation ? <Text style={s.sigLine}>{p.settings.signatory_designation}</Text> : null}
-                {p.settings.signatory_company_line ? <Text style={s.sigLine}>{p.settings.signatory_company_line}</Text> : null}
-                {p.settings.signatory_reg_line ? <Text style={s.sigReg}>{p.settings.signatory_reg_line}</Text> : null}
+                {p.settings.signatory_reg_line ? (
+                  <Text style={s.sigReg}>{p.settings.signatory_reg_line}</Text>
+                ) : null}
               </View>
             </View>
 
+            {/* Spacer pushes badge strip + footer to bottom */}
+            <View style={s.spacer} />
+
+            {/* Certification badge strip */}
+            {logoUrls.length > 0 ? (
+              <View style={s.certStrip}>
+                {logoUrls.slice(0, 8).map((url, i) => (
+                  <PdfImage key={i} src={url} style={s.certLogo} />
+                ))}
+              </View>
+            ) : null}
+
+            {/* Footer */}
             <View style={s.footer}>
               {p.settings.corporate_office_address ? (
-                <Text style={s.footerText}>{p.settings.corporate_office_address}</Text>
+                <Text style={s.footerText}>
+                  Corporate Office: {p.settings.corporate_office_address}
+                </Text>
               ) : null}
-              {p.settings.verification_url_base ? (
-                <Text style={s.footerText}>To verify: {p.settings.verification_url_base}</Text>
-              ) : null}
-              {p.settings.contact_email ? (
-                <Text style={s.footerText}>Mail: {p.settings.contact_email}</Text>
-              ) : null}
+              <Text style={s.footerText}>
+                {p.settings.verification_url_base
+                  ? `To verify this certificate visit: ${p.settings.verification_url_base}`
+                  : ''}
+                {p.settings.verification_url_base && p.settings.contact_email ? '  |  ' : ''}
+                {p.settings.contact_email ? `Mail us: ${p.settings.contact_email}` : ''}
+              </Text>
             </View>
+
           </View>
         </View>
       </Page>

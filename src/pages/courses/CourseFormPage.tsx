@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import FormField, { inputClass, selectClass } from '../../components/FormField'
+import { autoMapCertificateTemplate, listCertificateTemplates } from '../../lib/certificateSettings'
 import type { Course, Program } from '../../types'
 
 const courseSchema = z.object({
@@ -100,8 +101,25 @@ export default function CourseFormPage() {
         const { error } = await supabase.from('uce_courses').update(payload).eq('id', id)
         if (error) throw error; toast.success('Course updated')
       } else {
-        const { error } = await supabase.from('uce_courses').insert(payload)
+        const { data: inserted, error } = await supabase.from('uce_courses').insert(payload).select('id').single()
         if (error) { if (error.message?.includes('duplicate')) toast.error('Course code already exists'); else throw error; return }
+
+        // Auto-map certificate template based on course name
+        const orientation = autoMapCertificateTemplate(form.name)
+        if (orientation && inserted?.id) {
+          try {
+            const templates = await listCertificateTemplates()
+            const tpl = templates.find(t => t.orientation === orientation)
+            if (tpl) {
+              await supabase.from('uce_course_certificate_mapping').insert({
+                course_id: inserted.id,
+                template_id: tpl.id,
+                is_default: true,
+                show_typing_fields: orientation === 'portrait',
+              })
+            }
+          } catch { /* non-fatal */ }
+        }
         toast.success('Course created')
       }
       navigate('/admin/courses')
