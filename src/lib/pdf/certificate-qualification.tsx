@@ -1,3 +1,9 @@
+/**
+ * IMAGE FORMAT POLICY:
+ * @react-pdf/renderer only supports PNG and JPG for <Image> components.
+ * WEBP / AVIF / SVG / GIF will fail silently or cascade errors.
+ * All images referenced here must be PNG or JPG.
+ */
 import {
   Document,
   Page,
@@ -8,7 +14,10 @@ import {
   pdf,
 } from '@react-pdf/renderer'
 import type { CertificateSettings, TypingSubject } from '../../types/certificate'
-import { registerPdfFonts } from './fonts'
+import { registerPdfFonts, FONTS } from './register-fonts'
+
+// Ensure fonts are registered before any PDF component is rendered
+registerPdfFonts()
 
 export interface CertificateOfQualificationProps {
   settings: CertificateSettings
@@ -44,16 +53,21 @@ const GOLD = '#B8860B'
 
 const s = StyleSheet.create({
   page: {
-    fontFamily: 'DMSans',
+    fontFamily: FONTS.body,
     fontSize: 10,
     color: '#1A1A1A',
     backgroundColor: '#FFFFFF',
-    position: 'relative',
   },
-  backgroundImage: {
+  backgroundContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
+  backgroundImage: {
     width: '100%',
     height: '100%',
   },
@@ -81,7 +95,7 @@ const s = StyleSheet.create({
   blackBarText: { fontSize: 9, fontWeight: 700, color: '#FFFFFF' },
 
   certTitle: {
-    fontFamily: 'GreatVibes',
+    fontFamily: FONTS.script,
     fontSize: 38,
     color: NAVY,
     textAlign: 'center',
@@ -96,17 +110,9 @@ const s = StyleSheet.create({
     marginBottom: 6,
   },
   presentedText: { fontSize: 10, color: '#1A1A1A' },
-  smallSquare: {
-    width: 3,
-    height: 3,
-    backgroundColor: NAVY,
-    marginHorizontal: 6,
-  },
+  smallSquare: { width: 3, height: 3, backgroundColor: NAVY, marginHorizontal: 6 },
 
-  bodyRow: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
+  bodyRow: { flexDirection: 'row', marginBottom: 4 },
   bodyLeft: { width: 90, alignItems: 'center', justifyContent: 'center' },
   bodyCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
   bodyRight: { width: 90, alignItems: 'center', justifyContent: 'flex-start' },
@@ -119,23 +125,15 @@ const s = StyleSheet.create({
   },
 
   studentName: {
-    fontSize: 16,
-    fontWeight: 700,
-    color: NAVY,
-    textAlign: 'center',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 6,
+    fontSize: 16, fontWeight: 700, color: NAVY, textAlign: 'center',
+    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6,
   },
   bodyLine: { fontSize: 10, textAlign: 'center', lineHeight: 1.6, color: '#1A1A1A' },
   bodyCourse: { fontSize: 11, fontWeight: 700, color: NAVY, textAlign: 'center', marginVertical: 2 },
 
   typingMini: {
-    marginTop: 3,
-    borderWidth: 1,
-    borderColor: '#000',
-    width: '70%',
-    alignSelf: 'center',
+    marginTop: 3, borderWidth: 1, borderColor: '#000',
+    width: '70%', alignSelf: 'center',
   },
   typingRow: { flexDirection: 'row' },
   typingHeadCell: {
@@ -154,11 +152,7 @@ const s = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: '#000',
   },
 
-  bottomRow: {
-    flexDirection: 'row',
-    marginTop: 4,
-    alignItems: 'flex-start',
-  },
+  bottomRow: { flexDirection: 'row', marginTop: 4, alignItems: 'flex-start' },
   bottomLeft: { width: 180 },
   certNumLabel: { fontSize: 8, fontWeight: 700, color: '#1A1A1A' },
   certNum: { fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 4 },
@@ -169,10 +163,8 @@ const s = StyleSheet.create({
 
   bottomCenter: { flex: 1, paddingHorizontal: 10, justifyContent: 'center' },
   partnerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    marginTop: 20,
+    flexDirection: 'row', justifyContent: 'space-around',
+    alignItems: 'center', marginTop: 20,
   },
   partnerLogo: { height: 30, width: 38, objectFit: 'contain' },
 
@@ -186,12 +178,8 @@ const s = StyleSheet.create({
   spacer: { flexGrow: 1 },
 
   certStrip: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: 4,
-    borderTopWidth: 0.5,
-    borderTopColor: GOLD,
+    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
+    paddingVertical: 4, borderTopWidth: 0.5, borderTopColor: GOLD,
   },
   certLogo: { height: 22, objectFit: 'contain' },
 
@@ -206,14 +194,15 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
 
   return (
     <Document>
-      <Page size="A4" orientation="landscape" style={s.page}>
-        {/* Background image fills entire page */}
-        <PdfImage src="/Landscape.webp" style={s.backgroundImage} />
+      <Page size="A4" orientation="landscape" style={s.page} wrap={false}>
+        {/* Fixed background — renders on every page without flowing */}
+        <View style={s.backgroundContainer} fixed>
+          <PdfImage src="/Landscape.png" style={s.backgroundImage} />
+        </View>
 
-        {/* Content overlay — absolute positioned within safe zone */}
+        {/* Content overlay inside safe zone */}
         <View style={s.contentContainer}>
 
-          {/* Row 1 — Top metadata */}
           <View style={s.topRow}>
             <Text style={s.topText}>Reg. by Govt. of India</Text>
             {p.settings.institute_reg_number ? (
@@ -221,32 +210,27 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
             ) : null}
           </View>
 
-          {/* Row 2 — Brand title */}
           <Text style={s.brandLine}>
-            <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 22, color: '#000', letterSpacing: 1 }}>UN</Text>
-            <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 22, color: RED, letterSpacing: 1 }}>SKILLS</Text>
-            <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 22, color: '#000', letterSpacing: 1 }}> COMPUTER EDUCATION</Text>
-            <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 11, color: '#000' }}>™</Text>
+            <Text style={{ fontFamily: FONTS.display, fontSize: 22, color: '#000', letterSpacing: 1 }}>UN</Text>
+            <Text style={{ fontFamily: FONTS.display, fontSize: 22, color: RED, letterSpacing: 1 }}>SKILLS</Text>
+            <Text style={{ fontFamily: FONTS.display, fontSize: 22, color: '#000', letterSpacing: 1 }}> COMPUTER EDUCATION</Text>
+            <Text style={{ fontFamily: FONTS.display, fontSize: 11, color: '#000' }}>™</Text>
           </Text>
 
-          {/* Row 3 — Black ISO ribbon */}
           {p.settings.tagline ? (
             <View style={s.blackBar}>
               <Text style={s.blackBarText}>{p.settings.tagline}</Text>
             </View>
           ) : null}
 
-          {/* Row 4 — Certificate title */}
           <Text style={s.certTitle}>Certificate of Qualification</Text>
 
-          {/* Row 5 — Presented subtitle */}
           <View style={s.presentedRow}>
             <View style={s.smallSquare} />
             <Text style={s.presentedText}>This Certificate Is Proudly Presented To</Text>
             <View style={s.smallSquare} />
           </View>
 
-          {/* Row 6 — Body (3 columns) */}
           <View style={s.bodyRow}>
             <View style={s.bodyLeft}>
               {p.trainingCenterLogoUrl ? (
@@ -258,12 +242,9 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
 
             <View style={s.bodyCenter}>
               <Text style={s.studentName}>{p.salutation} {p.studentName}</Text>
-
               <Text style={s.bodyLine}>has successfully attended the</Text>
               <Text style={s.bodyCourse}>{p.courseCode} – {p.courseName}</Text>
-              <Text style={s.bodyLine}>
-                learning at UnSkills Computer Education
-              </Text>
+              <Text style={s.bodyLine}>learning at UnSkills Computer Education</Text>
               <Text style={s.bodyLine}>
                 at <Text style={{ fontWeight: 700 }}>{p.trainingCenterName}</Text>
               </Text>
@@ -311,12 +292,9 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
             </View>
           </View>
 
-          {/* Spacer — pushes bottom content down */}
           <View style={s.spacer} />
 
-          {/* Row 7 — Bottom row (3 sections) */}
           <View style={s.bottomRow}>
-            {/* Left — cert number + QR */}
             <View style={s.bottomLeft}>
               <Text style={s.certNumLabel}>CERTIFICATE NUMBER</Text>
               <Text style={s.certNum}>{p.certificateNumber}</Text>
@@ -337,7 +315,6 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
               </View>
             </View>
 
-            {/* Middle — partner logos */}
             <View style={s.bottomCenter}>
               <View style={s.partnerRow}>
                 {logoUrls.slice(0, 5).map((url, i) => (
@@ -346,7 +323,6 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
               </View>
             </View>
 
-            {/* Right — signature block */}
             <View style={s.bottomRight}>
               {p.settings.signature_image_url ? (
                 <PdfImage src={p.settings.signature_image_url} style={s.sigImg} />
@@ -366,7 +342,6 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
             </View>
           </View>
 
-          {/* Row 8 — Certification badge strip */}
           {logoUrls.length > 0 ? (
             <View style={s.certStrip}>
               {logoUrls.slice(0, 7).map((url, i) => (
@@ -375,7 +350,6 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
             </View>
           ) : null}
 
-          {/* Row 9 — Footer */}
           <View style={s.footer}>
             <Text style={s.footerText}>
               {p.settings.verification_url_base
@@ -392,6 +366,6 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
 export async function buildCertificateOfQualificationBlob(
   p: CertificateOfQualificationProps,
 ): Promise<Blob> {
-  await registerPdfFonts()
+  registerPdfFonts()
   return await pdf(<CertificateOfQualification {...p} />).toBlob()
 }

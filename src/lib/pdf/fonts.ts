@@ -1,22 +1,4 @@
-let fontsRegistered = false
-
-export async function registerPdfFonts(): Promise<void> {
-  if (fontsRegistered) return
-  const { Font } = await import('@react-pdf/renderer')
-  Font.register({
-    family: 'DMSans',
-    fonts: [
-      { src: '/fonts/dm-sans-400.woff', fontWeight: 400 },
-      { src: '/fonts/dm-sans-700.woff', fontWeight: 700 },
-    ],
-  })
-  Font.register({
-    family: 'GreatVibes',
-    src: '/fonts/GreatVibes-Regular.ttf',
-  })
-  Font.register({
-    family: 'ArchivoBlack',
-    src: '/fonts/ArchivoBlack-Regular.ttf',
-  })
-  fontsRegistered = true
-}
+// Re-export the canonical font registration module. Historical call-sites
+// imported `registerPdfFonts` from here; keep that working while new code
+// imports from './register-fonts' for the FONTS constants too.
+export { registerPdfFonts, FONTS } from './register-fonts'

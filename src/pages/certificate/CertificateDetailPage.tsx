@@ -6,10 +6,14 @@ import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { getCertificateSettings } from '../../lib/certificateSettings'
+import { registerPdfFonts } from '../../lib/pdf/register-fonts'
 import {
   CertificateOfQualification,
   buildCertificateOfQualificationBlob,
 } from '../../lib/pdf/certificate-qualification'
+
+// Register PDF fonts at module-load so <PDFViewer> has them ready on first mount
+registerPdfFonts()
 import {
   ComputerBasedTypingCertificate,
   buildComputerBasedTypingBlob,
@@ -45,6 +49,8 @@ export default function CertificateDetailPage() {
   const [certLogos, setCertLogos] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+  const [bgLoaded, setBgLoaded] = useState(false)
+  const [bgError, setBgError] = useState(false)
   const [revoking, setRevoking] = useState(false)
   const [showRevoke, setShowRevoke] = useState(false)
   const [revokeReason, setRevokeReason] = useState('')
@@ -53,6 +59,20 @@ export default function CertificateDetailPage() {
 
   // Mount guard — PDFViewer must not render during SSR / before browser APIs are ready
   useEffect(() => { setMounted(true) }, [])
+
+  // Preload both certificate background PNGs so PDFViewer never hits a missing image
+  useEffect(() => {
+    let cancelled = false
+    Promise.all(['/Landscape.png', '/Portrait.png'].map(src => new Promise<void>((resolve, reject) => {
+      const img = new window.Image()
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error(`Failed to load ${src}`))
+      img.src = src
+    })))
+      .then(() => { if (!cancelled) setBgLoaded(true) })
+      .catch(() => { if (!cancelled) setBgError(true) })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -185,6 +205,18 @@ export default function CertificateDetailPage() {
     }
   }
 
+  if (bgError) {
+    return (
+      <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800 max-w-xl mx-auto mt-8">
+        <strong>Certificate background failed to load.</strong>
+        <p className="mt-1 text-xs">
+          Ensure <code className="bg-white px-1 rounded">/public/Landscape.png</code> and{' '}
+          <code className="bg-white px-1 rounded">/public/Portrait.png</code> exist and are deployed.
+        </p>
+      </div>
+    )
+  }
+
   if (loading || !cert || !settings) {
     return (
       <div className="py-12 flex justify-center">
@@ -195,7 +227,7 @@ export default function CertificateDetailPage() {
 
   const isHorizontal = cert.template?.slug === 'certificate-of-qualification'
   const formattedDate = formatDateDDMMYYYY(cert.issue_date)
-  const ready = mounted && !loading && !!cert && !!settings
+  const ready = mounted && bgLoaded && !loading && !!cert && !!settings
 
   const pdfComponent = isHorizontal ? (
     <CertificateOfQualification

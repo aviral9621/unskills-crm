@@ -1,3 +1,9 @@
+/**
+ * IMAGE FORMAT POLICY:
+ * @react-pdf/renderer only supports PNG and JPG for <Image> components.
+ * WEBP / AVIF / SVG / GIF will fail silently or cascade errors.
+ * All images referenced here must be PNG or JPG.
+ */
 import {
   Document,
   Page,
@@ -8,7 +14,10 @@ import {
   pdf,
 } from '@react-pdf/renderer'
 import type { CertificateSettings, TypingSubject } from '../../types/certificate'
-import { registerPdfFonts } from './fonts'
+import { registerPdfFonts, FONTS } from './register-fonts'
+
+// Ensure fonts are registered before any PDF component is rendered
+registerPdfFonts()
 
 export interface ComputerBasedTypingCertificateProps {
   settings: CertificateSettings
@@ -35,16 +44,21 @@ const GOLD = '#B8860B'
 
 const s = StyleSheet.create({
   page: {
-    fontFamily: 'DMSans',
+    fontFamily: FONTS.body,
     fontSize: 10,
     color: '#1A1A1A',
     backgroundColor: '#FFFFFF',
-    position: 'relative',
   },
-  backgroundImage: {
+  backgroundContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
+  backgroundImage: {
     width: '100%',
     height: '100%',
   },
@@ -57,23 +71,11 @@ const s = StyleSheet.create({
     flexDirection: 'column',
   },
 
-  // Row 1 — top metadata (kept on LEFT side only to dodge top-right marble)
-  topMeta: {
-    alignItems: 'flex-start',
-    maxWidth: 280,
-    marginBottom: 4,
-  },
+  topMeta: { alignItems: 'flex-start', maxWidth: 280, marginBottom: 4 },
   topMetaText: { fontSize: 8, fontWeight: 700, color: '#1A1A1A', lineHeight: 1.4 },
 
-  // Row 2 — brand title (center, narrower than full width)
-  brandLine: {
-    textAlign: 'center',
-    marginBottom: 3,
-    alignSelf: 'center',
-    maxWidth: 420,
-  },
+  brandLine: { textAlign: 'center', marginBottom: 3, alignSelf: 'center', maxWidth: 420 },
 
-  // Row 3 — black ribbon
   blackBar: {
     alignSelf: 'center',
     backgroundColor: '#000000',
@@ -83,34 +85,18 @@ const s = StyleSheet.create({
   },
   blackBarText: { fontSize: 9, fontWeight: 700, color: '#FFFFFF' },
 
-  // Row 4 — sub-headers
   subHeader: {
-    fontSize: 7.5,
-    textAlign: 'center',
-    color: '#1A1A1A',
-    lineHeight: 1.35,
-    maxWidth: 420,
-    alignSelf: 'center',
+    fontSize: 7.5, textAlign: 'center', color: '#1A1A1A',
+    lineHeight: 1.35, maxWidth: 420, alignSelf: 'center',
   },
 
-  // Row 5 — cert title
   certTitle: {
-    fontFamily: 'GreatVibes',
-    fontSize: 26,
-    color: NAVY,
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 6,
-    maxWidth: 440,
-    alignSelf: 'center',
+    fontFamily: FONTS.script,
+    fontSize: 26, color: NAVY, textAlign: 'center',
+    marginTop: 8, marginBottom: 6, maxWidth: 440, alignSelf: 'center',
   },
 
-  // Row 6 — info table (full safe width)
-  infoTable: {
-    borderWidth: 1,
-    borderColor: '#000',
-    marginBottom: 8,
-  },
+  infoTable: { borderWidth: 1, borderColor: '#000', marginBottom: 8 },
   infoRow: { flexDirection: 'row' },
   infoHeadCell: {
     flex: 1, fontSize: 9, fontWeight: 700, padding: 4, textAlign: 'center',
@@ -130,7 +116,6 @@ const s = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: '#000',
   },
 
-  // Row 7 — student row (3-col, after marble recedes around y=260)
   studentRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   centerLogoCol: { width: 60, alignItems: 'center' },
   centerLogo: { width: 45, height: 45, objectFit: 'contain', borderRadius: 23 },
@@ -147,12 +132,10 @@ const s = StyleSheet.create({
     backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',
   },
 
-  // Row 8 — body paragraph
   body: { alignItems: 'center', marginVertical: 4 },
   bodyLine: { fontSize: 10, textAlign: 'center', lineHeight: 1.5 },
-  bodyScript: { fontFamily: 'GreatVibes', fontSize: 16, textAlign: 'center', marginVertical: 1 },
+  bodyScript: { fontFamily: FONTS.script, fontSize: 16, textAlign: 'center', marginVertical: 1 },
 
-  // Row 9 — marks table
   marksTable: { borderWidth: 1, borderColor: '#000', marginTop: 4, marginBottom: 4 },
   mtRow: { flexDirection: 'row' },
   mtHeadCell: {
@@ -178,41 +161,23 @@ const s = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: '#000',
   },
 
-  // Row 10 — grade legend (left-aligned, max 200pt)
-  legend: {
-    alignSelf: 'flex-start',
-    maxWidth: 200,
-    marginTop: 2,
-  },
+  legend: { alignSelf: 'flex-start', maxWidth: 200, marginTop: 2 },
   legendHead: { fontSize: 9, fontWeight: 700, marginBottom: 1 },
   legendLine: { fontSize: 8, lineHeight: 1.3 },
 
-  // Row 11 — QR/pills + signature (avoid bottom-left marble)
   bottomRow: {
-    flexDirection: 'row',
-    marginTop: 6,
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    flexDirection: 'row', marginTop: 6,
+    justifyContent: 'space-between', alignItems: 'flex-end',
   },
-  bottomLeft: {
-    width: 200,
-    // Stay tight against left edge but above bottom marble
-  },
+  bottomLeft: { width: 200 },
   qrImg: { width: 55, height: 55, borderWidth: 1, borderColor: '#000' },
   pillRow: { flexDirection: 'row', marginTop: 3 },
-  pillRed: {
-    backgroundColor: RED, paddingHorizontal: 6, paddingVertical: 2,
-  },
+  pillRed: { backgroundColor: RED, paddingHorizontal: 6, paddingVertical: 2 },
   pillRedText: { fontSize: 7.5, fontWeight: 700, color: '#FFFFFF' },
-  pillBlack: {
-    backgroundColor: '#000', paddingHorizontal: 6, paddingVertical: 2,
-  },
+  pillBlack: { backgroundColor: '#000', paddingHorizontal: 6, paddingVertical: 2 },
   pillBlackText: { fontSize: 7.5, fontWeight: 700, color: '#FFFFFF' },
 
-  bottomRight: {
-    width: 200,
-    alignItems: 'flex-end',
-  },
+  bottomRight: { width: 200, alignItems: 'flex-end' },
   sigImg: { width: 130, height: 30, objectFit: 'contain' },
   sigHLine: { width: 150, borderTopWidth: 1, borderTopColor: '#000', marginTop: 3, marginBottom: 2 },
   sigName: { fontSize: 10, fontWeight: 700, color: '#000', textAlign: 'right' },
@@ -221,23 +186,13 @@ const s = StyleSheet.create({
 
   spacer: { flexGrow: 1 },
 
-  // Row 12 — badge strip
   certStrip: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: 3,
-    borderTopWidth: 0.5,
-    borderTopColor: GOLD,
+    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
+    paddingVertical: 3, borderTopWidth: 0.5, borderTopColor: GOLD,
   },
   certLogo: { height: 20, objectFit: 'contain' },
 
-  // Row 13 — footer (center-aligned, max 420pt to stay out of bottom-left marble)
-  footer: {
-    alignSelf: 'center',
-    maxWidth: 420,
-    marginTop: 3,
-  },
+  footer: { alignSelf: 'center', maxWidth: 420, marginTop: 3 },
   footerText: { fontSize: 8, textAlign: 'center', color: '#1A1A1A' },
 })
 
@@ -246,14 +201,15 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
 
   return (
     <Document>
-      <Page size="A4" orientation="portrait" style={s.page}>
-        {/* Background image fills entire page */}
-        <PdfImage src="/Portrait.webp" style={s.backgroundImage} />
+      <Page size="A4" orientation="portrait" style={s.page} wrap={false}>
+        {/* Fixed background — renders on every page without flowing */}
+        <View style={s.backgroundContainer} fixed>
+          <PdfImage src="/Portrait.png" style={s.backgroundImage} />
+        </View>
 
         {/* Content overlay */}
         <View style={s.contentContainer}>
 
-          {/* Row 1 — top metadata (LEFT side only, dodge top-right marble) */}
           <View style={s.topMeta}>
             <Text style={s.topMetaText}>Certificate No : {p.certificateNumber}</Text>
             {p.settings.institute_reg_number ? (
@@ -261,22 +217,19 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
             ) : null}
           </View>
 
-          {/* Row 2 — brand title (narrower, centered) */}
           <Text style={s.brandLine}>
-            <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 17, color: '#000', letterSpacing: 0.8 }}>UN</Text>
-            <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 17, color: RED, letterSpacing: 0.8 }}>SKILLS</Text>
-            <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 17, color: '#000', letterSpacing: 0.8 }}> COMPUTER EDUCATION</Text>
-            <Text style={{ fontFamily: 'ArchivoBlack', fontSize: 9, color: '#000' }}>™</Text>
+            <Text style={{ fontFamily: FONTS.display, fontSize: 17, color: '#000', letterSpacing: 0.8 }}>UN</Text>
+            <Text style={{ fontFamily: FONTS.display, fontSize: 17, color: RED, letterSpacing: 0.8 }}>SKILLS</Text>
+            <Text style={{ fontFamily: FONTS.display, fontSize: 17, color: '#000', letterSpacing: 0.8 }}> COMPUTER EDUCATION</Text>
+            <Text style={{ fontFamily: FONTS.display, fontSize: 9, color: '#000' }}>™</Text>
           </Text>
 
-          {/* Row 3 — black ISO ribbon */}
           {p.settings.tagline ? (
             <View style={s.blackBar}>
               <Text style={s.blackBarText}>{p.settings.tagline}</Text>
             </View>
           ) : null}
 
-          {/* Row 4 — sub-header lines */}
           {p.settings.sub_header_line_1 ? (
             <Text style={s.subHeader}>{p.settings.sub_header_line_1}</Text>
           ) : null}
@@ -287,10 +240,8 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
             <Text style={s.subHeader}>{p.settings.sub_header_line_3}</Text>
           ) : null}
 
-          {/* Row 5 — certificate title */}
           <Text style={s.certTitle}>Computer Based Typing Examination</Text>
 
-          {/* Row 6 — info table (full safe width at y~200+, safe) */}
           <View style={s.infoTable}>
             <View style={s.infoRow}>
               <Text style={s.infoHeadCell}>Enrollment No.</Text>
@@ -304,7 +255,6 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
             </View>
           </View>
 
-          {/* Row 7 — student row (y~250+, safe after marble recedes) */}
           <View style={s.studentRow}>
             <View style={s.centerLogoCol}>
               {p.trainingCenterLogoUrl ? (
@@ -335,7 +285,6 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
             </View>
           </View>
 
-          {/* Row 8 — body paragraph */}
           <View style={s.body}>
             <Text style={s.bodyLine}>has passed in the following subject of the</Text>
             <Text style={s.bodyScript}>Computer Based Typing Examination</Text>
@@ -346,7 +295,6 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
             <Text style={s.bodyLine}>held at {p.trainingCenterName}</Text>
           </View>
 
-          {/* Row 9 — marks table */}
           <View style={s.marksTable}>
             <View style={s.mtRow}>
               <Text style={s.mtHeadCell}>Name of the Subject</Text>
@@ -366,7 +314,6 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
             ))}
           </View>
 
-          {/* Row 10 — grade legend (left-aligned, maxWidth 200) */}
           <View style={s.legend}>
             <Text style={s.legendHead}>Grade System</Text>
             <Text style={s.legendLine}>A+ : 85% &amp; Above</Text>
@@ -375,12 +322,9 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
             <Text style={s.legendLine}>C  : 40% to 69%</Text>
           </View>
 
-          {/* Spacer pushes bottom content to bottom of safe zone */}
           <View style={s.spacer} />
 
-          {/* Row 11 — QR/pills + signature (bottom-left marble aware) */}
           <View style={s.bottomRow}>
-            {/* LEFT — kept tight and above bottom marble */}
             <View style={s.bottomLeft}>
               {p.qrCodeDataUrl ? (
                 <PdfImage src={p.qrCodeDataUrl} style={s.qrImg} />
@@ -403,7 +347,6 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
               </View>
             </View>
 
-            {/* RIGHT — signature (safe in bottom-right) */}
             <View style={s.bottomRight}>
               {p.settings.signature_image_url ? (
                 <PdfImage src={p.settings.signature_image_url} style={s.sigImg} />
@@ -424,7 +367,6 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
             </View>
           </View>
 
-          {/* Row 12 — certification badge strip */}
           {logos.length > 0 ? (
             <View style={s.certStrip}>
               {logos.slice(0, 7).map((url, i) => (
@@ -433,7 +375,6 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
             </View>
           ) : null}
 
-          {/* Row 13 — footer (center, maxWidth 420, dodge bottom-left marble) */}
           <View style={s.footer}>
             {p.settings.verification_url_base ? (
               <Text style={s.footerText}>
@@ -450,6 +391,6 @@ export function ComputerBasedTypingCertificate(p: ComputerBasedTypingCertificate
 export async function buildComputerBasedTypingBlob(
   p: ComputerBasedTypingCertificateProps,
 ): Promise<Blob> {
-  await registerPdfFonts()
+  registerPdfFonts()
   return await pdf(<ComputerBasedTypingCertificate {...p} />).toBlob()
 }

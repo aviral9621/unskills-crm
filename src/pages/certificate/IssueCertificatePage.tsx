@@ -20,8 +20,12 @@ import {
   buildComputerBasedTypingBlob,
 } from '../../lib/pdf/certificate-typing'
 import { generateQRDataUrl } from '../../lib/pdf/generate-qr'
+import { registerPdfFonts } from '../../lib/pdf/register-fonts'
 import { toDataUrl } from '../../lib/pdf/marksheet'
 import { formatDateDDMMYYYY } from '../../lib/utils'
+
+// Register PDF fonts at module-load so <PDFViewer> has them ready on first mount
+registerPdfFonts()
 import type {
   CertificateSettings,
   CertificateTemplate,
