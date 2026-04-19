@@ -31,7 +31,11 @@ import QuestionsPage from './pages/exams/QuestionsPage'
 import ResultsPage from './pages/exams/ResultsPage'
 import MarksheetPage from './pages/marksheet/MarksheetPage'
 import MarksheetSettingsPage from './pages/marksheet/MarksheetSettingsPage'
-import CertificatePage from './pages/certificate/CertificatePage'
+import CertificateListPage from './pages/certificate/CertificateListPage'
+import IssueCertificatePage from './pages/certificate/IssueCertificatePage'
+import CertificateDetailPage from './pages/certificate/CertificateDetailPage'
+import CertificateSettingsPage from './pages/certificate/CertificateSettingsPage'
+import CertificatePreviewPage from './pages/certificate/CertificatePreviewPage'
 import DepartmentPage from './pages/staff/DepartmentPage'
 import EmployeeListPage from './pages/staff/EmployeeListPage'
 import EmployeeFormPage from './pages/staff/EmployeeFormPage'
@@ -147,7 +151,13 @@ function AppRoutes() {
         {/* Documents */}
         <Route path="marksheets" element={<MarksheetPage />} />
         <Route path="marksheets/settings" element={<MarksheetSettingsPage />} />
-        <Route path="certificates" element={<CertificatePage />} />
+        <Route path="certificates" element={<CertificateListPage />} />
+        <Route path="certificates/issue" element={<IssueCertificatePage />} />
+        <Route path="certificates/settings" element={<CertificateSettingsPage />} />
+        {import.meta.env.DEV && (
+          <Route path="certificates/preview" element={<CertificatePreviewPage />} />
+        )}
+        <Route path="certificates/:id" element={<CertificateDetailPage />} />
 
         {/* Staff */}
         <Route path="staff/departments" element={<DepartmentPage />} />

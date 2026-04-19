@@ -41,6 +41,17 @@ export function formatDateTime(date: string | Date): string {
   }).format(new Date(date))
 }
 
+// ── DD-MM-YYYY for certificates / marksheets ──
+export function formatDateDDMMYYYY(date: string | Date | null | undefined): string {
+  if (!date) return ''
+  const d = typeof date === 'string' && date.length === 10 ? new Date(date + 'T00:00:00') : new Date(date)
+  if (isNaN(d.getTime())) return String(date)
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  return `${dd}-${mm}-${yyyy}`
+}
+
 // ── Phone Validation (10-digit Indian) ──
 export function isValidIndianPhone(phone: string): boolean {
   return /^[6-9]\d{9}$/.test(phone.replace(/\s/g, ''))

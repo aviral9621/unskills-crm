@@ -67,7 +67,14 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
         ],
       },
       { label: 'Marksheets', icon: ScrollText, path: '/admin/marksheets', permission: 'marksheet' },
-      { label: 'Certificates', icon: Award, path: '/admin/certificates', permission: 'certificate' },
+      {
+        label: 'Certificates', icon: Award, permission: 'certificate',
+        children: [
+          { label: 'All Certificates', path: '/admin/certificates' },
+          { label: 'Issue New', path: '/admin/certificates/issue' },
+          { label: 'Settings', path: '/admin/certificates/settings' },
+        ],
+      },
     ],
   },
   {

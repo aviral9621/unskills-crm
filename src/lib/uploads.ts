@@ -21,6 +21,7 @@ export const STORAGE_BUCKETS = {
   studyMaterials:'study-materials',
   website:       'website-assets',
   documents:     'documents',      // generic public docs (syllabus, etc.)
+  certificateAssets: 'certificate-assets', // logos / signatures for certificate PDFs
 } as const
 
 /** Upload a file and return its PUBLIC URL. Throws on any failure. */
