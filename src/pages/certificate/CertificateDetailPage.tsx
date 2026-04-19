@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { PDFViewer } from '@react-pdf/renderer'
-import { ArrowLeft, Loader2, Download, Ban, RefreshCcw } from 'lucide-react'
+import { ArrowLeft, Loader2, Download, Ban, RefreshCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -14,8 +14,19 @@ import {
   ComputerBasedTypingCertificate,
   buildComputerBasedTypingBlob,
 } from '../../lib/pdf/certificate-typing'
+import { toDataUrl } from '../../lib/pdf/marksheet'
 import { formatDateDDMMYYYY } from '../../lib/utils'
 import type { Certificate, CertificateSettings } from '../../types/certificate'
+
+const CERT_LOGO_URLS = [
+  '/ISO LOGOs.png',
+  '/MSME loogo.png',
+  '/Skill India Logo.png',
+  '/NSDC logo.png',
+  '/Digital India logo.png',
+  '/ANSI logo.png',
+  '/IAF LOGO.png',
+]
 
 interface CertificateRow extends Certificate {
   template?: { name: string; slug: 'certificate-of-qualification' | 'computer-based-typing' }
@@ -31,10 +42,17 @@ export default function CertificateDetailPage() {
 
   const [cert, setCert] = useState<CertificateRow | null>(null)
   const [settings, setSettings] = useState<CertificateSettings | null>(null)
+  const [certLogos, setCertLogos] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
   const [revoking, setRevoking] = useState(false)
   const [showRevoke, setShowRevoke] = useState(false)
   const [revokeReason, setRevokeReason] = useState('')
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  // Mount guard — PDFViewer must not render during SSR / before browser APIs are ready
+  useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
     if (!id) return
@@ -45,14 +63,20 @@ export default function CertificateDetailPage() {
         .eq('id', id)
         .single(),
       getCertificateSettings(),
+      Promise.all(CERT_LOGO_URLS.map(u => toDataUrl(encodeURI(u)).catch(() => ''))),
     ])
-      .then(([certRes, s]) => {
+      .then(([certRes, s, logos]) => {
         if (certRes.error) throw certRes.error
         setCert(certRes.data as unknown as CertificateRow)
         setSettings(s)
+        setCertLogos(logos.filter(Boolean))
         if (searchParams.get('revoke') === '1' && isSuperAdmin) setShowRevoke(true)
         if (searchParams.get('download') === '1') {
-          setTimeout(() => handleDownload(certRes.data as unknown as CertificateRow, s), 200)
+          setTimeout(() => handleDownload(
+            certRes.data as unknown as CertificateRow,
+            s,
+            logos.filter(Boolean),
+          ), 200)
         }
       })
       .catch(e => toast.error(e instanceof Error ? e.message : 'Failed to load'))
@@ -60,7 +84,7 @@ export default function CertificateDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  async function handleDownload(c: CertificateRow, s: CertificateSettings) {
+  async function handleDownload(c: CertificateRow, s: CertificateSettings, logos: string[] = certLogos) {
     try {
       const slug = c.template?.slug
       const formattedDate = formatDateDDMMYYYY(c.issue_date)
@@ -85,6 +109,7 @@ export default function CertificateDetailPage() {
           grade: c.grade ?? '',
           typingSubjects: c.typing_subjects,
           trainingCenterLogoUrl: c.branch?.center_logo_url ?? null,
+          certificationLogoUrls: logos,
         })
       } else {
         blob = await buildComputerBasedTypingBlob({
@@ -103,6 +128,7 @@ export default function CertificateDetailPage() {
           trainingCenterLogoUrl: c.branch?.center_logo_url ?? null,
           typingSubjects: c.typing_subjects ?? [],
           grade: c.typing_grade ?? c.grade ?? '',
+          certificationLogoUrls: logos,
         })
       }
       const url = URL.createObjectURL(blob)
@@ -120,10 +146,7 @@ export default function CertificateDetailPage() {
 
   async function handleRevoke() {
     if (!cert) return
-    if (!revokeReason.trim()) {
-      toast.error('Enter a reason')
-      return
-    }
+    if (!revokeReason.trim()) { toast.error('Enter a reason'); return }
     setRevoking(true)
     try {
       const { error } = await supabase
@@ -145,6 +168,23 @@ export default function CertificateDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!cert) return
+    setDeleting(true)
+    try {
+      const { error } = await supabase
+        .from('uce_certificates')
+        .delete()
+        .eq('id', cert.id)
+      if (error) throw error
+      toast.success('Certificate deleted')
+      navigate('/admin/certificates')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete')
+      setDeleting(false)
+    }
+  }
+
   if (loading || !cert || !settings) {
     return (
       <div className="py-12 flex justify-center">
@@ -155,6 +195,50 @@ export default function CertificateDetailPage() {
 
   const isHorizontal = cert.template?.slug === 'certificate-of-qualification'
   const formattedDate = formatDateDDMMYYYY(cert.issue_date)
+  const ready = mounted && !loading && !!cert && !!settings
+
+  const pdfComponent = isHorizontal ? (
+    <CertificateOfQualification
+      settings={settings}
+      certificateNumber={cert.certificate_number}
+      issueDate={formattedDate}
+      qrCodeDataUrl={cert.qr_code_data_url ?? ''}
+      salutation={cert.salutation ?? ''}
+      studentName={cert.student_name}
+      fatherPrefix={cert.father_prefix ?? ''}
+      fatherName={cert.father_name ?? ''}
+      studentPhotoUrl={cert.student_photo_url}
+      courseLevel={cert.course_level ?? undefined}
+      courseCode={cert.course_code ?? ''}
+      courseName={cert.course_name ?? ''}
+      trainingCenterName={cert.training_center_name ?? ''}
+      performanceText={cert.performance_text ?? ''}
+      marksScored={cert.marks_scored ?? 0}
+      grade={cert.grade ?? ''}
+      typingSubjects={cert.typing_subjects}
+      trainingCenterLogoUrl={cert.branch?.center_logo_url ?? null}
+      certificationLogoUrls={certLogos}
+    />
+  ) : (
+    <ComputerBasedTypingCertificate
+      settings={settings}
+      certificateNumber={cert.certificate_number}
+      issueDate={formattedDate}
+      qrCodeDataUrl={cert.qr_code_data_url ?? ''}
+      salutation={cert.salutation ?? undefined}
+      studentName={cert.student_name}
+      fatherPrefix={cert.father_prefix ?? ''}
+      fatherName={cert.father_name ?? ''}
+      studentPhotoUrl={cert.student_photo_url}
+      enrollmentNumber={cert.enrollment_number ?? ''}
+      trainingCenterCode={cert.training_center_code ?? ''}
+      trainingCenterName={cert.training_center_name ?? ''}
+      trainingCenterLogoUrl={cert.branch?.center_logo_url ?? null}
+      typingSubjects={cert.typing_subjects ?? []}
+      grade={cert.typing_grade ?? cert.grade ?? ''}
+      certificationLogoUrls={certLogos}
+    />
+  )
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -179,7 +263,7 @@ export default function CertificateDetailPage() {
             <Download size={14} /> Download
           </button>
           <button
-            onClick={() => navigate(`/admin/certificates/issue`)}
+            onClick={() => navigate('/admin/certificates/issue')}
             className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50"
           >
             <RefreshCcw size={14} /> Re-issue
@@ -190,6 +274,14 @@ export default function CertificateDetailPage() {
               className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100"
             >
               <Ban size={14} /> Revoke
+            </button>
+          ) : null}
+          {isSuperAdmin ? (
+            <button
+              onClick={() => setShowDelete(true)}
+              className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
+              <Trash2 size={14} /> Delete
             </button>
           ) : null}
         </div>
@@ -204,56 +296,24 @@ export default function CertificateDetailPage() {
       ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 h-[720px] border border-gray-200 rounded-xl overflow-hidden bg-white">
-          <PDFViewer width="100%" height="100%" showToolbar>
-            {isHorizontal ? (
-              <CertificateOfQualification
-                settings={settings}
-                certificateNumber={cert.certificate_number}
-                issueDate={formattedDate}
-                qrCodeDataUrl={cert.qr_code_data_url ?? ''}
-                salutation={cert.salutation ?? ''}
-                studentName={cert.student_name}
-                fatherPrefix={cert.father_prefix ?? ''}
-                fatherName={cert.father_name ?? ''}
-                studentPhotoUrl={cert.student_photo_url}
-                courseLevel={cert.course_level ?? undefined}
-                courseCode={cert.course_code ?? ''}
-                courseName={cert.course_name ?? ''}
-                trainingCenterName={cert.training_center_name ?? ''}
-                performanceText={cert.performance_text ?? ''}
-                marksScored={cert.marks_scored ?? 0}
-                grade={cert.grade ?? ''}
-                typingSubjects={cert.typing_subjects}
-                trainingCenterLogoUrl={cert.branch?.center_logo_url ?? null}
-              />
-            ) : (
-              <ComputerBasedTypingCertificate
-                settings={settings}
-                certificateNumber={cert.certificate_number}
-                issueDate={formattedDate}
-                qrCodeDataUrl={cert.qr_code_data_url ?? ''}
-                salutation={cert.salutation ?? undefined}
-                studentName={cert.student_name}
-                fatherPrefix={cert.father_prefix ?? ''}
-                fatherName={cert.father_name ?? ''}
-                studentPhotoUrl={cert.student_photo_url}
-                enrollmentNumber={cert.enrollment_number ?? ''}
-                trainingCenterCode={cert.training_center_code ?? ''}
-                trainingCenterName={cert.training_center_name ?? ''}
-                trainingCenterLogoUrl={cert.branch?.center_logo_url ?? null}
-                typingSubjects={cert.typing_subjects ?? []}
-                grade={cert.typing_grade ?? cert.grade ?? ''}
-              />
-            )}
-          </PDFViewer>
+        <div className="lg:col-span-2 border border-gray-200 rounded-xl overflow-hidden bg-white" style={{ height: 800 }}>
+          {ready ? (
+            <PDFViewer width="100%" height="800px" showToolbar>
+              {pdfComponent}
+            </PDFViewer>
+          ) : (
+            <div className="h-full flex items-center justify-center bg-gray-50">
+              <Loader2 className="animate-spin text-red-600 mr-2" />
+              <span className="text-sm text-gray-500">Loading certificate…</span>
+            </div>
+          )}
         </div>
 
         <div className="space-y-3">
           <div className="bg-white rounded-xl border border-gray-200 p-4 text-sm">
             <Row label="Certificate No." value={cert.certificate_number} mono />
             <Row label="Student" value={cert.student_name} />
-            <Row label={cert.father_prefix ?? "Father"} value={cert.father_name ?? '—'} />
+            <Row label={cert.father_prefix ?? 'Father'} value={cert.father_name ?? '—'} />
             <Row label="Course" value={cert.course_name ?? '—'} />
             <Row label="Training Center" value={cert.training_center_name ?? '—'} />
             <Row label="Issue Date" value={formattedDate} />
@@ -263,13 +323,19 @@ export default function CertificateDetailPage() {
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-4 text-xs">
             <p className="text-gray-500 mb-1">Verification URL</p>
-            <a href={cert.qr_target_url ?? '#'} target="_blank" rel="noreferrer" className="text-red-600 break-all hover:underline">
+            <a
+              href={cert.qr_target_url ?? '#'}
+              target="_blank"
+              rel="noreferrer"
+              className="text-red-600 break-all hover:underline"
+            >
               {cert.qr_target_url ?? '—'}
             </a>
           </div>
         </div>
       </div>
 
+      {/* Revoke modal */}
       {showRevoke && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl p-6 max-w-md w-full space-y-3">
@@ -285,15 +351,36 @@ export default function CertificateDetailPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20"
             />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowRevoke(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
-                Cancel
-              </button>
+              <button onClick={() => setShowRevoke(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
               <button
                 onClick={() => void handleRevoke()}
                 disabled={revoking}
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
                 {revoking ? 'Revoking…' : 'Confirm Revoke'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete modal */}
+      {showDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full space-y-3">
+            <h3 className="text-lg font-semibold text-red-700">Delete certificate</h3>
+            <p className="text-sm text-gray-600">
+              Delete certificate <strong>{cert.certificate_number}</strong>? This permanently removes the record and cannot be undone.
+              Use <strong>Revoke</strong> instead if you want to keep an audit trail.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowDelete(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+              <button
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete Permanently'}
               </button>
             </div>
           </div>

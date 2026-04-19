@@ -14,5 +14,9 @@ export async function registerPdfFonts(): Promise<void> {
     family: 'GreatVibes',
     src: '/fonts/GreatVibes-Regular.ttf',
   })
+  Font.register({
+    family: 'ArchivoBlack',
+    src: '/fonts/ArchivoBlack-Regular.ttf',
+  })
   fontsRegistered = true
 }
