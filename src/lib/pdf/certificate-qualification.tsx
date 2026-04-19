@@ -1,8 +1,8 @@
 /**
- * IMAGE FORMAT POLICY:
- * @react-pdf/renderer only supports PNG and JPG for <Image> components.
- * WEBP / AVIF / SVG / GIF will fail silently or cascade errors.
- * All images referenced here must be PNG or JPG.
+ * IMAGE POLICY:
+ * <Image> is used ONLY for: student photo, training-center logo, QR code,
+ * signature image, and partner badge data URLs. All decorative framing is
+ * drawn with native SVG primitives — no background images.
  */
 import {
   Document,
@@ -14,10 +14,16 @@ import {
   pdf,
 } from '@react-pdf/renderer'
 import type { CertificateSettings, TypingSubject } from '../../types/certificate'
-import { registerPdfFonts, FONTS } from './register-fonts'
+import { registerPDFFonts, FONTS } from './register-fonts'
+import { CERT_COLORS as C } from './certificate-theme'
+import {
+  CornerFlourish,
+  TitleDivider,
+  SquareAccent,
+  EdgeOrnament,
+} from './certificate-decorations'
 
-// Ensure fonts are registered before any PDF component is rendered
-registerPdfFonts()
+registerPDFFonts()
 
 export interface CertificateOfQualificationProps {
   settings: CertificateSettings
@@ -47,60 +53,88 @@ export interface CertificateOfQualificationProps {
   partnerLogoUrls?: string[]
 }
 
-const NAVY = '#0B2447'
-const RED = '#C8102E'
-const GOLD = '#B8860B'
-
 const s = StyleSheet.create({
   page: {
+    backgroundColor: C.pageBg,
+    padding: 0,
     fontFamily: FONTS.body,
-    fontSize: 10,
-    color: '#1A1A1A',
-    backgroundColor: '#FFFFFF',
+    color: C.textPrimary,
   },
-  backgroundContainer: {
+  outerFrame: {
+    margin: 16,
+    borderWidth: 3,
+    borderStyle: 'solid',
+    borderColor: C.frameOuter,
+    flex: 1,
+  },
+  middleFrame: {
+    margin: 4,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: C.frameInner,
+    flex: 1,
+  },
+  innerFrame: {
+    margin: 6,
+    borderWidth: 0.5,
+    borderStyle: 'solid',
+    borderColor: C.frameOuter,
+    flex: 1,
+    position: 'relative',
+  },
+  topEdgeOrnament: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
+    top: -7,
+    left: '50%',
+    marginLeft: -20,
   },
-  backgroundImage: {
-    width: '100%',
-    height: '100%',
-  },
-  contentContainer: {
+  bottomEdgeOrnament: {
     position: 'absolute',
-    top: 85,
-    left: 100,
-    right: 100,
-    bottom: 85,
+    bottom: -7,
+    left: '50%',
+    marginLeft: -20,
+  },
+  content: {
+    flex: 1,
+    padding: 20,
     flexDirection: 'column',
   },
 
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
-  topText: { fontSize: 8, fontWeight: 700, color: '#1A1A1A' },
+  topMeta: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  metaText: { fontSize: 8, fontFamily: FONTS.body, fontWeight: 700, color: C.textPrimary },
 
-  brandLine: { textAlign: 'center', marginBottom: 3 },
-
-  blackBar: {
-    alignSelf: 'center',
-    backgroundColor: '#000000',
-    paddingVertical: 3,
-    paddingHorizontal: 12,
+  brandTitle: {
+    fontFamily: FONTS.display,
+    fontSize: 24,
+    letterSpacing: 1.2,
+    textAlign: 'center',
     marginBottom: 4,
   },
-  blackBarText: { fontSize: 9, fontWeight: 700, color: '#FFFFFF' },
+
+  isoRibbon: {
+    backgroundColor: '#000000',
+    paddingVertical: 3,
+    paddingHorizontal: 14,
+    alignSelf: 'center',
+    marginBottom: 4,
+  },
+  isoText: { color: '#FFFFFF', fontSize: 9, fontFamily: FONTS.body, fontWeight: 700 },
+
+  subHeader: {
+    fontSize: 7.5,
+    fontFamily: FONTS.body,
+    fontWeight: 400,
+    color: C.textSecondary,
+    textAlign: 'center',
+    lineHeight: 1.4,
+  },
 
   certTitle: {
     fontFamily: FONTS.script,
     fontSize: 38,
-    color: NAVY,
+    color: C.titleNavy,
     textAlign: 'center',
-    marginTop: 2,
-    marginBottom: 4,
+    marginTop: 6,
   },
 
   presentedRow: {
@@ -109,82 +143,136 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 6,
   },
-  presentedText: { fontSize: 10, color: '#1A1A1A' },
-  smallSquare: { width: 3, height: 3, backgroundColor: NAVY, marginHorizontal: 6 },
+  presentedText: {
+    fontSize: 10,
+    fontFamily: FONTS.body,
+    color: C.textPrimary,
+    marginHorizontal: 6,
+  },
 
-  bodyRow: { flexDirection: 'row', marginBottom: 4 },
-  bodyLeft: { width: 90, alignItems: 'center', justifyContent: 'center' },
-  bodyCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
-  bodyRight: { width: 90, alignItems: 'center', justifyContent: 'flex-start' },
-
-  trainingLogo: { width: 70, height: 70, objectFit: 'contain', borderRadius: 35 },
-  studentPhoto: { width: 75, height: 85, objectFit: 'cover', borderWidth: 1, borderColor: '#000' },
+  mainRow: { flexDirection: 'row', marginVertical: 4, flexGrow: 1 },
+  leftCol: { width: 90, alignItems: 'center', justifyContent: 'center' },
+  centerCol: { flex: 1, alignItems: 'center', paddingHorizontal: 10 },
+  rightCol: { width: 90, alignItems: 'center', justifyContent: 'flex-start' },
+  tcLogo: { width: 70, height: 70, objectFit: 'contain' },
+  studentPhoto: {
+    width: 75, height: 85,
+    borderWidth: 1, borderStyle: 'solid', borderColor: '#000000',
+    objectFit: 'cover',
+  },
   studentPhotoPlaceholder: {
-    width: 75, height: 85, borderWidth: 1, borderColor: '#000',
-    backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center',
+    width: 75, height: 85,
+    borderWidth: 1, borderStyle: 'solid', borderColor: '#000000',
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center', justifyContent: 'center',
   },
 
   studentName: {
-    fontSize: 16, fontWeight: 700, color: NAVY, textAlign: 'center',
-    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6,
+    fontFamily: FONTS.body,
+    fontSize: 16,
+    fontWeight: 700,
+    color: C.titleNavy,
+    letterSpacing: 1,
+    textAlign: 'center',
+    marginBottom: 6,
+    textTransform: 'uppercase',
   },
-  bodyLine: { fontSize: 10, textAlign: 'center', lineHeight: 1.6, color: '#1A1A1A' },
-  bodyCourse: { fontSize: 11, fontWeight: 700, color: NAVY, textAlign: 'center', marginVertical: 2 },
+  bodyLine: {
+    fontFamily: FONTS.body,
+    fontSize: 10,
+    textAlign: 'center',
+    color: C.textPrimary,
+    marginBottom: 3,
+    lineHeight: 1.4,
+  },
+  courseName: {
+    fontFamily: FONTS.body,
+    fontSize: 11,
+    fontWeight: 700,
+    color: C.titleNavy,
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  bold: { fontFamily: FONTS.body, fontWeight: 700 },
 
   typingMini: {
-    marginTop: 3, borderWidth: 1, borderColor: '#000',
-    width: '70%', alignSelf: 'center',
+    marginTop: 2,
+    marginBottom: 2,
+    borderWidth: 1,
+    borderColor: '#000',
+    width: '80%',
+    alignSelf: 'center',
   },
   typingRow: { flexDirection: 'row' },
   typingHeadCell: {
     flex: 1, fontSize: 7, fontWeight: 700, padding: 2, textAlign: 'center',
-    borderRightWidth: 1, borderRightColor: '#000', backgroundColor: '#F5F5F5',
+    borderRightWidth: 1, borderRightColor: '#000', backgroundColor: C.tableHeaderBg,
   },
   typingHeadCellLast: {
-    flex: 1, fontSize: 7, fontWeight: 700, padding: 2, textAlign: 'center', backgroundColor: '#F5F5F5',
+    flex: 1, fontSize: 7, fontWeight: 700, padding: 2, textAlign: 'center',
+    backgroundColor: C.tableHeaderBg,
   },
   typingCell: {
     flex: 1, fontSize: 7, padding: 2, textAlign: 'center',
-    borderRightWidth: 1, borderRightColor: '#000', borderTopWidth: 1, borderTopColor: '#000',
+    borderRightWidth: 1, borderRightColor: '#000',
+    borderTopWidth: 1, borderTopColor: '#000',
   },
   typingCellLast: {
     flex: 1, fontSize: 7, padding: 2, textAlign: 'center',
     borderTopWidth: 1, borderTopColor: '#000',
   },
 
-  bottomRow: { flexDirection: 'row', marginTop: 4, alignItems: 'flex-start' },
+  bottomRow: { flexDirection: 'row', marginTop: 6, paddingTop: 4 },
   bottomLeft: { width: 180 },
-  certNumLabel: { fontSize: 8, fontWeight: 700, color: '#1A1A1A' },
-  certNum: { fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 4 },
-  qrRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
-  qrImg: { width: 50, height: 50, borderWidth: 1, borderColor: '#000' },
-  contactCol: { flex: 1 },
-  contactLine: { fontSize: 8, color: '#1A1A1A', lineHeight: 1.4 },
-
-  bottomCenter: { flex: 1, paddingHorizontal: 10, justifyContent: 'center' },
-  partnerRow: {
-    flexDirection: 'row', justifyContent: 'space-around',
-    alignItems: 'center', marginTop: 20,
+  bottomCenter: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 8,
+    paddingTop: 20,
   },
-  partnerLogo: { height: 30, width: 38, objectFit: 'contain' },
-
-  bottomRight: { width: 200, alignItems: 'flex-end' },
-  sigImg: { width: 130, height: 30, objectFit: 'contain' },
-  sigHLine: { width: 150, borderTopWidth: 1, borderTopColor: '#000', marginTop: 3, marginBottom: 2 },
-  sigTitle: { fontSize: 10, fontWeight: 700, color: '#000', textAlign: 'right' },
-  sigCompany: { fontSize: 9, color: '#000', textAlign: 'right' },
-  sigReg: { fontSize: 7, color: '#555', textAlign: 'right', marginTop: 1 },
-
-  spacer: { flexGrow: 1 },
-
-  certStrip: {
-    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
-    paddingVertical: 4, borderTopWidth: 0.5, borderTopColor: GOLD,
+  bottomRight: { width: 180, alignItems: 'flex-end' },
+  certNumLabel: {
+    fontSize: 7.5, fontFamily: FONTS.body, fontWeight: 700, color: C.textPrimary,
   },
-  certLogo: { height: 22, objectFit: 'contain' },
+  certNumValue: {
+    fontSize: 13, fontFamily: FONTS.body, fontWeight: 700, color: C.titleNavy, marginBottom: 4,
+  },
+  qrRow: { flexDirection: 'row', alignItems: 'center' },
+  qr: { width: 50, height: 50, borderWidth: 1, borderColor: '#000000' },
+  contactBlock: { marginLeft: 6 },
+  contactLine: { fontSize: 7.5, fontFamily: FONTS.body, color: C.textPrimary, lineHeight: 1.4 },
+  partnerLogo: { height: 28, objectFit: 'contain' },
+  signature: { width: 120, height: 28, objectFit: 'contain' },
+  sigLine: {
+    width: 150,
+    borderTopWidth: 1, borderTopStyle: 'solid', borderTopColor: '#000000',
+    marginTop: 2, marginBottom: 3,
+  },
+  sigTitle: { fontSize: 9.5, fontFamily: FONTS.body, fontWeight: 700, color: C.textPrimary },
+  sigCompany: { fontSize: 8, fontFamily: FONTS.body, color: C.textSecondary },
+  sigReg: { fontSize: 7, fontFamily: FONTS.body, color: C.textMuted, marginTop: 1 },
 
-  footer: { alignItems: 'center', marginTop: 4 },
-  footerText: { fontSize: 8, textAlign: 'center', color: '#1A1A1A' },
+  badgeStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderTopWidth: 0.5,
+    borderTopStyle: 'solid',
+    borderTopColor: C.gold,
+    marginTop: 4,
+  },
+  badge: { height: 20, objectFit: 'contain' },
+
+  footer: {
+    fontSize: 7.5,
+    fontFamily: FONTS.body,
+    color: C.textPrimary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
 })
 
 export function CertificateOfQualification(p: CertificateOfQualificationProps) {
@@ -195,167 +283,171 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={s.page} wrap={false}>
-        {/* Fixed background — renders on every page without flowing */}
-        <View style={s.backgroundContainer} fixed>
-          <PdfImage src="/Landscape.png" style={s.backgroundImage} />
-        </View>
+        <View style={s.outerFrame}>
+          <View style={s.middleFrame}>
+            <View style={s.innerFrame}>
+              {/* Corner flourishes — rotation mirrors to each corner */}
+              <CornerFlourish size={70} top={-4} left={-4} rotation={0} />
+              <CornerFlourish size={70} top={-4} right={-4} rotation={90} />
+              <CornerFlourish size={70} bottom={-4} right={-4} rotation={180} />
+              <CornerFlourish size={70} bottom={-4} left={-4} rotation={270} />
 
-        {/* Content overlay inside safe zone */}
-        <View style={s.contentContainer}>
+              {/* Mid-edge ornaments */}
+              <View style={s.topEdgeOrnament}><EdgeOrnament /></View>
+              <View style={s.bottomEdgeOrnament}><EdgeOrnament /></View>
 
-          <View style={s.topRow}>
-            <Text style={s.topText}>Reg. by Govt. of India</Text>
-            {p.settings.institute_reg_number ? (
-              <Text style={s.topText}>Reg. No.-{p.settings.institute_reg_number}</Text>
-            ) : null}
-          </View>
+              <View style={s.content}>
+                <View style={s.topMeta}>
+                  <Text style={s.metaText}>Reg. by Govt. of India</Text>
+                  {p.settings.institute_reg_number ? (
+                    <Text style={s.metaText}>Reg. No.-{p.settings.institute_reg_number}</Text>
+                  ) : null}
+                </View>
 
-          <Text style={s.brandLine}>
-            <Text style={{ fontFamily: FONTS.display, fontSize: 22, color: '#000', letterSpacing: 1 }}>UN</Text>
-            <Text style={{ fontFamily: FONTS.display, fontSize: 22, color: RED, letterSpacing: 1 }}>SKILLS</Text>
-            <Text style={{ fontFamily: FONTS.display, fontSize: 22, color: '#000', letterSpacing: 1 }}> COMPUTER EDUCATION</Text>
-            <Text style={{ fontFamily: FONTS.display, fontSize: 11, color: '#000' }}>™</Text>
-          </Text>
+                <Text style={s.brandTitle}>
+                  <Text style={{ color: C.textPrimary }}>UN</Text>
+                  <Text style={{ color: C.brandRed }}>SKILLS</Text>
+                  <Text style={{ color: C.textPrimary }}> COMPUTER EDUCATION</Text>
+                  <Text style={{ fontSize: 10 }}>™</Text>
+                </Text>
 
-          {p.settings.tagline ? (
-            <View style={s.blackBar}>
-              <Text style={s.blackBarText}>{p.settings.tagline}</Text>
-            </View>
-          ) : null}
-
-          <Text style={s.certTitle}>Certificate of Qualification</Text>
-
-          <View style={s.presentedRow}>
-            <View style={s.smallSquare} />
-            <Text style={s.presentedText}>This Certificate Is Proudly Presented To</Text>
-            <View style={s.smallSquare} />
-          </View>
-
-          <View style={s.bodyRow}>
-            <View style={s.bodyLeft}>
-              {p.trainingCenterLogoUrl ? (
-                <PdfImage src={p.trainingCenterLogoUrl} style={s.trainingLogo} />
-              ) : p.settings.training_center_logo_url ? (
-                <PdfImage src={p.settings.training_center_logo_url} style={s.trainingLogo} />
-              ) : null}
-            </View>
-
-            <View style={s.bodyCenter}>
-              <Text style={s.studentName}>{p.salutation} {p.studentName}</Text>
-              <Text style={s.bodyLine}>has successfully attended the</Text>
-              <Text style={s.bodyCourse}>{p.courseCode} – {p.courseName}</Text>
-              <Text style={s.bodyLine}>learning at UnSkills Computer Education</Text>
-              <Text style={s.bodyLine}>
-                at <Text style={{ fontWeight: 700 }}>{p.trainingCenterName}</Text>
-              </Text>
-              <Text style={s.bodyLine}>
-                and entitled to all honors and privileges associated with this achievement
-              </Text>
-              <Text style={s.bodyLine}>
-                on <Text style={{ fontWeight: 700 }}>{p.issueDate}</Text> with Secured{' '}
-                <Text style={{ fontWeight: 700 }}>{displayPct}%</Text> marks and achieved Grade{' '}
-                <Text style={{ fontWeight: 700 }}>{p.grade}</Text>
-              </Text>
-
-              {showTyping ? (
-                <View style={s.typingMini}>
-                  <View style={s.typingRow}>
-                    <Text style={s.typingHeadCell}>Subject</Text>
-                    <Text style={s.typingHeadCell}>Speed WPM</Text>
-                    <Text style={s.typingHeadCell}>Max</Text>
-                    <Text style={s.typingHeadCell}>Min</Text>
-                    <Text style={s.typingHeadCellLast}>Obtained</Text>
+                {p.settings.tagline ? (
+                  <View style={s.isoRibbon}>
+                    <Text style={s.isoText}>{p.settings.tagline}</Text>
                   </View>
-                  {p.typingSubjects!.map((t, i) => (
-                    <View key={i} style={s.typingRow}>
-                      <Text style={s.typingCell}>{t.name}</Text>
-                      <Text style={s.typingCell}>{t.speed}</Text>
-                      <Text style={s.typingCell}>{t.max}</Text>
-                      <Text style={s.typingCell}>{t.min}</Text>
-                      <Text style={s.typingCellLast}>{t.obtained}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-
-            <View style={s.bodyRight}>
-              {p.studentPhotoUrl ? (
-                <PdfImage src={p.studentPhotoUrl} style={s.studentPhoto} />
-              ) : (
-                <View style={s.studentPhotoPlaceholder}>
-                  <Text style={{ fontSize: 22, color: '#9CA3AF' }}>
-                    {p.studentName.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          <View style={s.spacer} />
-
-          <View style={s.bottomRow}>
-            <View style={s.bottomLeft}>
-              <Text style={s.certNumLabel}>CERTIFICATE NUMBER</Text>
-              <Text style={s.certNum}>{p.certificateNumber}</Text>
-              <View style={s.qrRow}>
-                {p.qrCodeDataUrl ? (
-                  <PdfImage src={p.qrCodeDataUrl} style={s.qrImg} />
                 ) : null}
-                <View style={s.contactCol}>
-                  {p.settings.contact_email ? (
-                    <Text style={s.contactLine}>{p.settings.contact_email}</Text>
-                  ) : null}
-                  {p.settings.verification_url_base ? (
-                    <Text style={s.contactLine}>
-                      {p.settings.verification_url_base.replace(/^https?:\/\//, '')}
-                    </Text>
-                  ) : null}
+
+                {p.settings.sub_header_line_1 ? <Text style={s.subHeader}>{p.settings.sub_header_line_1}</Text> : null}
+                {p.settings.sub_header_line_2 ? <Text style={s.subHeader}>{p.settings.sub_header_line_2}</Text> : null}
+                {p.settings.sub_header_line_3 ? <Text style={s.subHeader}>{p.settings.sub_header_line_3}</Text> : null}
+
+                <Text style={s.certTitle}>Certificate of Qualification</Text>
+                <TitleDivider width={220} />
+
+                <View style={s.presentedRow}>
+                  <SquareAccent />
+                  <Text style={s.presentedText}>This Certificate Is Proudly Presented To</Text>
+                  <SquareAccent />
                 </View>
+
+                <View style={s.mainRow}>
+                  <View style={s.leftCol}>
+                    {p.trainingCenterLogoUrl ? (
+                      <PdfImage src={p.trainingCenterLogoUrl} style={s.tcLogo} />
+                    ) : p.settings.training_center_logo_url ? (
+                      <PdfImage src={p.settings.training_center_logo_url} style={s.tcLogo} />
+                    ) : null}
+                  </View>
+
+                  <View style={s.centerCol}>
+                    <Text style={s.studentName}>{p.salutation} {p.studentName}</Text>
+                    <Text style={s.bodyLine}>has successfully attended the</Text>
+                    <Text style={s.courseName}>{p.courseCode} – {p.courseName}</Text>
+                    <Text style={s.bodyLine}>
+                      learning at UnSkills Computer Education at{' '}
+                      <Text style={s.bold}>{p.trainingCenterName}</Text>
+                    </Text>
+                    <Text style={s.bodyLine}>
+                      and entitled to all honors and privileges associated with this achievement
+                    </Text>
+                    <Text style={s.bodyLine}>
+                      on <Text style={s.bold}>{p.issueDate}</Text> with Secured{' '}
+                      <Text style={s.bold}>{displayPct}% marks</Text> and achieved Grade{' '}
+                      <Text style={s.bold}>{p.grade}</Text>
+                    </Text>
+
+                    {showTyping ? (
+                      <View style={s.typingMini}>
+                        <View style={s.typingRow}>
+                          <Text style={s.typingHeadCell}>Subject</Text>
+                          <Text style={s.typingHeadCell}>Speed WPM</Text>
+                          <Text style={s.typingHeadCell}>Max</Text>
+                          <Text style={s.typingHeadCell}>Min</Text>
+                          <Text style={s.typingHeadCellLast}>Obtained</Text>
+                        </View>
+                        {p.typingSubjects!.map((t, i) => (
+                          <View key={i} style={s.typingRow}>
+                            <Text style={s.typingCell}>{t.name}</Text>
+                            <Text style={s.typingCell}>{t.speed}</Text>
+                            <Text style={s.typingCell}>{t.max}</Text>
+                            <Text style={s.typingCell}>{t.min}</Text>
+                            <Text style={s.typingCellLast}>{t.obtained}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={s.rightCol}>
+                    {p.studentPhotoUrl ? (
+                      <PdfImage src={p.studentPhotoUrl} style={s.studentPhoto} />
+                    ) : (
+                      <View style={s.studentPhotoPlaceholder}>
+                        <Text style={{ fontSize: 22, color: '#9CA3AF' }}>
+                          {p.studentName.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <View style={s.bottomRow}>
+                  <View style={s.bottomLeft}>
+                    <Text style={s.certNumLabel}>CERTIFICATE NUMBER</Text>
+                    <Text style={s.certNumValue}>{p.certificateNumber}</Text>
+                    <View style={s.qrRow}>
+                      {p.qrCodeDataUrl ? <PdfImage src={p.qrCodeDataUrl} style={s.qr} /> : null}
+                      <View style={s.contactBlock}>
+                        {p.settings.contact_email ? <Text style={s.contactLine}>{p.settings.contact_email}</Text> : null}
+                        {p.settings.verification_url_base ? (
+                          <Text style={s.contactLine}>
+                            {p.settings.verification_url_base.replace(/^https?:\/\//, '')}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={s.bottomCenter}>
+                    {logoUrls.slice(0, 5).map((url, i) => (
+                      <PdfImage key={i} src={url} style={s.partnerLogo} />
+                    ))}
+                  </View>
+
+                  <View style={s.bottomRight}>
+                    {p.settings.signature_image_url ? (
+                      <PdfImage src={p.settings.signature_image_url} style={s.signature} />
+                    ) : (
+                      <View style={{ height: 28 }} />
+                    )}
+                    <View style={s.sigLine} />
+                    <Text style={s.sigTitle}>
+                      {p.settings.signatory_designation || 'Chief Executive Officer'}
+                    </Text>
+                    {p.settings.signatory_company_line ? (
+                      <Text style={s.sigCompany}>{p.settings.signatory_company_line}</Text>
+                    ) : null}
+                    {p.settings.signatory_reg_line ? (
+                      <Text style={s.sigReg}>{p.settings.signatory_reg_line}</Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                {logoUrls.length > 0 ? (
+                  <View style={s.badgeStrip}>
+                    {logoUrls.slice(0, 7).map((url, i) => (
+                      <PdfImage key={i} src={url} style={s.badge} />
+                    ))}
+                  </View>
+                ) : null}
+
+                {p.settings.verification_url_base ? (
+                  <Text style={s.footer}>
+                    To verify this certificate visit: {p.settings.verification_url_base}
+                  </Text>
+                ) : null}
               </View>
             </View>
-
-            <View style={s.bottomCenter}>
-              <View style={s.partnerRow}>
-                {logoUrls.slice(0, 5).map((url, i) => (
-                  <PdfImage key={i} src={url} style={s.partnerLogo} />
-                ))}
-              </View>
-            </View>
-
-            <View style={s.bottomRight}>
-              {p.settings.signature_image_url ? (
-                <PdfImage src={p.settings.signature_image_url} style={s.sigImg} />
-              ) : (
-                <View style={{ height: 30 }} />
-              )}
-              <View style={s.sigHLine} />
-              <Text style={s.sigTitle}>
-                {p.settings.signatory_designation || 'Chief Executive Officer'}
-              </Text>
-              {p.settings.signatory_company_line ? (
-                <Text style={s.sigCompany}>{p.settings.signatory_company_line}</Text>
-              ) : null}
-              {p.settings.signatory_reg_line ? (
-                <Text style={s.sigReg}>{p.settings.signatory_reg_line}</Text>
-              ) : null}
-            </View>
-          </View>
-
-          {logoUrls.length > 0 ? (
-            <View style={s.certStrip}>
-              {logoUrls.slice(0, 7).map((url, i) => (
-                <PdfImage key={i} src={url} style={s.certLogo} />
-              ))}
-            </View>
-          ) : null}
-
-          <View style={s.footer}>
-            <Text style={s.footerText}>
-              {p.settings.verification_url_base
-                ? `To verify this certificate visit: ${p.settings.verification_url_base}`
-                : ''}
-            </Text>
           </View>
         </View>
       </Page>
@@ -366,6 +458,6 @@ export function CertificateOfQualification(p: CertificateOfQualificationProps) {
 export async function buildCertificateOfQualificationBlob(
   p: CertificateOfQualificationProps,
 ): Promise<Blob> {
-  registerPdfFonts()
+  registerPDFFonts()
   return await pdf(<CertificateOfQualification {...p} />).toBlob()
 }

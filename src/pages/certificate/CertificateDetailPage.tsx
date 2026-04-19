@@ -42,8 +42,6 @@ export default function CertificateDetailPage() {
   const [certLogos, setCertLogos] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
-  const [bgLoaded, setBgLoaded] = useState(false)
-  const [bgError, setBgError] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [revoking, setRevoking] = useState(false)
@@ -52,22 +50,8 @@ export default function CertificateDetailPage() {
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  // Mount guard — PDFViewer must not render during SSR / before browser APIs are ready
+  // Mount guard — defer iframe render until after first client mount
   useEffect(() => { setMounted(true) }, [])
-
-  // Preload both certificate background PNGs so PDFViewer never hits a missing image
-  useEffect(() => {
-    let cancelled = false
-    Promise.all(['/Landscape.png', '/Portrait.png'].map(src => new Promise<void>((resolve, reject) => {
-      const img = new window.Image()
-      img.onload = () => resolve()
-      img.onerror = () => reject(new Error(`Failed to load ${src}`))
-      img.src = src
-    })))
-      .then(() => { if (!cancelled) setBgLoaded(true) })
-      .catch(() => { if (!cancelled) setBgError(true) })
-    return () => { cancelled = true }
-  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -102,7 +86,7 @@ export default function CertificateDetailPage() {
   // Build preview blob once data + background are ready. Same blob builders
   // used for download — guaranteed parity between preview and download.
   useEffect(() => {
-    if (!mounted || !bgLoaded || loading || !cert || !settings) return
+    if (!mounted || loading || !cert || !settings) return
     let revokedUrl: string | null = null
     let cancelled = false
     ;(async () => {
@@ -161,7 +145,7 @@ export default function CertificateDetailPage() {
       cancelled = true
       if (revokedUrl) URL.revokeObjectURL(revokedUrl)
     }
-  }, [mounted, bgLoaded, loading, cert, settings, certLogos])
+  }, [mounted, loading, cert, settings, certLogos])
 
   async function handleDownload(c: CertificateRow, s: CertificateSettings, logos: string[] = certLogos) {
     try {
@@ -262,18 +246,6 @@ export default function CertificateDetailPage() {
       toast.error(e instanceof Error ? e.message : 'Failed to delete')
       setDeleting(false)
     }
-  }
-
-  if (bgError) {
-    return (
-      <div className="p-6 bg-red-50 border border-red-200 rounded-xl text-sm text-red-800 max-w-xl mx-auto mt-8">
-        <strong>Certificate background failed to load.</strong>
-        <p className="mt-1 text-xs">
-          Ensure <code className="bg-white px-1 rounded">/public/Landscape.png</code> and{' '}
-          <code className="bg-white px-1 rounded">/public/Portrait.png</code> exist and are deployed.
-        </p>
-      </div>
-    )
   }
 
   if (loading || !cert || !settings) {
