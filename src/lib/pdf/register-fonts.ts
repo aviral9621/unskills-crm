@@ -14,7 +14,7 @@ export const FONTS = {
 let registered = false
 
 /** Idempotent synchronous registration. Safe to call multiple times. */
-export function registerPdfFonts(): void {
+export function registerPDFFonts(): void {
   if (registered) return
 
   Font.register({
@@ -35,12 +35,13 @@ export function registerPdfFonts(): void {
     src: '/fonts/ArchivoBlack-Regular.ttf',
   })
 
-  // Disable hyphenation — @react-pdf's default can split words awkwardly
   Font.registerHyphenationCallback(word => [word])
 
   registered = true
 }
 
-// Register immediately at module load. Any file that imports from this
-// module triggers registration before the PDFViewer / pdf() sees a component.
-registerPdfFonts()
+// Backward-compat alias for existing callers
+export const registerPdfFonts = registerPDFFonts
+
+// Register immediately at module load
+registerPDFFonts()
