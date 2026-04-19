@@ -1,23 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { PDFViewer } from '@react-pdf/renderer'
 import { ArrowLeft, Loader2, Download, Ban, RefreshCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { getCertificateSettings } from '../../lib/certificateSettings'
 import { registerPdfFonts } from '../../lib/pdf/register-fonts'
-import {
-  CertificateOfQualification,
-  buildCertificateOfQualificationBlob,
-} from '../../lib/pdf/certificate-qualification'
+import { buildCertificateOfQualificationBlob } from '../../lib/pdf/certificate-qualification'
+import { buildComputerBasedTypingBlob } from '../../lib/pdf/certificate-typing'
 
-// Register PDF fonts at module-load so <PDFViewer> has them ready on first mount
+// Register PDF fonts at module-load so any downstream pdf() call has them ready
 registerPdfFonts()
-import {
-  ComputerBasedTypingCertificate,
-  buildComputerBasedTypingBlob,
-} from '../../lib/pdf/certificate-typing'
 import { toDataUrl } from '../../lib/pdf/marksheet'
 import { formatDateDDMMYYYY } from '../../lib/utils'
 import type { Certificate, CertificateSettings } from '../../types/certificate'
@@ -51,6 +44,8 @@ export default function CertificateDetailPage() {
   const [mounted, setMounted] = useState(false)
   const [bgLoaded, setBgLoaded] = useState(false)
   const [bgError, setBgError] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const [revoking, setRevoking] = useState(false)
   const [showRevoke, setShowRevoke] = useState(false)
   const [revokeReason, setRevokeReason] = useState('')
@@ -103,6 +98,70 @@ export default function CertificateDetailPage() {
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // Build preview blob once data + background are ready. Same blob builders
+  // used for download — guaranteed parity between preview and download.
+  useEffect(() => {
+    if (!mounted || !bgLoaded || loading || !cert || !settings) return
+    let revokedUrl: string | null = null
+    let cancelled = false
+    ;(async () => {
+      try {
+        const slug = cert.template?.slug
+        const formattedDate = formatDateDDMMYYYY(cert.issue_date)
+        const blob = slug === 'certificate-of-qualification'
+          ? await buildCertificateOfQualificationBlob({
+              settings,
+              certificateNumber: cert.certificate_number,
+              issueDate: formattedDate,
+              qrCodeDataUrl: cert.qr_code_data_url ?? '',
+              salutation: cert.salutation ?? '',
+              studentName: cert.student_name,
+              fatherPrefix: cert.father_prefix ?? '',
+              fatherName: cert.father_name ?? '',
+              studentPhotoUrl: cert.student_photo_url,
+              courseLevel: cert.course_level ?? undefined,
+              courseCode: cert.course_code ?? '',
+              courseName: cert.course_name ?? '',
+              trainingCenterName: cert.training_center_name ?? '',
+              performanceText: cert.performance_text ?? '',
+              marksScored: cert.marks_scored ?? 0,
+              grade: cert.grade ?? '',
+              typingSubjects: cert.typing_subjects,
+              trainingCenterLogoUrl: cert.branch?.center_logo_url ?? null,
+              certificationLogoUrls: certLogos,
+            })
+          : await buildComputerBasedTypingBlob({
+              settings,
+              certificateNumber: cert.certificate_number,
+              issueDate: formattedDate,
+              qrCodeDataUrl: cert.qr_code_data_url ?? '',
+              salutation: cert.salutation ?? undefined,
+              studentName: cert.student_name,
+              fatherPrefix: cert.father_prefix ?? '',
+              fatherName: cert.father_name ?? '',
+              studentPhotoUrl: cert.student_photo_url,
+              enrollmentNumber: cert.enrollment_number ?? '',
+              trainingCenterCode: cert.training_center_code ?? '',
+              trainingCenterName: cert.training_center_name ?? '',
+              trainingCenterLogoUrl: cert.branch?.center_logo_url ?? null,
+              typingSubjects: cert.typing_subjects ?? [],
+              grade: cert.typing_grade ?? cert.grade ?? '',
+              certificationLogoUrls: certLogos,
+            })
+        if (cancelled) return
+        const url = URL.createObjectURL(blob)
+        revokedUrl = url
+        setPreviewUrl(url)
+      } catch (e) {
+        if (!cancelled) setPreviewError(e instanceof Error ? e.message : 'Preview failed')
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (revokedUrl) URL.revokeObjectURL(revokedUrl)
+    }
+  }, [mounted, bgLoaded, loading, cert, settings, certLogos])
 
   async function handleDownload(c: CertificateRow, s: CertificateSettings, logos: string[] = certLogos) {
     try {
@@ -225,52 +284,7 @@ export default function CertificateDetailPage() {
     )
   }
 
-  const isHorizontal = cert.template?.slug === 'certificate-of-qualification'
   const formattedDate = formatDateDDMMYYYY(cert.issue_date)
-  const ready = mounted && bgLoaded && !loading && !!cert && !!settings
-
-  const pdfComponent = isHorizontal ? (
-    <CertificateOfQualification
-      settings={settings}
-      certificateNumber={cert.certificate_number}
-      issueDate={formattedDate}
-      qrCodeDataUrl={cert.qr_code_data_url ?? ''}
-      salutation={cert.salutation ?? ''}
-      studentName={cert.student_name}
-      fatherPrefix={cert.father_prefix ?? ''}
-      fatherName={cert.father_name ?? ''}
-      studentPhotoUrl={cert.student_photo_url}
-      courseLevel={cert.course_level ?? undefined}
-      courseCode={cert.course_code ?? ''}
-      courseName={cert.course_name ?? ''}
-      trainingCenterName={cert.training_center_name ?? ''}
-      performanceText={cert.performance_text ?? ''}
-      marksScored={cert.marks_scored ?? 0}
-      grade={cert.grade ?? ''}
-      typingSubjects={cert.typing_subjects}
-      trainingCenterLogoUrl={cert.branch?.center_logo_url ?? null}
-      certificationLogoUrls={certLogos}
-    />
-  ) : (
-    <ComputerBasedTypingCertificate
-      settings={settings}
-      certificateNumber={cert.certificate_number}
-      issueDate={formattedDate}
-      qrCodeDataUrl={cert.qr_code_data_url ?? ''}
-      salutation={cert.salutation ?? undefined}
-      studentName={cert.student_name}
-      fatherPrefix={cert.father_prefix ?? ''}
-      fatherName={cert.father_name ?? ''}
-      studentPhotoUrl={cert.student_photo_url}
-      enrollmentNumber={cert.enrollment_number ?? ''}
-      trainingCenterCode={cert.training_center_code ?? ''}
-      trainingCenterName={cert.training_center_name ?? ''}
-      trainingCenterLogoUrl={cert.branch?.center_logo_url ?? null}
-      typingSubjects={cert.typing_subjects ?? []}
-      grade={cert.typing_grade ?? cert.grade ?? ''}
-      certificationLogoUrls={certLogos}
-    />
-  )
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -329,14 +343,21 @@ export default function CertificateDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 border border-gray-200 rounded-xl overflow-hidden bg-white" style={{ height: 800 }}>
-          {ready ? (
-            <PDFViewer width="100%" height="800px" showToolbar>
-              {pdfComponent}
-            </PDFViewer>
+          {previewError ? (
+            <div className="h-full flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
+              <span className="text-sm font-semibold text-red-700">Preview failed</span>
+              <span className="text-xs text-gray-600 mt-1">{previewError}</span>
+            </div>
+          ) : previewUrl ? (
+            <iframe
+              src={`${previewUrl}#toolbar=0&navpanes=0&view=FitH`}
+              title="Certificate preview"
+              style={{ width: '100%', height: '100%', border: 'none' }}
+            />
           ) : (
             <div className="h-full flex items-center justify-center bg-gray-50">
               <Loader2 className="animate-spin text-red-600 mr-2" />
-              <span className="text-sm text-gray-500">Loading certificate…</span>
+              <span className="text-sm text-gray-500">Generating certificate…</span>
             </div>
           )}
         </div>
