@@ -110,6 +110,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
           { label: 'Newsletters', path: '/admin/website/newsletters', permission: 'website.newsletter' },
         ],
       },
+      { label: 'Announcements', icon: MessageSquare, path: '/admin/announcements' },
     ],
   },
 ]

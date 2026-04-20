@@ -167,7 +167,7 @@ export function FWalletReportPage() {
 function Table({ cols, rows }: { cols: string[]; rows: Array<Array<string | number>> }) {
   return (
     <div className="rounded-xl border bg-white overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm min-w-[560px]">
         <thead className="bg-gray-50 text-left text-xs font-semibold uppercase text-gray-500">
           <tr>{cols.map(c => <th key={c} className="px-4 py-3">{c}</th>)}</tr>
         </thead>

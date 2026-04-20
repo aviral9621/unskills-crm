@@ -59,16 +59,18 @@ export default function WalletRequestsPage() {
         {rows.length === 0 ? (
           <div className="rounded-xl border bg-white p-10 text-center text-sm text-gray-400">No {tab} requests.</div>
         ) : rows.map(r => (
-          <div key={r.id} className="rounded-xl border bg-white p-4 grid sm:grid-cols-[1fr_auto] gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <p className="font-semibold">{r.branch?.name}</p>
+          <div key={r.id} className="rounded-xl border bg-white p-3 sm:p-4 grid sm:grid-cols-[1fr_auto] gap-3 sm:gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <p className="font-semibold break-words">{r.branch?.name}</p>
                 <span className="text-xs font-mono text-gray-400">{r.branch?.code}</span>
-                <span className="ml-auto text-xs text-gray-400">{formatDateDDMMYYYY(r.created_at)}</span>
+                <span className="ml-auto text-xs text-gray-400 whitespace-nowrap">{formatDateDDMMYYYY(r.created_at)}</span>
               </div>
-              <p className="text-2xl font-bold text-red-600">{formatINR(r.amount)}</p>
-              <div className="mt-1 text-sm text-gray-600">
-                <span className="font-mono">{r.transaction_id}</span> · <span className="capitalize">{r.payment_mode.replace('_', ' ')}</span>
+              <p className="text-xl sm:text-2xl font-bold text-red-600">{formatINR(r.amount)}</p>
+              <div className="mt-1 text-sm text-gray-600 break-words">
+                {r.transaction_id && <span className="font-mono break-all">{r.transaction_id}</span>}
+                {r.transaction_id && ' · '}
+                <span className="capitalize">{r.payment_mode.replace('_', ' ')}</span>
               </div>
               {r.note && <p className="text-xs text-gray-500 mt-1">{r.note}</p>}
               {r.review_note && <p className="text-xs text-red-600 mt-1">Review: {r.review_note}</p>}

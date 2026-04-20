@@ -4,6 +4,7 @@ import {
   LayoutDashboard, GraduationCap, BookOpen, Wallet, IndianRupee,
   FileText, IdCard, ClipboardList, ScrollText, Briefcase, Megaphone,
   LifeBuoy, BarChart3, Settings, UserCircle, ChevronDown, LogOut, X,
+  Bell,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '../../lib/utils'
@@ -66,6 +67,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
     items: [
       { label: 'Jobs', icon: Briefcase, path: '/franchise/jobs' },
       { label: 'Promotions', icon: Megaphone, path: '/franchise/promotions' },
+      { label: 'Announcements', icon: Bell, path: '/franchise/announcements' },
     ],
   },
   {

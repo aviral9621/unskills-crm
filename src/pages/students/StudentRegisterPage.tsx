@@ -323,10 +323,22 @@ export default function StudentRegisterPage() {
         // Record registration fee payment
         if (form.registration_fee > 0 && newStudent) {
           await supabase.from('uce_student_fee_payments').insert({
-            student_id: newStudent.id, amount: form.registration_fee,
+            student_id: newStudent.id, branch_id: effectiveBranchId, amount: form.registration_fee,
             payment_date: new Date().toISOString().split('T')[0], payment_mode: 'cash',
-            note: 'Registration fee', recorded_by: user?.id || null,
+            note: 'Registration fee', recorded_by: user?.id || null, status: 'confirmed',
           })
+        }
+
+        // Create Supabase auth account for student (reg_no + phone).
+        // Non-blocking — if it fails we keep the student row and warn.
+        if (newStudent) {
+          const { error: fnErr } = await supabase.functions.invoke('create-student-auth', {
+            body: { student_id: newStudent.id },
+          })
+          if (fnErr) {
+            console.warn('create-student-auth failed', fnErr)
+            toast.warning('Student saved, but login account could not be created. Contact admin.')
+          }
         }
 
         toast.success('Student registered successfully')
