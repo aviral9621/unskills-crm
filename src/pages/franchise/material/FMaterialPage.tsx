@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, FileText, Download, Trash2, Loader2, Upload } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
-import { uploadPublicFile } from '../../../lib/uploads'
+import { uploadPublicFile, deletePublicFile } from '../../../lib/uploads'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useBranchId } from '../../../lib/franchise'
 import Modal from '../../../components/Modal'
@@ -59,7 +59,9 @@ export default function FMaterialPage() {
 
   async function remove(id: string) {
     if (!confirm('Delete this material?')) return
+    const row = rows.find(r => r.id === id)
     await supabase.from('uce_study_materials').update({ is_active: false }).eq('id', id)
+    if (row?.file_url) void deletePublicFile(row.file_url)
     load()
   }
 

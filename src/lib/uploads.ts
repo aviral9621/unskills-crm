@@ -60,3 +60,32 @@ export async function uploadPublicFile(
 export function isBlobUrl(u: string | null | undefined): boolean {
   return !!u && u.startsWith('blob:')
 }
+
+const R2_PUBLIC_PREFIX = 'https://pub-96afa465e90c4f5caa4a35d8f5993259.r2.dev/'
+
+/** True if the URL points to our Cloudflare R2 bucket. */
+export function isR2Url(u: string | null | undefined): boolean {
+  return !!u && u.startsWith(R2_PUBLIC_PREFIX)
+}
+
+/**
+ * Delete a file from R2 by its public URL. No-ops silently for non-R2 URLs
+ * or null/undefined — safe to call unconditionally with any stored URL.
+ */
+export async function deletePublicFile(url: string | null | undefined): Promise<void> {
+  if (!isR2Url(url)) return
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return
+
+  const key = url!.slice(R2_PUBLIC_PREFIX.length)
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+  await fetch(`${supabaseUrl}/functions/v1/r2-upload`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ key }),
+  })
+  // Silently swallow errors — DB cleanup is the source of truth
+}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, Trash2, Loader2, Upload } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { uploadPublicFile } from '../../lib/uploads'
+import { uploadPublicFile, deletePublicFile } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatDateDDMMYYYY } from '../../lib/utils'
 import Modal from '../../components/Modal'
@@ -49,7 +49,9 @@ export default function AdminPromotionsPage() {
   }
   async function remove(id: string) {
     if (!confirm('Delete permanently?')) return
+    const row = rows.find(r => r.id === id)
     await supabase.from('uce_promotional_materials').delete().eq('id', id)
+    if (row?.file_url) void deletePublicFile(row.file_url)
     load()
   }
 

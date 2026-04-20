@@ -7,7 +7,7 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { supabase } from '../../lib/supabase'
-import { uploadPublicFile } from '../../lib/uploads'
+import { uploadPublicFile, deletePublicFile } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '../../lib/utils'
 import DataTable from '../../components/DataTable'
@@ -146,6 +146,7 @@ export default function MaterialListPage() {
     try {
       const { error } = await supabase.from('uce_study_materials').delete().eq('id', deleteTarget.id)
       if (error) throw error
+      void deletePublicFile(deleteTarget.file_url)
       setMaterials(prev => prev.filter(m => m.id !== deleteTarget.id))
       setDeleteTarget(null)
       toast.success('Material deleted')
