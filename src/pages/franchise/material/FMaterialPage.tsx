@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, FileText, Download, Trash2, Loader2, Upload } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import { uploadPublicFile } from '../../../lib/uploads'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useBranchId } from '../../../lib/franchise'
 import Modal from '../../../components/Modal'
@@ -43,9 +44,7 @@ export default function FMaterialPage() {
     setSaving(true)
     try {
       const path = `${branchId}/${Date.now()}-${file.name}`
-      const up = await supabase.storage.from('promotions').upload(path, file)
-      if (up.error) throw up.error
-      const { data: { publicUrl } } = supabase.storage.from('promotions').getPublicUrl(path)
+      const publicUrl = await uploadPublicFile('promotions', path, file)
       const { error } = await supabase.from('uce_study_materials').insert({
         title, description: desc || null, course_id: courseId, file_url: publicUrl,
         file_name: file.name, file_size: file.size, uploaded_by: user?.id || null,

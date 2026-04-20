@@ -1,47 +1,59 @@
 /**
  * Centralised file-upload helpers.
  *
- * Keeps bucket names in ONE place so we never drift again (e.g. we had
- * `uce-student-photos` in code while the actual bucket is
- * `student-photos`, which silently failed uploads and caused blob URLs
- * to be stored as `photo_url`).
+ * All uploads go to Cloudflare R2 via the `r2-upload` Supabase Edge Function.
+ * The bucket/path scheme is preserved: key = `{bucket}/{path}` so folder
+ * structure stays identical to the old Supabase Storage layout.
  *
- * When we switch to Cloudflare R2, this file is the only place that
- * changes — call-sites stay the same.
+ * Call-sites are unchanged — they still call uploadPublicFile(bucket, path, file).
  */
 import { supabase } from './supabase'
 
 export const STORAGE_BUCKETS = {
   studentPhotos: 'student-photos',
-  avatars:       'avatars',        // director / staff / user avatars
-  branchAssets:  'branch-assets',  // logos, other branch files
+  avatars:       'avatars',
+  branchAssets:  'branch-assets',
   employees:     'employee-files',
   examAssets:    'exam-assets',
   expenses:      'expense-receipts',
   studyMaterials:'study-materials',
   website:       'website-assets',
-  documents:     'documents',      // generic public docs (syllabus, etc.)
-  certificateAssets: 'certificate-assets', // logos / signatures for certificate PDFs
+  documents:     'documents',
+  certificateAssets: 'certificate-assets',
+  promotions:    'promotions',
+  walletRequests:'wallet-requests',
 } as const
 
-/** Upload a file and return its PUBLIC URL. Throws on any failure. */
+/** Upload a file to Cloudflare R2 and return its PUBLIC URL. Throws on failure. */
 export async function uploadPublicFile(
   bucket: string,
   path: string,
   file: File,
-  opts: { upsert?: boolean } = {}
+  _opts: { upsert?: boolean } = {}
 ): Promise<string> {
-  const { data, error } = await supabase.storage.from(bucket).upload(path, file, {
-    upsert: opts.upsert ?? true,
-    contentType: file.type || 'application/octet-stream',
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Not authenticated')
+
+  const key = `${bucket}/${path}`
+  const form = new FormData()
+  form.append('file', file)
+  form.append('key', key)
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+  const res = await fetch(`${supabaseUrl}/functions/v1/r2-upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: form,
   })
-  if (error) {
-    // Surface the real reason so users/devs can fix it instead of silently
-    // storing a blob: URL that vanishes on navigation.
-    throw new Error(`Upload to ${bucket} failed: ${error.message}`)
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Upload to R2 failed (${res.status}): ${body}`)
   }
-  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path)
-  return urlData.publicUrl
+
+  const json = await res.json() as { url?: string; error?: string }
+  if (!json.url) throw new Error(`Upload to R2 failed: ${json.error ?? 'no url returned'}`)
+  return json.url
 }
 
 /** True if the URL is a transient in-memory blob (unsafe to persist). */

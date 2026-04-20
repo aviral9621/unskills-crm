@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, Trash2, Loader2, Upload } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { uploadPublicFile } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatDateDDMMYYYY } from '../../lib/utils'
 import Modal from '../../components/Modal'
@@ -31,9 +32,7 @@ export default function AdminPromotionsPage() {
     setSaving(true)
     try {
       const path = `${Date.now()}-${file.name}`
-      const up = await supabase.storage.from('promotions').upload(path, file)
-      if (up.error) throw up.error
-      const { data: { publicUrl } } = supabase.storage.from('promotions').getPublicUrl(path)
+      const publicUrl = await uploadPublicFile('promotions', path, file)
       const { error } = await supabase.from('uce_promotional_materials').insert({
         title, description: desc || null, file_url: publicUrl, file_name: file.name,
         file_type: file.type, uploaded_by: user?.id || null, is_active: true,
