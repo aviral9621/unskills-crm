@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { PDFViewer } from '@react-pdf/renderer'
 import { ArrowLeft, ArrowRight, Search, Loader2, Check, Plus, Trash2, FileDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -11,21 +10,10 @@ import {
   listCertificateTemplates,
   listCourseMappings,
 } from '../../lib/certificateSettings'
-import {
-  CertificateOfQualification,
-  buildCertificateOfQualificationBlob,
-} from '../../lib/pdf/certificate-qualification'
-import {
-  ComputerBasedTypingCertificate,
-  buildComputerBasedTypingBlob,
-} from '../../lib/pdf/certificate-typing'
+import { generateLandscapeBlob, generatePortraitBlob } from '../../lib/pdf/cert-generator'
 import { generateQRDataUrl } from '../../lib/pdf/generate-qr'
-import { registerPdfFonts } from '../../lib/pdf/register-fonts'
 import { toDataUrl } from '../../lib/pdf/marksheet'
 import { formatDateDDMMYYYY } from '../../lib/utils'
-
-// Register PDF fonts at module-load so <PDFViewer> has them ready on first mount
-registerPdfFonts()
 import type {
   CertificateSettings,
   CertificateTemplate,
@@ -273,7 +261,7 @@ export default function IssueCertificatePage() {
       // Build + download PDF
       let blob: Blob
       if (isHorizontal) {
-        blob = await buildCertificateOfQualificationBlob({
+        blob = await generateLandscapeBlob({
           settings,
           certificateNumber: certNumber,
           issueDate: formattedDate,
@@ -283,19 +271,17 @@ export default function IssueCertificatePage() {
           fatherPrefix,
           fatherName,
           studentPhotoUrl: student.photo_url,
-          courseLevel,
           courseCode,
           courseName,
           trainingCenterName,
           performanceText,
-          marksScored,
+          percentage: marksScored,
           grade,
-          typingSubjects: showTyping ? typingSubjects : null,
           trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
           certificationLogoUrls: certLogos,
         })
       } else {
-        blob = await buildComputerBasedTypingBlob({
+        blob = await generatePortraitBlob({
           settings,
           certificateNumber: certNumber,
           issueDate: formattedDate,
@@ -563,52 +549,27 @@ export default function IssueCertificatePage() {
       {step === 4 && student && settings && selectedTemplate && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 space-y-3">
           <p className="text-sm font-medium text-gray-700">Preview & confirm</p>
-          <div className="h-[600px] border border-gray-200 rounded-lg overflow-hidden">
-            <PDFViewer width="100%" height="100%" showToolbar={false}>
-              {selectedTemplate.slug === 'certificate-of-qualification' ? (
-                <CertificateOfQualification
-                  settings={settings}
-                  certificateNumber="PREVIEW"
-                  issueDate={formatDateDDMMYYYY(issueDate)}
-                  qrCodeDataUrl={qrPreview}
-                  salutation={salutation}
-                  studentName={studentName}
-                  fatherPrefix={fatherPrefix}
-                  fatherName={fatherName}
-                  studentPhotoUrl={student.photo_url}
-                  courseLevel={courseLevel}
-                  courseCode={courseCode}
-                  courseName={courseName}
-                  trainingCenterName={trainingCenterName}
-                  performanceText={performanceText}
-                  marksScored={marksScored}
-                  grade={grade}
-                  typingSubjects={selectedMapping?.show_typing_fields ? typingSubjects : null}
-                  trainingCenterLogoUrl={student.branch?.center_logo_url ?? null}
-                  certificationLogoUrls={certLogos}
-                />
-              ) : (
-                <ComputerBasedTypingCertificate
-                  settings={settings}
-                  certificateNumber="PREVIEW"
-                  issueDate={formatDateDDMMYYYY(issueDate)}
-                  qrCodeDataUrl={qrPreview}
-                  salutation={salutation}
-                  studentName={studentName}
-                  fatherPrefix={fatherPrefix}
-                  fatherName={fatherName}
-                  studentPhotoUrl={student.photo_url}
-                  enrollmentNumber={enrollmentNumber}
-                  trainingCenterCode={trainingCenterCode}
-                  trainingCenterName={trainingCenterName}
-                  trainingCenterLogoUrl={student.branch?.center_logo_url ?? null}
-                  typingSubjects={typingSubjects}
-                  grade={grade}
-                  certificationLogoUrls={certLogos}
-                />
-              )}
-            </PDFViewer>
-          </div>
+          <StepFourPreview
+            settings={settings}
+            student={student}
+            selectedTemplate={selectedTemplate}
+            salutation={salutation}
+            studentName={studentName}
+            fatherPrefix={fatherPrefix}
+            fatherName={fatherName}
+            issueDate={issueDate}
+            courseCode={courseCode}
+            courseName={courseName}
+            trainingCenterName={trainingCenterName}
+            performanceText={performanceText}
+            marksScored={marksScored}
+            grade={grade}
+            enrollmentNumber={enrollmentNumber}
+            trainingCenterCode={trainingCenterCode}
+            typingSubjects={typingSubjects}
+            qrPreview={qrPreview}
+            certLogos={certLogos}
+          />
           <div className="flex justify-between pt-2">
             <button onClick={() => setStep(3)} className="text-sm text-gray-500 hover:text-red-600">
               Back to Edit
@@ -626,6 +587,80 @@ export default function IssueCertificatePage() {
               Confirm &amp; Issue
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StepFourPreview({
+  settings, student, selectedTemplate,
+  salutation, studentName, fatherPrefix, fatherName, issueDate,
+  courseCode, courseName, trainingCenterName, performanceText, marksScored, grade,
+  enrollmentNumber, trainingCenterCode, typingSubjects, qrPreview, certLogos,
+}: {
+  settings: CertificateSettings
+  student: StudentRow
+  selectedTemplate: CertificateTemplate
+  salutation: string; studentName: string; fatherPrefix: string; fatherName: string; issueDate: string
+  courseCode: string; courseName: string; trainingCenterName: string; performanceText: string
+  marksScored: number; grade: string; enrollmentNumber: string; trainingCenterCode: string
+  typingSubjects: TypingSubject[]; qrPreview: string; certLogos: string[]
+}) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const urlRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const isH = selectedTemplate.slug === 'certificate-of-qualification'
+        const blob = isH
+          ? await generateLandscapeBlob({
+              settings, certificateNumber: 'PREVIEW',
+              issueDate: formatDateDDMMYYYY(issueDate), qrCodeDataUrl: qrPreview,
+              salutation, studentName, fatherPrefix, fatherName,
+              studentPhotoUrl: student.photo_url, courseCode, courseName,
+              trainingCenterName, performanceText, percentage: marksScored, grade,
+              trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
+              certificationLogoUrls: certLogos,
+            })
+          : await generatePortraitBlob({
+              settings, certificateNumber: 'PREVIEW',
+              issueDate: formatDateDDMMYYYY(issueDate), qrCodeDataUrl: qrPreview,
+              salutation, studentName, fatherPrefix, fatherName,
+              studentPhotoUrl: student.photo_url, enrollmentNumber,
+              trainingCenterCode, trainingCenterName, typingSubjects, grade,
+              trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
+              certificationLogoUrls: certLogos,
+            })
+        if (cancelled) return
+        const newUrl = URL.createObjectURL(blob)
+        if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+        urlRef.current = newUrl
+        setUrl(newUrl)
+        setErr(null)
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof Error ? e.message : 'Preview failed')
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className="h-[600px] border border-gray-200 rounded-lg overflow-hidden">
+      {err ? (
+        <div className="h-full flex items-center justify-center text-sm text-red-600 p-4 text-center bg-gray-50">{err}</div>
+      ) : url ? (
+        <iframe src={`${url}#toolbar=0&navpanes=0&view=FitH`} title="Preview" style={{ width: '100%', height: '100%', border: 'none' }} />
+      ) : (
+        <div className="h-full flex items-center justify-center bg-gray-50 text-sm text-gray-500">
+          <Loader2 size={16} className="animate-spin mr-2" /> Generating preview…
         </div>
       )}
     </div>

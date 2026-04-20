@@ -5,12 +5,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { getCertificateSettings } from '../../lib/certificateSettings'
-import { registerPdfFonts } from '../../lib/pdf/register-fonts'
-import { buildCertificateOfQualificationBlob } from '../../lib/pdf/certificate-qualification'
-import { buildComputerBasedTypingBlob } from '../../lib/pdf/certificate-typing'
-
-// Register PDF fonts at module-load so any downstream pdf() call has them ready
-registerPdfFonts()
+import { generateLandscapeBlob, generatePortraitBlob } from '../../lib/pdf/cert-generator'
 import { toDataUrl } from '../../lib/pdf/marksheet'
 import { formatDateDDMMYYYY } from '../../lib/utils'
 import type { Certificate, CertificateSettings } from '../../types/certificate'
@@ -94,7 +89,7 @@ export default function CertificateDetailPage() {
         const slug = cert.template?.slug
         const formattedDate = formatDateDDMMYYYY(cert.issue_date)
         const blob = slug === 'certificate-of-qualification'
-          ? await buildCertificateOfQualificationBlob({
+          ? await generateLandscapeBlob({
               settings,
               certificateNumber: cert.certificate_number,
               issueDate: formattedDate,
@@ -104,18 +99,16 @@ export default function CertificateDetailPage() {
               fatherPrefix: cert.father_prefix ?? '',
               fatherName: cert.father_name ?? '',
               studentPhotoUrl: cert.student_photo_url,
-              courseLevel: cert.course_level ?? undefined,
               courseCode: cert.course_code ?? '',
               courseName: cert.course_name ?? '',
               trainingCenterName: cert.training_center_name ?? '',
               performanceText: cert.performance_text ?? '',
-              marksScored: cert.marks_scored ?? 0,
+              percentage: cert.marks_scored ?? 0,
               grade: cert.grade ?? '',
-              typingSubjects: cert.typing_subjects,
               trainingCenterLogoUrl: cert.branch?.center_logo_url ?? null,
               certificationLogoUrls: certLogos,
             })
-          : await buildComputerBasedTypingBlob({
+          : await generatePortraitBlob({
               settings,
               certificateNumber: cert.certificate_number,
               issueDate: formattedDate,
@@ -153,7 +146,7 @@ export default function CertificateDetailPage() {
       const formattedDate = formatDateDDMMYYYY(c.issue_date)
       let blob: Blob
       if (slug === 'certificate-of-qualification') {
-        blob = await buildCertificateOfQualificationBlob({
+        blob = await generateLandscapeBlob({
           settings: s,
           certificateNumber: c.certificate_number,
           issueDate: formattedDate,
@@ -163,19 +156,17 @@ export default function CertificateDetailPage() {
           fatherPrefix: c.father_prefix ?? '',
           fatherName: c.father_name ?? '',
           studentPhotoUrl: c.student_photo_url,
-          courseLevel: c.course_level ?? undefined,
           courseCode: c.course_code ?? '',
           courseName: c.course_name ?? '',
           trainingCenterName: c.training_center_name ?? '',
           performanceText: c.performance_text ?? '',
-          marksScored: c.marks_scored ?? 0,
+          percentage: c.marks_scored ?? 0,
           grade: c.grade ?? '',
-          typingSubjects: c.typing_subjects,
           trainingCenterLogoUrl: c.branch?.center_logo_url ?? null,
           certificationLogoUrls: logos,
         })
       } else {
-        blob = await buildComputerBasedTypingBlob({
+        blob = await generatePortraitBlob({
           settings: s,
           certificateNumber: c.certificate_number,
           issueDate: formattedDate,
