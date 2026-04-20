@@ -237,7 +237,7 @@ export default function StudentRegisterPage() {
 
   async function onSubmit(form: FormData) {
     if (step !== 4) return  // guard: never save unless user is on the final step
-    if (isEdit && locked) {
+    if (isEdit && locked && !isSuperAdmin) {
       toast.error('This student is locked because a certificate or result has been issued')
       return
     }
@@ -363,7 +363,7 @@ export default function StudentRegisterPage() {
         </div>
       </div>
 
-      {isEdit && locked && (
+      {isEdit && locked && !isSuperAdmin && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3">
           <AlertTriangle size={18} className="text-amber-600" />
           <p className="text-sm text-amber-900">
