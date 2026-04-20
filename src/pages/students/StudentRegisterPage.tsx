@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { isStudentLocked } from '../../lib/studentLock'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { toast } from 'sonner'
@@ -59,11 +60,14 @@ type FormData = z.infer<typeof schema>
 
 export default function StudentRegisterPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const base = location.pathname.startsWith('/franchise') ? '/franchise' : '/admin'
   const [searchParams] = useSearchParams()
   const editId = searchParams.get('edit')
   const isEdit = !!editId
   const { user, profile } = useAuth()
   const isSuperAdmin = profile?.role === 'super_admin'
+  const [locked, setLocked] = useState(false)
 
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -160,7 +164,8 @@ export default function StudentRegisterPage() {
   async function loadStudent() {
     try {
       const { data, error } = await supabase.from('uce_students').select('*').eq('id', editId).single()
-      if (error || !data) { toast.error('Student not found'); navigate('/admin/students'); return }
+      if (error || !data) { toast.error('Student not found'); navigate(`${base}/students`); return }
+      if (editId) setLocked(await isStudentLocked(editId))
       setRegNo(data.registration_no)
       setPhotoUrl(data.photo_url)
       setSelectedBranchId(data.branch_id || '')
@@ -232,6 +237,10 @@ export default function StudentRegisterPage() {
 
   async function onSubmit(form: FormData) {
     if (step !== 4) return  // guard: never save unless user is on the final step
+    if (isEdit && locked) {
+      toast.error('This student is locked because a certificate or result has been issued')
+      return
+    }
     const parsed = schema.safeParse(form)
     if (!parsed.success) {
       const issue = parsed.error.issues[0]
@@ -322,7 +331,7 @@ export default function StudentRegisterPage() {
 
         toast.success('Student registered successfully')
       }
-      navigate('/admin/students')
+      navigate(`${base}/students`)
     } catch (err) { console.error(err); toast.error('Failed to save student') }
     finally { setSaving(false) }
   }
@@ -333,7 +342,7 @@ export default function StudentRegisterPage() {
     <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center gap-2 sm:gap-3">
-        <button onClick={() => navigate('/admin/students')} className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 shrink-0"><ArrowLeft size={18} className="text-gray-600" /></button>
+        <button onClick={() => navigate(`${base}/students`)} className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 shrink-0"><ArrowLeft size={18} className="text-gray-600" /></button>
         <div className="min-w-0">
           <h1 className="text-base sm:text-2xl font-bold text-gray-900 font-heading">{isEdit ? 'Edit Student' : 'Register Student'}</h1>
           <div className="flex items-center gap-2 mt-0.5">
@@ -341,6 +350,15 @@ export default function StudentRegisterPage() {
           </div>
         </div>
       </div>
+
+      {isEdit && locked && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-amber-600" />
+          <p className="text-sm text-amber-900">
+            <strong>Data locked.</strong> A certificate or result has been issued for this student — their details cannot be edited.
+          </p>
+        </div>
+      )}
 
       {/* Progress */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-5">
@@ -529,7 +547,7 @@ export default function StudentRegisterPage() {
 
         {/* Nav buttons */}
         <div className="flex items-center justify-between mt-4 sm:mt-5 pb-4 sm:pb-6 gap-3">
-          <button type="button" onClick={step === 1 ? () => navigate('/admin/students') : () => setStep(step - 1)}
+          <button type="button" onClick={step === 1 ? () => navigate(`${base}/students`) : () => setStep(step - 1)}
             className="px-3 sm:px-5 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-1.5">
             <ArrowLeft size={16} /><span>{step === 1 ? 'Cancel' : 'Back'}</span>
           </button>
