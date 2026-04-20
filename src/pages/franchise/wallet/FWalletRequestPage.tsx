@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Loader2, ArrowLeft, Upload } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
+import { uploadPublicFile } from '../../../lib/uploads'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useBranchId } from '../../../lib/franchise'
 import FormField, { inputClass } from '../../../components/FormField'
@@ -28,9 +29,7 @@ export default function FWalletRequestPage() {
       if (file) {
         const ext = (file.name.split('.').pop() || 'png').toLowerCase()
         const path = `${branchId}/${Date.now()}.${ext}`
-        const up = await supabase.storage.from('wallet-requests').upload(path, file, { upsert: false })
-        if (up.error) throw up.error
-        screenshotUrl = supabase.storage.from('wallet-requests').getPublicUrl(path).data.publicUrl
+        screenshotUrl = await uploadPublicFile('wallet-requests', path, file)
       }
 
       const { error } = await supabase.from('uce_branch_wallet_requests').insert({

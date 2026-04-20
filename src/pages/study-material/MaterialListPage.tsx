@@ -7,6 +7,7 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { supabase } from '../../lib/supabase'
+import { uploadPublicFile } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '../../lib/utils'
 import DataTable from '../../components/DataTable'
@@ -104,10 +105,7 @@ export default function MaterialListPage() {
     try {
       const ext = uploadFile.name.split('.').pop() || 'pdf'
       const path = `study-materials/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const { error: uploadErr } = await supabase.storage.from('documents').upload(path, uploadFile)
-      if (uploadErr) throw uploadErr
-
-      const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(path)
+      const publicUrl = await uploadPublicFile('documents', path, uploadFile)
 
       const { error } = await supabase.from('uce_study_materials').insert({
         program_id: get('program_id') || null,

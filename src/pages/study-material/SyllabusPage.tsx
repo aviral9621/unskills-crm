@@ -7,6 +7,7 @@ import {
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { supabase } from '../../lib/supabase'
+import { uploadPublicFile } from '../../lib/uploads'
 import { cn } from '../../lib/utils'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
@@ -77,9 +78,7 @@ export default function SyllabusPage() {
       if (uploadFile) {
         const ext = uploadFile.name.split('.').pop() || 'pdf'
         const path = `syllabus/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-        const { error: upErr } = await supabase.storage.from('documents').upload(path, uploadFile)
-        if (upErr) throw upErr
-        fileUrl = supabase.storage.from('documents').getPublicUrl(path).data.publicUrl
+        fileUrl = await uploadPublicFile('documents', path, uploadFile)
         fileName = uploadFile.name
       }
 
