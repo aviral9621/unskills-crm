@@ -1,12 +1,22 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { AuthProvider } from './contexts/AuthContext'
+import { ProtectedRoute, PublicRoute } from './components/RoleRoute'
+
 import AdminLayout from './layouts/AdminLayout'
+import FranchiseLayout from './layouts/FranchiseLayout'
+import StudentLayout from './layouts/StudentLayout'
+
 import LoginPage from './pages/LoginPage'
+import FranchiseLoginPage from './pages/FranchiseLoginPage'
+import StudentLoginPage from './pages/StudentLoginPage'
+
+// Admin pages
 import DashboardPage from './pages/DashboardPage'
 import BranchListPage from './pages/branches/BranchListPage'
 import BranchFormPage from './pages/branches/BranchFormPage'
 import BranchWalletPage from './pages/branches/BranchWalletPage'
+import WalletRequestsPage from './pages/branches/WalletRequestsPage'
 import UserListPage from './pages/users/UserListPage'
 import UserFormPage from './pages/users/UserFormPage'
 import PermissionsPage from './pages/users/PermissionsPage'
@@ -20,6 +30,7 @@ import AdmitCardSettingsPage from './pages/students/AdmitCardSettingsPage'
 import ProgramListPage from './pages/courses/ProgramListPage'
 import CourseListPage from './pages/courses/CourseListPage'
 import CourseFormPage from './pages/courses/CourseFormPage'
+import CourseApprovalPage from './pages/courses/CourseApprovalPage'
 import SubjectPage from './pages/courses/SubjectPage'
 import BatchPage from './pages/courses/BatchPage'
 import MaterialListPage from './pages/study-material/MaterialListPage'
@@ -48,77 +59,70 @@ import DueFeesPage from './pages/reports/DueFeesPage'
 import IncomeReportPage from './pages/reports/IncomeReportPage'
 import ExpensesPage from './pages/reports/ExpensesPage'
 import ProfitLossPage from './pages/reports/ProfitLossPage'
+import BranchesRevenuePage from './pages/reports/BranchesRevenuePage'
 import GalleryManagePage from './pages/website/GalleryManagePage'
 import BannerManagePage from './pages/website/BannerManagePage'
 import VideoManagePage from './pages/website/VideoManagePage'
 import NewsletterPage from './pages/website/NewsletterPage'
 import SettingsPage from './pages/SettingsPage'
 import ProfilePage from './pages/ProfilePage'
-import { Loader2 } from 'lucide-react'
+import AdminPromotionsPage from './pages/admin/AdminPromotionsPage'
+import AdminTicketsPage from './pages/admin/AdminTicketsPage'
+import AdminExamFormsPage from './pages/admin/AdminExamFormsPage'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth()
+// Franchise pages
+import FDashboardPage from './pages/franchise/FDashboardPage'
+import FProfilePage from './pages/franchise/FProfilePage'
+import FCourseListPage from './pages/franchise/courses/FCourseListPage'
+import FCourseFormPage from './pages/franchise/courses/FCourseFormPage'
+import FPaymentAccountsPage from './pages/franchise/fees/FPaymentAccountsPage'
+import FFeeCollectionPage from './pages/franchise/fees/FFeeCollectionPage'
+import FFeeHistoryPage from './pages/franchise/fees/FFeeHistoryPage'
+import FWalletPage from './pages/franchise/wallet/FWalletPage'
+import FWalletRequestPage from './pages/franchise/wallet/FWalletRequestPage'
+import FMaterialPage from './pages/franchise/material/FMaterialPage'
+import FExamFormPage from './pages/franchise/exams/FExamFormPage'
+import FResultsPage from './pages/franchise/results/FResultsPage'
+import FJobsPage from './pages/franchise/jobs/FJobsPage'
+import FPromotionsPage from './pages/franchise/promotions/FPromotionsPage'
+import FTicketsPage from './pages/franchise/tickets/FTicketsPage'
+import FTicketDetailPage from './pages/franchise/tickets/FTicketDetailPage'
+import {
+  FStudentReportPage, FFeesReportPage, FPendingFeesPage, FWalletReportPage,
+} from './pages/franchise/reports/FReportsPages'
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-bg-primary">
-        <Loader2 size={32} className="animate-spin text-red-600" />
-      </div>
-    )
-  }
-
-  if (!session) {
-    return <Navigate to="/admin/login" replace />
-  }
-
-  return <>{children}</>
-}
-
-function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-bg-primary">
-        <Loader2 size={32} className="animate-spin text-red-600" />
-      </div>
-    )
-  }
-
-  if (session) {
-    return <Navigate to="/admin/dashboard" replace />
-  }
-
-  return <>{children}</>
-}
+// Student pages
+import {
+  StudentDashboardPage, StudentFeesPage, StudentMaterialsPage,
+  StudentResultsPage, StudentJobsPage, StudentExamFormPage,
+} from './pages/student/StudentPages'
 
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public routes */}
+      {/* Public login routes */}
       <Route path="/admin/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+      <Route path="/franchise/login" element={<PublicRoute><FranchiseLoginPage /></PublicRoute>} />
+      <Route path="/student/login" element={<PublicRoute><StudentLoginPage /></PublicRoute>} />
 
-      {/* Protected admin routes */}
-      <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+      {/* Admin — super_admin only */}
+      <Route path="/admin" element={<ProtectedRoute allow={['super_admin']}><AdminLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
 
-        {/* Branches */}
         <Route path="branches" element={<BranchListPage />} />
         <Route path="branches/new" element={<BranchFormPage />} />
         <Route path="branches/:id/edit" element={<BranchFormPage />} />
         <Route path="branches/:id/wallet" element={<BranchWalletPage />} />
+        <Route path="branches/wallet-requests" element={<WalletRequestsPage />} />
 
-        {/* Users */}
         <Route path="users" element={<UserListPage />} />
         <Route path="users/new" element={<UserFormPage />} />
         <Route path="users/:id/edit" element={<UserFormPage />} />
         <Route path="users/:id/permissions" element={<PermissionsPage />} />
 
-        {/* Inquiries */}
         <Route path="inquiries" element={<InquiryPage />} />
 
-        {/* Students */}
         <Route path="students" element={<StudentListPage />} />
         <Route path="students/register" element={<StudentRegisterPage />} />
         <Route path="students/id-card" element={<StudentIdCardPage />} />
@@ -126,40 +130,33 @@ function AppRoutes() {
         <Route path="students/admit-card" element={<AdmitCardPage />} />
         <Route path="students/admit-card-settings" element={<AdmitCardSettingsPage />} />
 
-        {/* Courses */}
         <Route path="courses/programs" element={<ProgramListPage />} />
         <Route path="courses" element={<CourseListPage />} />
         <Route path="courses/new" element={<CourseFormPage />} />
         <Route path="courses/:id/edit" element={<CourseFormPage />} />
+        <Route path="courses/approvals" element={<CourseApprovalPage />} />
         <Route path="courses/subjects" element={<SubjectPage />} />
         <Route path="courses/batches" element={<BatchPage />} />
 
-        {/* Study Material */}
         <Route path="study-material" element={<MaterialListPage />} />
         <Route path="study-material/syllabus" element={<SyllabusPage />} />
-
-        {/* Online Classes */}
         <Route path="online-classes" element={<ClassesPage />} />
 
-        {/* Exams */}
         <Route path="exams/paper-sets" element={<PaperSetListPage />} />
         <Route path="exams/paper-sets/new" element={<PaperSetFormPage />} />
         <Route path="exams/paper-sets/:id/edit" element={<PaperSetFormPage />} />
         <Route path="exams/paper-sets/:id/questions" element={<QuestionsPage />} />
         <Route path="exams/results" element={<ResultsPage />} />
+        <Route path="exams/forms" element={<AdminExamFormsPage />} />
 
-        {/* Documents */}
         <Route path="marksheets" element={<MarksheetPage />} />
         <Route path="marksheets/settings" element={<MarksheetSettingsPage />} />
         <Route path="certificates" element={<CertificateListPage />} />
         <Route path="certificates/issue" element={<IssueCertificatePage />} />
         <Route path="certificates/settings" element={<CertificateSettingsPage />} />
-        {import.meta.env.DEV && (
-          <Route path="certificates/preview" element={<CertificatePreviewPage />} />
-        )}
+        {import.meta.env.DEV && <Route path="certificates/preview" element={<CertificatePreviewPage />} />}
         <Route path="certificates/:id" element={<CertificateDetailPage />} />
 
-        {/* Staff */}
         <Route path="staff/departments" element={<DepartmentPage />} />
         <Route path="staff/employees" element={<EmployeeListPage />} />
         <Route path="staff/employees/new" element={<EmployeeFormPage />} />
@@ -168,28 +165,81 @@ function AppRoutes() {
         <Route path="staff/advances" element={<AdvanceReportPage />} />
         <Route path="staff/salary-slips" element={<SalarySlipPage />} />
 
-        {/* Reports */}
         <Route path="reports/students" element={<StudentReportPage />} />
         <Route path="reports/fees" element={<FeesReportPage />} />
         <Route path="reports/due-fees" element={<DueFeesPage />} />
         <Route path="reports/income" element={<IncomeReportPage />} />
         <Route path="reports/expenses" element={<ExpensesPage />} />
         <Route path="reports/profit-loss" element={<ProfitLossPage />} />
+        <Route path="reports/branches-revenue" element={<BranchesRevenuePage />} />
 
-        {/* Website */}
         <Route path="website/gallery" element={<GalleryManagePage />} />
         <Route path="website/banners" element={<BannerManagePage />} />
         <Route path="website/videos" element={<VideoManagePage />} />
         <Route path="website/newsletters" element={<NewsletterPage />} />
 
-        {/* Settings & Profile */}
+        <Route path="promotions" element={<AdminPromotionsPage />} />
+        <Route path="support/tickets" element={<AdminTicketsPage />} />
+        <Route path="support/tickets/:id" element={<FTicketDetailPage />} />
+
         <Route path="settings" element={<SettingsPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
 
-      {/* Redirect root to admin */}
-      <Route path="/" element={<Navigate to="/admin/login" replace />} />
-      <Route path="*" element={<Navigate to="/admin/login" replace />} />
+      {/* Franchise — branch_admin/branch_staff */}
+      <Route path="/franchise" element={<ProtectedRoute allow={['branch_admin', 'branch_staff']}><FranchiseLayout /></ProtectedRoute>}>
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<FDashboardPage />} />
+
+        <Route path="students" element={<StudentListPage />} />
+        <Route path="students/register" element={<StudentRegisterPage />} />
+        <Route path="students/id-card" element={<StudentIdCardPage />} />
+
+        <Route path="courses" element={<FCourseListPage />} />
+        <Route path="courses/new" element={<FCourseFormPage />} />
+
+        <Route path="fees/accounts" element={<FPaymentAccountsPage />} />
+        <Route path="fees/collect" element={<FFeeCollectionPage />} />
+        <Route path="fees/history" element={<FFeeHistoryPage />} />
+
+        <Route path="wallet" element={<FWalletPage />} />
+        <Route path="wallet/request" element={<FWalletRequestPage />} />
+
+        <Route path="study-material" element={<FMaterialPage />} />
+        <Route path="exam-forms" element={<FExamFormPage />} />
+        <Route path="results" element={<FResultsPage />} />
+        <Route path="marksheets" element={<MarksheetPage />} />
+        <Route path="certificates" element={<CertificateListPage />} />
+        <Route path="certificates/:id" element={<CertificateDetailPage />} />
+
+        <Route path="jobs" element={<FJobsPage />} />
+        <Route path="promotions" element={<FPromotionsPage />} />
+        <Route path="tickets" element={<FTicketsPage />} />
+        <Route path="tickets/:id" element={<FTicketDetailPage />} />
+
+        <Route path="reports/students" element={<FStudentReportPage />} />
+        <Route path="reports/fees" element={<FFeesReportPage />} />
+        <Route path="reports/pending-fees" element={<FPendingFeesPage />} />
+        <Route path="reports/wallet" element={<FWalletReportPage />} />
+
+        <Route path="profile" element={<FProfilePage />} />
+        <Route path="settings" element={<FProfilePage />} />
+      </Route>
+
+      {/* Student panel */}
+      <Route path="/student" element={<ProtectedRoute allow={['student']}><StudentLayout /></ProtectedRoute>}>
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<StudentDashboardPage />} />
+        <Route path="fees" element={<StudentFeesPage />} />
+        <Route path="materials" element={<StudentMaterialsPage />} />
+        <Route path="exam-forms" element={<StudentExamFormPage />} />
+        <Route path="results" element={<StudentResultsPage />} />
+        <Route path="jobs" element={<StudentJobsPage />} />
+      </Route>
+
+      {/* Root — default to franchise login (website link target) */}
+      <Route path="/" element={<Navigate to="/franchise/login" replace />} />
+      <Route path="*" element={<Navigate to="/franchise/login" replace />} />
     </Routes>
   )
 }

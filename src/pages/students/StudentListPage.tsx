@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
   GraduationCap, Plus, Search, MoreVertical, Pencil, Power,
@@ -12,18 +12,22 @@ import { formatINR, cn } from '../../lib/utils'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import { lockedStudentIds } from '../../lib/studentLock'
+import { Lock } from 'lucide-react'
 
 interface StudentRow {
   id: string; registration_no: string; name: string; phone: string
   total_fee: number; net_fee: number; is_active: boolean; created_at: string
   course?: { name: string } | null; branch?: { name: string } | null
-  paid?: number
+  paid?: number; locked?: boolean
 }
 
 const colHelper = createColumnHelper<StudentRow>()
 
 export default function StudentListPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const base = location.pathname.startsWith('/franchise') ? '/franchise' : '/admin'
   const { profile } = useAuth()
   const isSuperAdmin = profile?.role === 'super_admin'
   const branchId = profile?.branch_id
@@ -58,7 +62,8 @@ export default function StudentListPage() {
         payments?.forEach(p => { paidMap[p.student_id] = (paidMap[p.student_id] || 0) + p.amount })
       }
 
-      setStudents((data ?? []).map((s: Record<string, unknown>) => ({ ...s, paid: paidMap[(s as { id: string }).id] || 0 })) as StudentRow[])
+      const lockedSet = await lockedStudentIds(ids)
+      setStudents((data ?? []).map((s: Record<string, unknown>) => ({ ...s, paid: paidMap[(s as { id: string }).id] || 0, locked: lockedSet.has((s as { id: string }).id) })) as StudentRow[])
     } catch { toast.error('Failed to load students') }
     finally { setLoading(false) }
   }
@@ -99,7 +104,12 @@ export default function StudentListPage() {
     colHelper.accessor('net_fee', { header: 'Fee', cell: i => <span className="text-sm text-gray-700">{formatINR(i.getValue())}</span> }),
     colHelper.display({ id: 'paid', header: 'Paid', cell: i => <span className="text-sm text-green-600 font-medium">{formatINR(i.row.original.paid || 0)}</span> }),
     colHelper.display({ id: 'due', header: 'Due', cell: i => { const due = (i.row.original.net_fee || 0) - (i.row.original.paid || 0); return <span className={`text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatINR(Math.max(0, due))}</span> } }),
-    colHelper.accessor('is_active', { header: 'Status', cell: i => <StatusBadge label={i.getValue() ? 'Active' : 'Inactive'} variant={i.getValue() ? 'success' : 'error'} /> }),
+    colHelper.accessor('is_active', { header: 'Status', cell: i => (
+      <div className="flex items-center gap-1.5">
+        <StatusBadge label={i.getValue() ? 'Active' : 'Inactive'} variant={i.getValue() ? 'success' : 'error'} />
+        {i.row.original.locked && <span title="Locked — certificate/result issued" className="inline-flex items-center gap-1 rounded bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px] font-semibold"><Lock size={10} /> LOCKED</span>}
+      </div>
+    ) }),
     colHelper.display({ id: 'actions', header: '', enableSorting: false, cell: i => (
       <button ref={el => { if (el) menuBtnRefs.current.set(i.row.original.id, el) }} onClick={e => { e.stopPropagation(); openMenu(i.row.original.id) }}
         className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><MoreVertical size={16} /></button>
@@ -143,16 +153,22 @@ export default function StudentListPage() {
   }
 
   const menuActions = menuStudent ? [
-    { label: 'Edit', icon: Pencil, onClick: () => navigate(`/admin/students/register?edit=${menuStudent.id}`) },
-    { label: 'ID Card', icon: CreditCard, onClick: () => navigate(`/admin/students/id-card?student=${menuStudent.id}`) },
-    { label: 'Admit Card', icon: ClipboardList, onClick: () => navigate(`/admin/students/admit-card?student=${menuStudent.id}`) },
+    {
+      label: menuStudent.locked ? 'Edit (Locked)' : 'Edit', icon: menuStudent.locked ? Lock : Pencil,
+      onClick: () => {
+        if (menuStudent.locked) { toast.error('Student is locked — certificate or result already issued'); return }
+        navigate(`${base}/students/register?edit=${menuStudent.id}`)
+      },
+    },
+    { label: 'ID Card', icon: CreditCard, onClick: () => navigate(`${base}/students/id-card?student=${menuStudent.id}`) },
+    ...(base === '/admin' ? [{ label: 'Admit Card', icon: ClipboardList, onClick: () => navigate(`/admin/students/admit-card?student=${menuStudent.id}`) }] : []),
   ] : []
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div><h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Students</h1><p className="text-xs sm:text-sm text-gray-500 mt-0.5">{students.length} total</p></div>
-        <button onClick={() => navigate('/admin/students/register')} className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm shrink-0"><Plus size={16} /> Register</button>
+        <button onClick={() => navigate(`${base}/students/register`)} className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm shrink-0"><Plus size={16} /> Register</button>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-4">
