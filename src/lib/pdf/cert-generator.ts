@@ -217,26 +217,49 @@ function drawDivider(page: PDFPage, cx: number, y: number, halfLen: number) {
 
 // ─── Template loader ──────────────────────────────────────────────────────────
 
-async function loadOrBlankLandscape(): Promise<PDFDocument> {
-  const templateBytes = await fetchBytes('/certificate-landscape-template.pdf')
-  if (templateBytes) {
-    try { return await PDFDocument.load(templateBytes) } catch { /* fall through */ }
-  }
-  // Fallback: blank A4 landscape
+const A4_LANDSCAPE: [number, number] = [841.89, 595.28]
+const A4_PORTRAIT: [number, number] = [595.28, 841.89]
+
+/**
+ * Builds a fresh A4 doc whose first page is painted with the template PDF's
+ * first page (scaled to fill). This normalizes whatever size Canva exported at
+ * (e.g. 2631×1860) down to A4 so the hardcoded layout coordinates remain valid.
+ * Falls back to a blank A4 page if the template is missing or unparseable.
+ */
+async function makeDocWithTemplate(
+  templatePath: string,
+  size: [number, number],
+): Promise<PDFDocument> {
   const doc = await PDFDocument.create()
-  doc.addPage([841.89, 595.28])
+  const page = doc.addPage(size)
+  const [W, H] = size
+
+  const templateBytes = await fetchBytes(templatePath)
+  if (!templateBytes) return doc
+  try {
+    const [embedded] = await doc.embedPdf(templateBytes, [0])
+    if (embedded) {
+      const ts = embedded.size()
+      const scale = Math.max(W / ts.width, H / ts.height)
+      const drawW = ts.width * scale
+      const drawH = ts.height * scale
+      page.drawPage(embedded, {
+        x: (W - drawW) / 2,
+        y: (H - drawH) / 2,
+        width: drawW,
+        height: drawH,
+      })
+    }
+  } catch { /* leave blank */ }
   return doc
 }
 
+async function loadOrBlankLandscape(): Promise<PDFDocument> {
+  return makeDocWithTemplate('/certificate-landscape-template.pdf', A4_LANDSCAPE)
+}
+
 async function loadOrBlankPortrait(): Promise<PDFDocument> {
-  const templateBytes = await fetchBytes('/certificate-portrait-template.pdf')
-  if (templateBytes) {
-    try { return await PDFDocument.load(templateBytes) } catch { /* fall through */ }
-  }
-  // Fallback: blank A4 portrait
-  const doc = await PDFDocument.create()
-  doc.addPage([595.28, 841.89])
-  return doc
+  return makeDocWithTemplate('/certificate-portrait-template.pdf', A4_PORTRAIT)
 }
 
 // ─── Landscape content ────────────────────────────────────────────────────────
