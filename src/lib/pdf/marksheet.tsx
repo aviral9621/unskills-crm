@@ -139,6 +139,10 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
       backgroundColor: colors.pageBg,
       padding: 18,
     },
+    bgPattern: {
+      position: 'absolute', top: -18, left: -18,
+      width: 595.28, height: 841.89,
+    },
 
     // Double-border frame (nested Views)
     frameOuter: {
@@ -421,9 +425,38 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
   let zebraIdx = 0
   const semesters = Array.from(new Set(rows.map(r => r.semester ?? 0))).sort((a, b) => a - b)
 
+  // Subtle offset dot grid — sits behind all content, does not disturb text.
+  const PAGE_W = 595.28
+  const PAGE_H = 841.89
+  const DOT_SPACING = 18
+  const DOT_RADIUS = 0.85
+  const dots: { cx: number; cy: number }[] = []
+  for (let row = 0, y = 12; y < PAGE_H - 6; y += DOT_SPACING, row++) {
+    const offset = (row % 2) * (DOT_SPACING / 2)
+    for (let x = 12 + offset; x < PAGE_W - 6; x += DOT_SPACING) {
+      dots.push({ cx: x, cy: y })
+    }
+  }
+
   return await pdf(
     <Document>
       <Page size="A4" style={s.page}>
+        {/* Subtle offset-grid dot pattern — premium, non-intrusive */}
+        <View style={s.bgPattern} fixed>
+          <Svg width={PAGE_W} height={PAGE_H}>
+            {dots.map((d, i) => (
+              <Circle
+                key={i}
+                cx={d.cx}
+                cy={d.cy}
+                r={DOT_RADIUS}
+                fill={colors.accentGold}
+                fillOpacity={0.14}
+              />
+            ))}
+          </Svg>
+        </View>
+
         <View style={s.frameOuter}>
           <View style={s.frameInner} wrap={false}>
 
