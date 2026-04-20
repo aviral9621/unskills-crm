@@ -30,12 +30,19 @@ const ADMISSION_YEARS = (() => {
   return [0, 1, 2].map(i => `${cy + i}-${cy + i + 1}`)
 })()
 
+const CATEGORIES = ['GEN', 'OBC', 'OBC-NCL', 'SC', 'ST', 'EWS', 'Other'] as const
+const RELIGIONS = ['Hinduism', 'Islam', 'Christianity', 'Sikhism', 'Buddhism', 'Jainism', 'Other'] as const
+const IDENTITY_TYPES = ['Adhar Card', 'Voter ID', 'Passport', 'Driving License', 'PAN Card', 'Other'] as const
+
 const schema = z.object({
   name: z.string().min(2, 'Student name required'),
   father_name: z.string().min(2, "Father's name required"),
   mother_name: z.string().optional(),
   dob: z.string().optional(),
   gender: z.string().optional(),
+  category: z.string().optional(),
+  religion: z.string().optional(),
+  identity_type: z.string().optional(),
   aadhar_number: z.string().regex(/^(\d{12})?$/, 'Aadhaar must be exactly 12 digits (or leave blank)').optional().or(z.literal('')),
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Valid 10-digit mobile required'),
   alt_phone: z.string().regex(/^([6-9]\d{9})?$/, 'Valid 10-digit mobile').optional().or(z.literal('')),
@@ -171,7 +178,9 @@ export default function StudentRegisterPage() {
       setSelectedBranchId(data.branch_id || '')
       reset({
         name: data.name, father_name: data.father_name, mother_name: data.mother_name || '',
-        dob: data.dob || '', gender: data.gender || '', aadhar_number: data.aadhar_number || '',
+        dob: data.dob || '', gender: data.gender || '',
+        category: data.category || '', religion: data.religion || '', identity_type: data.identity_type || '',
+        aadhar_number: data.aadhar_number || '',
         phone: data.phone, alt_phone: data.alt_phone || '', email: data.email || '', whatsapp: data.whatsapp || '',
         address: data.address || '', village: data.village || '', block: data.block || '',
         district: data.district || '', state: data.state || 'Uttar Pradesh', pincode: data.pincode || '',
@@ -290,7 +299,9 @@ export default function StudentRegisterPage() {
       const payload = {
         registration_no: regNo, branch_id: effectiveBranchId,
         name: form.name, father_name: form.father_name, mother_name: form.mother_name || null,
-        dob: form.dob || null, gender: form.gender || null, aadhar_number: form.aadhar_number || null,
+        dob: form.dob || null, gender: form.gender || null,
+        category: form.category || null, religion: form.religion || null, identity_type: form.identity_type || null,
+        aadhar_number: form.aadhar_number || null,
         photo_url: photoFinalUrl, phone: form.phone, alt_phone: form.alt_phone || null,
         email: form.email || null, whatsapp: form.whatsapp || null,
         address: form.address || null, village: form.village || null, block: form.block || null,
@@ -433,6 +444,32 @@ export default function StudentRegisterPage() {
                     const cleaned = el.value.replace(/\D/g, '')
                     if (cleaned !== el.value) el.value = cleaned
                   }}
+                />
+              </FormField>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <FormField label="Category">
+                <Select
+                  value={watch('category') || ''}
+                  onChange={v => setValue('category', v)}
+                  options={CATEGORIES.map(c => ({ value: c, label: c }))}
+                  placeholder="Select category"
+                />
+              </FormField>
+              <FormField label="Religion">
+                <Select
+                  value={watch('religion') || ''}
+                  onChange={v => setValue('religion', v)}
+                  options={RELIGIONS.map(r => ({ value: r, label: r }))}
+                  placeholder="Select religion"
+                />
+              </FormField>
+              <FormField label="Identity Type">
+                <Select
+                  value={watch('identity_type') || ''}
+                  onChange={v => setValue('identity_type', v)}
+                  options={IDENTITY_TYPES.map(t => ({ value: t, label: t }))}
+                  placeholder="Select ID type"
                 />
               </FormField>
             </div>
