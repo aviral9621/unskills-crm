@@ -37,13 +37,16 @@ export function FStudentReportPage() {
       let paidMap: Record<string, number> = {}
       if (ids.length) {
         const { data: pays } = await supabase.from('uce_student_fee_payments').select('student_id,amount').in('student_id', ids).eq('is_adjustment', false)
-        paidMap = Object.fromEntries(Object.entries(Object.groupBy(pays ?? [], (p: { student_id: string | null }) => p.student_id || '')).map(([k, v]) => [k, (v as Array<{ amount: number }>).reduce((s, p) => s + Number(p.amount), 0)]))
+        for (const p of pays ?? []) {
+          if (!p.student_id) continue
+          paidMap[p.student_id] = (paidMap[p.student_id] || 0) + Number(p.amount)
+        }
       }
       setRows((data ?? []).map(d => ({
         id: d.id, name: d.name, registration_no: d.registration_no, phone: d.phone,
         net_fee: Number(d.net_fee), paid: paidMap[d.id] || 0,
         due: Math.max(0, Number(d.net_fee) - (paidMap[d.id] || 0)),
-        course: (d.course as { name: string } | null)?.name || '',
+        course: (d.course as unknown as { name: string } | null)?.name || '',
       })))
     })()
   }, [branchId])
@@ -106,11 +109,14 @@ export function FPendingFeesPage() {
       let paidMap: Record<string, number> = {}
       if (ids.length) {
         const { data: pays } = await supabase.from('uce_student_fee_payments').select('student_id,amount').in('student_id', ids).eq('is_adjustment', false)
-        paidMap = Object.fromEntries(Object.entries(Object.groupBy(pays ?? [], (p: { student_id: string | null }) => p.student_id || '')).map(([k, v]) => [k, (v as Array<{ amount: number }>).reduce((s, p) => s + Number(p.amount), 0)]))
+        for (const p of pays ?? []) {
+          if (!p.student_id) continue
+          paidMap[p.student_id] = (paidMap[p.student_id] || 0) + Number(p.amount)
+        }
       }
       const out = (data ?? []).map(d => ({
         reg: d.registration_no, name: d.name, phone: d.phone,
-        course: (d.course as { name: string } | null)?.name || '',
+        course: (d.course as unknown as { name: string } | null)?.name || '',
         fee: Number(d.net_fee), paid: paidMap[d.id] || 0,
         due: Math.max(0, Number(d.net_fee) - (paidMap[d.id] || 0)),
       })).filter(r => r.due > 0).sort((a, b) => b.due - a.due)

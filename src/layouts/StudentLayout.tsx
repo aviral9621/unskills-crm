@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, NavLink, useLocation } from 'react-router-dom'
+import { Outlet, NavLink } from 'react-router-dom'
 import { LayoutDashboard, FileText, Briefcase, ClipboardList, ScrollText, IndianRupee, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
@@ -16,7 +16,6 @@ const NAV = [
 export default function StudentLayout() {
   const [open, setOpen] = useState(false)
   const { profile, signOut } = useAuth()
-  const location = useLocation()
 
   return (
     <div className="flex h-screen bg-bg-page overflow-hidden">
