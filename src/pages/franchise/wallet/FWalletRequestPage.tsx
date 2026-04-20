@@ -22,19 +22,22 @@ export default function FWalletRequestPage() {
     if (!branchId) return
     const amt = Number(amount)
     if (!amt || amt <= 0) return toast.error('Enter amount')
-    if (!txnId.trim()) return toast.error('Transaction ID required')
-    if (!file) return toast.error('Screenshot required')
     setSaving(true)
     try {
-      const ext = (file.name.split('.').pop() || 'png').toLowerCase()
-      const path = `${branchId}/${Date.now()}.${ext}`
-      const up = await supabase.storage.from('wallet-requests').upload(path, file, { upsert: false })
-      if (up.error) throw up.error
-      const { data: { publicUrl } } = supabase.storage.from('wallet-requests').getPublicUrl(path)
+      let screenshotUrl: string | null = null
+      if (file) {
+        const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+        const path = `${branchId}/${Date.now()}.${ext}`
+        const up = await supabase.storage.from('wallet-requests').upload(path, file, { upsert: false })
+        if (up.error) throw up.error
+        screenshotUrl = supabase.storage.from('wallet-requests').getPublicUrl(path).data.publicUrl
+      }
 
       const { error } = await supabase.from('uce_branch_wallet_requests').insert({
         branch_id: branchId, amount: amt, payment_mode: mode,
-        transaction_id: txnId, screenshot_url: publicUrl, note: note || null,
+        transaction_id: txnId.trim() || null,
+        screenshot_url: screenshotUrl,
+        note: note || null,
         requested_by: user?.id || null,
       })
       if (error) throw error
@@ -66,13 +69,13 @@ export default function FWalletRequestPage() {
             <option value="cash">Cash</option>
           </select>
         </FormField>
-        <FormField label="Transaction ID / UTR" required>
+        <FormField label="Transaction ID / UTR" hint="Optional — include if you have it">
           <input value={txnId} onChange={e => setTxnId(e.target.value)} className={inputClass} placeholder="e.g. 123456789012" />
         </FormField>
-        <FormField label="Payment Screenshot" required>
+        <FormField label="Payment Screenshot" hint="Optional — upload if you want to attach proof">
           <label className="flex items-center justify-center gap-2 h-24 rounded-lg border-2 border-dashed border-gray-300 hover:border-red-400 cursor-pointer text-sm text-gray-500">
             <Upload size={16} />
-            {file ? file.name : 'Click to upload image/PDF'}
+            {file ? file.name : 'Click to upload image/PDF (optional)'}
             <input type="file" accept="image/*,application/pdf" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} />
           </label>
         </FormField>

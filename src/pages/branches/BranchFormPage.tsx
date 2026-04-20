@@ -195,6 +195,11 @@ export default function BranchFormPage() {
 
   /* ─── Submit (final step) ─── */
   async function onSubmit(formData: BranchFormData) {
+    // Guard: never submit unless the user is on the final step.
+    // Prevents accidental saves from Enter-key, keyboard focus, or
+    // any stray form submission while stepping through the wizard.
+    if (step !== 4) return
+
     const parsed = fullSchema.safeParse(formData)
     if (!parsed.success) {
       const firstErr = parsed.error.issues[0]
@@ -541,7 +546,7 @@ export default function BranchFormPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <ReviewItem label="Branch Code" value={branchCode} />
                   <ReviewItem label="Branch Name" value={getValues('name')} />
-                  <ReviewItem label="Category" value={getValues('category')?.charAt(0).toUpperCase() + getValues('category')?.slice(1)} />
+                  <ReviewItem label="Category" value={capitalize(getValues('category'))} />
                   <ReviewItem label="Director" value={getValues('director_name')} />
                   <ReviewItem label="Phone" value={getValues('director_phone')} />
                   <ReviewItem label="District" value={getValues('district')} />
@@ -577,6 +582,12 @@ export default function BranchFormPage() {
       </form>
     </div>
   )
+}
+
+/* ─── Helpers ─── */
+function capitalize(v: string | undefined | null): string {
+  if (!v) return ''
+  return v.charAt(0).toUpperCase() + v.slice(1)
 }
 
 /* ─── Review Item ─── */
