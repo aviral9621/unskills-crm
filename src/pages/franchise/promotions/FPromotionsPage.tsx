@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Download, Megaphone, FileText, Image as ImageIcon } from 'lucide-react'
+import { Download, Megaphone, FileText } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { formatDateDDMMYYYY } from '../../../lib/utils'
 
