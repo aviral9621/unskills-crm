@@ -8,9 +8,28 @@ import { formatDate } from '../../lib/utils'
 import Modal from '../../components/Modal'
 import ConfirmDialog from '../../components/ConfirmDialog'
 
+type Category = 'announcement' | 'campus_news' | 'examination' | 'notice' | 'event'
+
 interface Newsletter {
   id: string; title: string; content: string | null; pdf_url: string | null
   publish_date: string; is_published: boolean; created_at: string
+  category: Category
+}
+
+const CATEGORY_OPTIONS: { value: Category; label: string }[] = [
+  { value: 'announcement', label: 'Announcement' },
+  { value: 'campus_news',  label: 'Campus News' },
+  { value: 'examination',  label: 'Examination' },
+  { value: 'notice',       label: 'Notice' },
+  { value: 'event',        label: 'Event' },
+]
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  announcement: 'Announcement',
+  campus_news:  'Campus News',
+  examination:  'Examination',
+  notice:       'Notice',
+  event:        'Event',
 }
 
 export default function NewsletterPage() {
@@ -19,7 +38,7 @@ export default function NewsletterPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [form, setForm] = useState({ title: '', content: '', pdf: null as File | null, pdfName: '' })
+  const [form, setForm] = useState({ title: '', content: '', category: 'announcement' as Category, pdf: null as File | null, pdfName: '' })
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Newsletter | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -50,6 +69,7 @@ export default function NewsletterPage() {
 
       const payload: Record<string, unknown> = {
         title: form.title.trim(), content: form.content.trim() || null,
+        category: form.category,
         publish_date: new Date().toISOString().split('T')[0], created_by: user?.id,
       }
       if (pdfUrl) payload.pdf_url = pdfUrl
@@ -63,7 +83,7 @@ export default function NewsletterPage() {
         if (error) throw error
         toast.success('Newsletter added')
       }
-      setShowModal(false); setEditId(null); setForm({ title: '', content: '', pdf: null, pdfName: '' })
+      setShowModal(false); setEditId(null); setForm({ title: '', content: '', category: 'announcement', pdf: null, pdfName: '' })
       load()
     } catch (err) { toast.error(err instanceof Error ? err.message : 'Failed to save') }
     finally { setSaving(false) }
@@ -90,7 +110,7 @@ export default function NewsletterPage() {
   }
 
   function openEdit(n: Newsletter) {
-    setEditId(n.id); setForm({ title: n.title, content: n.content || '', pdf: null, pdfName: '' }); setShowModal(true)
+    setEditId(n.id); setForm({ title: n.title, content: n.content || '', category: n.category ?? 'announcement', pdf: null, pdfName: '' }); setShowModal(true)
   }
 
   function handlePdfChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -106,7 +126,7 @@ export default function NewsletterPage() {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div><h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Newsletters & Updates</h1><p className="text-xs sm:text-sm text-gray-500 mt-0.5">{items.length} total, {published} published on website</p></div>
-        <button onClick={() => { setEditId(null); setForm({ title: '', content: '', pdf: null, pdfName: '' }); setShowModal(true) }}
+        <button onClick={() => { setEditId(null); setForm({ title: '', content: '', category: 'announcement', pdf: null, pdfName: '' }); setShowModal(true) }}
           className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm shrink-0"><Plus size={16} /> Add Update</button>
       </div>
 
@@ -135,6 +155,7 @@ export default function NewsletterPage() {
                     <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${item.is_published ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{item.is_published ? 'Published' : 'Draft'}</span>
                   </div>
                   <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-[10px] font-semibold uppercase tracking-wide">{CATEGORY_LABELS[item.category ?? 'announcement']}</span>
                     <span className="flex items-center gap-1"><Calendar size={11} />{formatDate(item.publish_date)}</span>
                     {item.pdf_url && (
                       <a href={item.pdf_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-red-500 hover:text-red-600">
@@ -158,6 +179,12 @@ export default function NewsletterPage() {
       {/* Add/Edit Modal */}
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editId ? 'Edit Newsletter' : 'Add Newsletter'} size="lg">
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
+            <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value as Category }))} className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none bg-white">
+              {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title <span className="text-red-500">*</span></label>
             <input type="text" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Newsletter title..." className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm placeholder:text-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
