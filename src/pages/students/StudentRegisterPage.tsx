@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { isStudentLocked } from '../../lib/studentLock'
 import { useForm } from 'react-hook-form'
@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { uploadPublicFile, isBlobUrl, STORAGE_BUCKETS } from '../../lib/uploads'
+import { uploadPublicFile, deletePublicFile, isBlobUrl, STORAGE_BUCKETS } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
 import { INDIAN_STATES, formatINR, cn } from '../../lib/utils'
 import FormField, { inputClass } from '../../components/FormField'
@@ -90,6 +90,7 @@ export default function StudentRegisterPage() {
 
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const savedPhotoUrlRef = useRef<string | null>(null) // tracks the URL actually saved in DB
 
   const [walletError, setWalletError] = useState(false)
 
@@ -175,6 +176,7 @@ export default function StudentRegisterPage() {
       if (editId) setLocked(await isStudentLocked(editId))
       setRegNo(data.registration_no)
       setPhotoUrl(data.photo_url)
+      savedPhotoUrlRef.current = data.photo_url
       setSelectedBranchId(data.branch_id || '')
       reset({
         name: data.name, father_name: data.father_name, mother_name: data.mother_name || '',
@@ -314,8 +316,13 @@ export default function StudentRegisterPage() {
       }
 
       if (isEdit) {
+        // Delete old R2 photo if it was replaced or cleared
+        const oldUrl = savedPhotoUrlRef.current
+        if (oldUrl && oldUrl !== photoFinalUrl) void deletePublicFile(oldUrl)
         const { error } = await supabase.from('uce_students').update(payload).eq('id', editId)
-        if (error) throw error; toast.success('Student updated')
+        if (error) throw error
+        savedPhotoUrlRef.current = photoFinalUrl
+        toast.success('Student updated')
       } else {
         const { data: newStudent, error } = await supabase.from('uce_students').insert({ ...payload, is_active: true }).select().single()
         if (error) { if (error.message?.includes('duplicate')) toast.error('Registration number already exists'); else throw error; return }
