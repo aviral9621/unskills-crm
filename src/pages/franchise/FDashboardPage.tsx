@@ -57,58 +57,58 @@ export default function FDashboardPage() {
   const walletLow = (branch?.wallet_balance ?? 0) < 500
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h2 className="font-heading text-2xl font-bold text-text-primary">
+        <h2 className="font-heading text-xl sm:text-2xl font-bold text-text-primary break-words">
           Welcome{branch ? `, ${branch.name}` : ''}
         </h2>
-        <p className="text-sm text-text-muted mt-1">
+        <p className="text-xs sm:text-sm text-text-muted mt-1 break-words">
           Code: <span className="font-medium">{branch?.code ?? '—'}</span>
           {branch?.b_code && <> · B-Code: <span className="font-medium">{branch.b_code}</span></>}
         </p>
       </div>
 
       {walletLow && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
-          <AlertTriangle className="text-amber-600 mt-0.5" size={20} />
-          <div className="flex-1">
-            <p className="font-semibold text-amber-900">Wallet balance is low</p>
-            <p className="text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4 flex items-start gap-3 flex-wrap sm:flex-nowrap">
+          <AlertTriangle className="text-amber-600 mt-0.5 shrink-0" size={20} />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-amber-900 text-sm sm:text-base">Wallet balance is low</p>
+            <p className="text-xs sm:text-sm text-amber-800 break-words">
               Current balance {formatINR(branch?.wallet_balance ?? 0)}. Please create a reload request.
             </p>
           </div>
-          <Link to="/franchise/wallet/request" className="text-sm font-semibold text-amber-900 underline">
+          <Link to="/franchise/wallet/request" className="text-xs sm:text-sm font-semibold text-amber-900 underline whitespace-nowrap">
             Request Reload →
           </Link>
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Wallet} label="Wallet Balance" value={formatINR(branch?.wallet_balance ?? 0)} color="bg-red-50 text-red-700" />
         <StatCard icon={Users} label="Total Students" value={String(stats?.students ?? '—')} color="bg-blue-50 text-blue-700" />
         <StatCard icon={IndianRupee} label="Collected (this month)" value={formatINR(stats?.collectedThisMonth ?? 0)} color="bg-green-50 text-green-700" />
         <StatCard icon={AlertTriangle} label="Pending Fees" value={formatINR(stats?.pendingFees ?? 0)} color="bg-amber-50 text-amber-700" />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Link to="/franchise/students/register" className="rounded-xl border border-gray-200 bg-white p-5 hover:shadow-md transition">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Link to="/franchise/students/register" className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 hover:shadow-md transition">
           <Users className="text-red-600 mb-2" size={22} />
           <p className="font-semibold text-text-primary">Register New Student</p>
-          <p className="text-sm text-text-muted">Add a student; wallet is debited by certificate fee.</p>
+          <p className="text-xs sm:text-sm text-text-muted">Wallet is debited by certificate fee.</p>
         </Link>
-        <Link to="/franchise/fees/collect" className="rounded-xl border border-gray-200 bg-white p-5 hover:shadow-md transition">
+        <Link to="/franchise/fees/collect" className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 hover:shadow-md transition">
           <IndianRupee className="text-red-600 mb-2" size={22} />
           <p className="font-semibold text-text-primary">Collect Fee</p>
-          <p className="text-sm text-text-muted">Record a student fee payment.</p>
+          <p className="text-xs sm:text-sm text-text-muted">Record a fee payment.</p>
         </Link>
-        <Link to="/franchise/jobs" className="rounded-xl border border-gray-200 bg-white p-5 hover:shadow-md transition">
+        <Link to="/franchise/jobs" className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 hover:shadow-md transition">
           <Briefcase className="text-red-600 mb-2" size={22} />
           <p className="font-semibold text-text-primary">Post a Job</p>
-          <p className="text-sm text-text-muted">Share a job opportunity with students.</p>
+          <p className="text-xs sm:text-sm text-text-muted">Share with students.</p>
         </Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <InfoLine icon={ScrollText} label="Pending course approvals" value={stats?.pendingCourses ?? 0} />
         <InfoLine icon={AlertTriangle} label="Open support tickets" value={stats?.openTickets ?? 0} />
       </div>
@@ -118,12 +118,12 @@ export default function FDashboardPage() {
 
 function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType; label: string; value: string; color: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
-      <div className={`h-10 w-10 rounded-lg flex items-center justify-center mb-3 ${color}`}>
-        <Icon size={20} />
+    <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-5">
+      <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center mb-2 sm:mb-3 ${color}`}>
+        <Icon size={18} />
       </div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{label}</p>
-      <p className="mt-1 font-heading text-xl font-bold text-text-primary">{value}</p>
+      <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="mt-1 font-heading text-base sm:text-xl font-bold text-text-primary break-words">{value}</p>
     </div>
   )
 }

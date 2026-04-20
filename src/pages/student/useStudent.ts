@@ -1,0 +1,51 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
+
+export interface StudentRec {
+  id: string
+  name: string
+  father_name: string
+  registration_no: string
+  phone: string
+  email: string | null
+  alt_phone: string | null
+  whatsapp: string | null
+  address: string | null
+  village: string | null
+  block: string | null
+  district: string | null
+  state: string | null
+  pincode: string | null
+  course_id: string
+  branch_id: string
+  net_fee: number
+  photo_url: string | null
+  session: string | null
+  course: { name: string; code: string } | null
+  branch: { name: string; code: string; director_phone: string } | null
+}
+
+export function useStudentRecord() {
+  const { user } = useAuth()
+  const [rec, setRec] = useState<StudentRec | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  async function reload() {
+    if (!user) return
+    setLoading(true)
+    const { data } = await supabase
+      .from('uce_students')
+      .select(
+        'id,name,father_name,registration_no,phone,email,alt_phone,whatsapp,address,village,block,district,state,pincode,course_id,branch_id,net_fee,photo_url,session,course:uce_courses(name,code),branch:uce_branches(name,code,director_phone)',
+      )
+      .eq('auth_user_id', user.id)
+      .maybeSingle()
+    setRec(data as unknown as StudentRec | null)
+    setLoading(false)
+  }
+
+  useEffect(() => { reload() }, [user?.id])
+
+  return { rec, loading, reload }
+}

@@ -92,10 +92,20 @@ import {
 } from './pages/franchise/reports/FReportsPages'
 
 // Student pages
-import {
-  StudentDashboardPage, StudentFeesPage, StudentMaterialsPage,
-  StudentResultsPage, StudentJobsPage, StudentExamFormPage,
-} from './pages/student/StudentPages'
+import StudentDashboardPage from './pages/student/StudentDashboardPage'
+import StudentFeesPage from './pages/student/StudentFeesPage'
+import StudentMaterialsPage from './pages/student/StudentMaterialsPage'
+import StudentSyllabusPage from './pages/student/StudentSyllabusPage'
+import StudentClassesPage from './pages/student/StudentClassesPage'
+import StudentDocumentsPage from './pages/student/StudentDocumentsPage'
+import StudentResultsPage from './pages/student/StudentResultsPage'
+import StudentJobsPage from './pages/student/StudentJobsPage'
+import StudentExamFormPage from './pages/student/StudentExamFormPage'
+import StudentAnnouncementsPage from './pages/student/StudentAnnouncementsPage'
+import StudentProfilePage from './pages/student/StudentProfilePage'
+import StudentTestsPage from './pages/student/StudentTestsPage'
+import StudentTakeTestPage from './pages/student/StudentTakeTestPage'
+import AnnouncementsPage from './pages/announcements/AnnouncementsPage'
 
 function AppRoutes() {
   return (
@@ -181,6 +191,7 @@ function AppRoutes() {
         <Route path="promotions" element={<AdminPromotionsPage />} />
         <Route path="support/tickets" element={<AdminTicketsPage />} />
         <Route path="support/tickets/:id" element={<FTicketDetailPage />} />
+        <Route path="announcements" element={<AnnouncementsPage />} />
 
         <Route path="settings" element={<SettingsPage />} />
         <Route path="profile" element={<ProfilePage />} />
@@ -214,6 +225,7 @@ function AppRoutes() {
 
         <Route path="jobs" element={<FJobsPage />} />
         <Route path="promotions" element={<FPromotionsPage />} />
+        <Route path="announcements" element={<AnnouncementsPage />} />
         <Route path="tickets" element={<FTicketsPage />} />
         <Route path="tickets/:id" element={<FTicketDetailPage />} />
 
@@ -231,10 +243,17 @@ function AppRoutes() {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<StudentDashboardPage />} />
         <Route path="fees" element={<StudentFeesPage />} />
+        <Route path="documents" element={<StudentDocumentsPage />} />
+        <Route path="classes" element={<StudentClassesPage />} />
         <Route path="materials" element={<StudentMaterialsPage />} />
+        <Route path="syllabus" element={<StudentSyllabusPage />} />
+        <Route path="tests" element={<StudentTestsPage />} />
+        <Route path="tests/:id" element={<StudentTakeTestPage />} />
         <Route path="exam-forms" element={<StudentExamFormPage />} />
         <Route path="results" element={<StudentResultsPage />} />
         <Route path="jobs" element={<StudentJobsPage />} />
+        <Route path="announcements" element={<StudentAnnouncementsPage />} />
+        <Route path="profile" element={<StudentProfilePage />} />
       </Route>
 
       {/* Root — default to franchise login (website link target) */}

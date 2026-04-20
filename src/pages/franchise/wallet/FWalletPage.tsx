@@ -30,18 +30,18 @@ export default function FWalletPage() {
   }, [branchId])
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl bg-gradient-to-br from-red-600 to-red-700 text-white p-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm opacity-90">Current Wallet Balance</p>
-          <p className="text-4xl font-bold font-heading mt-1">{formatINR(branch?.wallet_balance ?? 0)}</p>
-          <p className="text-xs opacity-80 mt-2">{branch?.name}</p>
+    <div className="space-y-4 sm:space-y-5">
+      <div className="rounded-2xl bg-gradient-to-br from-red-600 to-red-700 text-white p-4 sm:p-6 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs sm:text-sm opacity-90">Current Wallet Balance</p>
+          <p className="text-2xl sm:text-4xl font-bold font-heading mt-1 break-words">{formatINR(branch?.wallet_balance ?? 0)}</p>
+          <p className="text-xs opacity-80 mt-2 truncate">{branch?.name}</p>
         </div>
-        <Wallet size={56} className="opacity-30" />
+        <Wallet size={40} className="opacity-30 shrink-0 sm:w-14 sm:h-14" />
       </div>
 
       <div className="flex gap-3">
-        <Link to="/franchise/wallet/request" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700">
+        <Link to="/franchise/wallet/request" className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700">
           <Plus size={16} /> Request Reload
         </Link>
       </div>
@@ -51,10 +51,10 @@ export default function FWalletPage() {
           <h2 className="text-sm font-semibold text-gray-700 mb-2">My Reload Requests</h2>
           <div className="rounded-xl border bg-white divide-y">
             {reqs.map(r => (
-              <div key={r.id} className="px-4 py-3 flex items-center justify-between gap-3 text-sm">
-                <div>
-                  <p className="font-medium">{formatINR(r.amount)} <span className="ml-2 text-xs text-gray-400 font-mono">{r.transaction_id}</span></p>
-                  <p className="text-xs text-gray-500">{formatDateDDMMYYYY(r.created_at)}{r.review_note && ` · ${r.review_note}`}</p>
+              <div key={r.id} className="px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm">
+                <div className="min-w-0">
+                  <p className="font-medium">{formatINR(r.amount)} {r.transaction_id && <span className="ml-2 text-xs text-gray-400 font-mono break-all">{r.transaction_id}</span>}</p>
+                  <p className="text-xs text-gray-500 break-words">{formatDateDDMMYYYY(r.created_at)}{r.review_note && ` · ${r.review_note}`}</p>
                 </div>
                 <StatusPill status={r.status} />
               </div>
@@ -65,8 +65,29 @@ export default function FWalletPage() {
 
       <div>
         <h2 className="text-sm font-semibold text-gray-700 mb-2">Ledger</h2>
-        <div className="rounded-xl border bg-white overflow-x-auto">
-          <table className="w-full text-sm">
+        {/* Mobile: card list */}
+        <div className="md:hidden space-y-2">
+          {txns.length === 0 ? (
+            <div className="rounded-xl border bg-white p-6 text-center text-sm text-gray-400">No transactions</div>
+          ) : txns.map(t => (
+            <div key={t.id} className="rounded-xl border bg-white p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className={`inline-flex items-center gap-1 font-semibold text-xs ${t.type === 'credit' ? 'text-green-700' : 'text-red-700'}`}>
+                  {t.type === 'credit' ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />} {t.type.toUpperCase()}
+                </span>
+                <span className="text-xs text-gray-400">{formatDateDDMMYYYY(t.created_at)}</span>
+              </div>
+              <p className={`font-semibold mt-1 ${t.type === 'credit' ? 'text-green-700' : 'text-red-700'}`}>
+                {t.type === 'credit' ? '+' : '-'}{formatINR(t.amount)}
+              </p>
+              <p className="text-xs text-gray-500 break-words mt-0.5">{t.description}</p>
+              <p className="text-[10px] text-gray-400 mt-1">Balance: {formatINR(t.balance_after)}</p>
+            </div>
+          ))}
+        </div>
+        {/* Desktop: table */}
+        <div className="hidden md:block rounded-xl border bg-white overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead className="bg-gray-50 text-left text-xs font-semibold uppercase text-gray-500">
               <tr>
                 <th className="px-4 py-3">Date</th>

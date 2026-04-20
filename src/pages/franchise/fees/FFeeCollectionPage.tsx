@@ -82,7 +82,7 @@ export default function FFeeCollectionPage() {
   const balance = selected ? Math.max(0, (selected.net_fee || 0) - (selected.paid || 0)) : 0
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="max-w-3xl space-y-4 sm:space-y-5">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-heading">Collect Fee</h1>
         <p className="text-sm text-gray-500">Record a fee payment from a student.</p>
