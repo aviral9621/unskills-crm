@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Search, Loader2, Check, Plus, Trash2, FileDown } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Search, Loader2, FileDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -8,18 +8,13 @@ import FormField, { inputClass, selectClass } from '../../components/FormField'
 import {
   getCertificateSettings,
   listCertificateTemplates,
-  listCourseMappings,
 } from '../../lib/certificateSettings'
-import { generateLandscapeBlob, generatePortraitBlob } from '../../lib/pdf/cert-generator'
+import { generateCertificateBlob } from '../../lib/pdf/cert-generator'
+import { canIssueCertificate } from '../../lib/pdf/certificate-registry'
 import { generateQRDataUrl } from '../../lib/pdf/generate-qr'
 import { toDataUrl } from '../../lib/pdf/marksheet'
 import { formatDateDDMMYYYY } from '../../lib/utils'
-import type {
-  CertificateSettings,
-  CertificateTemplate,
-  CourseCertificateMapping,
-  TypingSubject,
-} from '../../types/certificate'
+import type { CertificateSettings } from '../../types/certificate'
 
 interface StudentRow {
   id: string
@@ -34,7 +29,7 @@ interface StudentRow {
   branch?: { id: string; name: string; b_code: string | null; code: string | null; center_logo_url: string | null } | null
 }
 
-type Step = 1 | 2 | 3 | 4
+type Step = 1 | 2 | 3
 
 const PERFORMANCE_OPTIONS = ['Excellent', 'Very Good', 'Good', 'Pass']
 const GRADE_OPTIONS = ['A+', 'A', 'B', 'C', 'D', 'F']
@@ -51,45 +46,34 @@ export default function IssueCertificatePage() {
 
   const [step, setStep] = useState<Step>(1)
   const [settings, setSettings] = useState<CertificateSettings | null>(null)
-  const [templates, setTemplates] = useState<CertificateTemplate[]>([])
+  // Retained only to satisfy the NOT NULL uce_certificates.template_id FK —
+  // rendering is driven by the course → program registry, not template_id.
+  const [defaultTemplateId, setDefaultTemplateId] = useState<string | null>(null)
 
   // Step 1
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [students, setStudents] = useState<StudentRow[]>([])
   const [student, setStudent] = useState<StudentRow | null>(null)
+  const [programName, setProgramName] = useState<string | null>(null)
 
-  // Step 2
-  const [mappings, setMappings] = useState<CourseCertificateMapping[]>([])
-  const [templateId, setTemplateId] = useState<string | null>(null)
-
-  // Step 3 shared
+  // Step 2 — form fields
   const [salutation, setSalutation] = useState('Mr.')
   const [studentName, setStudentName] = useState('')
   const [fatherPrefix, setFatherPrefix] = useState('S/o')
   const [fatherName, setFatherName] = useState('')
   const [issueDate, setIssueDate] = useState(todayISO())
-
-  // Horizontal-only
   const [courseLevel, setCourseLevel] = useState('')
   const [courseCode, setCourseCode] = useState('')
   const [courseName, setCourseName] = useState('')
   const [trainingCenterName, setTrainingCenterName] = useState('')
+  const [trainingCenterCode, setTrainingCenterCode] = useState('')
+  const [enrollmentNumber, setEnrollmentNumber] = useState('')
   const [performanceText, setPerformanceText] = useState('Excellent')
   const [marksScored, setMarksScored] = useState<number>(0)
   const [grade, setGrade] = useState('A+')
 
-  // Vertical-only
-  const [enrollmentNumber, setEnrollmentNumber] = useState('')
-  const [trainingCenterCode, setTrainingCenterCode] = useState('')
-
-  // Shared typing fields (horizontal uses if mapping.show_typing_fields)
-  const [typingSubjects, setTypingSubjects] = useState<TypingSubject[]>([
-    { name: 'HINDI TYPING', speed: 39, max: 100, min: 30, obtained: 85 },
-    { name: 'ENGLISH TYPING', speed: 41, max: 100, min: 30, obtained: 85 },
-  ])
-
-  // Step 4
+  // Step 3
   const [qrPreview, setQrPreview] = useState('')
   const [certLogos, setCertLogos] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -101,15 +85,16 @@ export default function IssueCertificatePage() {
 
   useEffect(() => {
     Promise.all([getCertificateSettings(), listCertificateTemplates()])
-      .then(([s, t]) => {
+      .then(([s, tpls]) => {
         setSettings(s)
-        setTemplates(t)
+        const horiz = tpls.find(t => t.slug === 'certificate-of-qualification')
+        setDefaultTemplateId(horiz?.id ?? tpls[0]?.id ?? null)
       })
       .catch(() => toast.error('Failed to load settings'))
   }, [])
 
   useEffect(() => {
-    if (step === 4 && settings) {
+    if (step === 3 && settings) {
       generateQRDataUrl(`${settings.verification_url_base}/PREVIEW`).then(setQrPreview)
       if (certLogos.length === 0) {
         Promise.all(CERT_LOGO_URLS.map(u => toDataUrl(encodeURI(u)).catch(() => '')))
@@ -120,15 +105,6 @@ export default function IssueCertificatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, settings])
 
-  const selectedTemplate = useMemo(
-    () => templates.find(t => t.id === templateId) ?? null,
-    [templates, templateId],
-  )
-  const selectedMapping = useMemo(
-    () => mappings.find(m => m.template_id === templateId) ?? null,
-    [mappings, templateId],
-  )
-
   async function runStudentSearch() {
     if (!query.trim()) return
     setSearching(true)
@@ -136,7 +112,7 @@ export default function IssueCertificatePage() {
       const sel =
         'id, registration_no, name, father_name, photo_url, course_id, branch_id, enrollment_date, course:uce_courses(id, code, name), branch:uce_branches(id, name, b_code, code, center_logo_url)'
       const q = query.trim()
-      let rows: StudentRow[] = []
+      const rows: StudentRow[] = []
       const { data: byReg } = await supabase
         .from('uce_students')
         .select(sel)
@@ -165,7 +141,15 @@ export default function IssueCertificatePage() {
   }
 
   async function chooseStudent(st: StudentRow) {
+    // Guard against unregistered programs before letting staff fill anything in
+    const check = await canIssueCertificate(st.course_id, supabase)
+    if (!check.canIssue) {
+      toast.error(check.reason ?? 'Certificate not available for this course')
+      return
+    }
+
     setStudent(st)
+    setProgramName(check.programName ?? null)
     setStudentName(st.name)
     setFatherName(st.father_name ?? '')
     setCourseCode(st.course?.code ?? '')
@@ -173,32 +157,15 @@ export default function IssueCertificatePage() {
     setTrainingCenterName(st.branch?.name ?? '')
     setTrainingCenterCode(st.branch?.b_code ?? st.branch?.code ?? '')
     setEnrollmentNumber(st.registration_no)
-
-    // Load mappings for this course
-    try {
-      const maps = await listCourseMappings(st.course_id)
-      setMappings(maps)
-      const def = maps.find(m => m.is_default)
-      setTemplateId(def?.template_id ?? maps[0]?.template_id ?? null)
-      setStep(2)
-    } catch {
-      toast.error('Failed to load course mapping')
-    }
-  }
-
-  function moveTypingRow(idx: number, patch: Partial<TypingSubject>) {
-    setTypingSubjects(prev => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
-  }
-  function addTypingRow() {
-    if (typingSubjects.length >= 5) return
-    setTypingSubjects(prev => [...prev, { name: '', speed: 0, max: 100, min: 30, obtained: 0 }])
-  }
-  function removeTypingRow(idx: number) {
-    setTypingSubjects(prev => prev.filter((_, i) => i !== idx))
+    setStep(2)
   }
 
   async function confirmAndIssue() {
-    if (!student || !settings || !selectedTemplate) return
+    if (!student || !settings) return
+    if (!defaultTemplateId) {
+      toast.error('Certificate templates not seeded — contact admin')
+      return
+    }
     setSubmitting(true)
     try {
       const centerCode = trainingCenterCode || student.branch?.b_code || student.branch?.code || ''
@@ -214,18 +181,10 @@ export default function IssueCertificatePage() {
       const qrDataUrl = await generateQRDataUrl(qrTarget)
       const formattedDate = formatDateDDMMYYYY(issueDate)
 
-      const isHorizontal = selectedTemplate.slug === 'certificate-of-qualification'
-      const showTyping = !!selectedMapping?.show_typing_fields
-      const typingPayload = isHorizontal
-        ? showTyping
-          ? typingSubjects
-          : null
-        : typingSubjects
-
       const insertRow = {
         certificate_number: certNumber,
         student_id: student.id,
-        template_id: selectedTemplate.id,
+        template_id: defaultTemplateId,
         course_id: student.course_id,
         branch_id: student.branch_id,
         salutation,
@@ -235,15 +194,15 @@ export default function IssueCertificatePage() {
         student_photo_url: student.photo_url,
         course_code: courseCode,
         course_name: courseName,
-        course_level: isHorizontal ? courseLevel : null,
+        course_level: courseLevel || null,
         training_center_name: trainingCenterName,
         training_center_code: centerCode,
         enrollment_number: enrollmentNumber,
-        performance_text: isHorizontal ? performanceText : null,
-        marks_scored: isHorizontal ? marksScored : null,
-        grade: isHorizontal ? grade : null,
-        typing_subjects: typingPayload,
-        typing_grade: isHorizontal ? null : grade,
+        performance_text: performanceText,
+        marks_scored: marksScored,
+        grade,
+        typing_subjects: null,
+        typing_grade: null,
         qr_code_data_url: qrDataUrl,
         qr_target_url: qrTarget,
         issue_date: issueDate,
@@ -258,10 +217,9 @@ export default function IssueCertificatePage() {
         .single()
       if (insErr) throw insErr
 
-      // Build + download PDF
-      let blob: Blob
-      if (isHorizontal) {
-        blob = await generateLandscapeBlob({
+      const blob = await generateCertificateBlob(
+        student.course_id,
+        {
           settings,
           certificateNumber: certNumber,
           issueDate: formattedDate,
@@ -279,27 +237,9 @@ export default function IssueCertificatePage() {
           grade,
           trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
           certificationLogoUrls: certLogos,
-        })
-      } else {
-        blob = await generatePortraitBlob({
-          settings,
-          certificateNumber: certNumber,
-          issueDate: formattedDate,
-          qrCodeDataUrl: qrDataUrl,
-          salutation,
-          studentName,
-          fatherPrefix,
-          fatherName,
-          studentPhotoUrl: student.photo_url,
-          enrollmentNumber,
-          trainingCenterCode: centerCode,
-          trainingCenterName,
-          trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
-          typingSubjects,
-          grade,
-          certificationLogoUrls: certLogos,
-        })
-      }
+        },
+        supabase,
+      )
 
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -330,7 +270,7 @@ export default function IssueCertificatePage() {
           <ArrowLeft size={18} />
         </button>
         <h1 className="text-xl font-bold font-heading">Issue Certificate</h1>
-        <span className="ml-auto text-xs text-gray-500">Step {step} of 4</span>
+        <span className="ml-auto text-xs text-gray-500">Step {step} of 3</span>
       </div>
 
       {step === 1 && (
@@ -383,65 +323,15 @@ export default function IssueCertificatePage() {
       )}
 
       {step === 2 && student && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 space-y-3">
-          <p className="text-sm font-medium text-gray-700">Pick a template</p>
-          {mappings.length === 0 ? (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-              This course has no certificate template configured.{' '}
-              <button
-                onClick={() => navigate('/admin/certificates/settings')}
-                className="underline font-medium"
-              >
-                Configure in Settings
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {mappings.map(m => {
-                const tpl = templates.find(t => t.id === m.template_id)
-                if (!tpl) return null
-                const isSel = templateId === tpl.id
-                return (
-                  <button
-                    key={tpl.id}
-                    onClick={() => setTemplateId(tpl.id)}
-                    className={`text-left p-4 rounded-lg border-2 ${
-                      isSel ? 'border-red-600 bg-red-50' : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold">{tpl.name}</p>
-                      {isSel ? <Check size={14} className="text-red-600" /> : null}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {tpl.orientation} · {tpl.description}
-                    </p>
-                    {m.is_default ? (
-                      <p className="text-[10px] text-gray-400 mt-2">Default for this course</p>
-                    ) : null}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-          <div className="flex justify-between pt-2">
-            <button onClick={() => setStep(1)} className="text-sm text-gray-500 hover:text-red-600">
-              Back
-            </button>
-            <button
-              onClick={() => setStep(3)}
-              disabled={!templateId}
-              className="inline-flex items-center gap-1 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50"
-            >
-              Next <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && selectedTemplate && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 space-y-4">
-          <p className="text-sm font-medium text-gray-700">Fill the certificate fields</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-700">Fill the certificate fields</p>
+            {programName ? (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
+                {programName}
+              </span>
+            ) : null}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <FormField label="Salutation">
@@ -462,82 +352,48 @@ export default function IssueCertificatePage() {
             </FormField>
           </div>
 
-          {selectedTemplate.slug === 'certificate-of-qualification' ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <FormField label="Course Code">
-                  <input value={courseCode} onChange={e => setCourseCode(e.target.value)} className={inputClass} />
-                </FormField>
-                <FormField label="Course Name" className="sm:col-span-2">
-                  <input value={courseName} onChange={e => setCourseName(e.target.value)} className={inputClass} />
-                </FormField>
-                <FormField label="Course Level" hint="e.g. 12">
-                  <input value={courseLevel} onChange={e => setCourseLevel(e.target.value)} className={inputClass} />
-                </FormField>
-                <FormField label="Training Center" className="sm:col-span-2">
-                  <input value={trainingCenterName} onChange={e => setTrainingCenterName(e.target.value)} className={inputClass} />
-                </FormField>
-                <FormField label="Performance">
-                  <select value={performanceText} onChange={e => setPerformanceText(e.target.value)} className={selectClass}>
-                    {PERFORMANCE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </FormField>
-                <FormField label="Marks Scored">
-                  <input type="number" value={marksScored} onChange={e => setMarksScored(Number(e.target.value))} className={inputClass} />
-                </FormField>
-                <FormField label="Grade">
-                  <select value={grade} onChange={e => setGrade(e.target.value)} className={selectClass}>
-                    {GRADE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                </FormField>
-              </div>
-
-              {selectedMapping?.show_typing_fields ? (
-                <TypingEditor
-                  subjects={typingSubjects}
-                  update={moveTypingRow}
-                  add={addTypingRow}
-                  remove={removeTypingRow}
-                />
-              ) : null}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <FormField label="Enrollment No.">
-                  <input value={enrollmentNumber} onChange={e => setEnrollmentNumber(e.target.value)} className={inputClass} />
-                </FormField>
-                <FormField label="Center Code">
-                  <input value={trainingCenterCode} onChange={e => setTrainingCenterCode(e.target.value)} className={inputClass} />
-                </FormField>
-                <FormField label="Training Center">
-                  <input value={trainingCenterName} onChange={e => setTrainingCenterName(e.target.value)} className={inputClass} />
-                </FormField>
-              </div>
-
-              <TypingEditor
-                subjects={typingSubjects}
-                update={moveTypingRow}
-                add={addTypingRow}
-                remove={removeTypingRow}
-              />
-
-              <FormField label="Grade">
-                <select value={grade} onChange={e => setGrade(e.target.value)} className={selectClass}>
-                  {GRADE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </FormField>
-            </div>
-          )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <FormField label="Course Code">
+              <input value={courseCode} onChange={e => setCourseCode(e.target.value)} className={inputClass} />
+            </FormField>
+            <FormField label="Course Name" className="sm:col-span-2">
+              <input value={courseName} onChange={e => setCourseName(e.target.value)} className={inputClass} />
+            </FormField>
+            <FormField label="Course Level" hint="optional">
+              <input value={courseLevel} onChange={e => setCourseLevel(e.target.value)} className={inputClass} />
+            </FormField>
+            <FormField label="Training Center" className="sm:col-span-2">
+              <input value={trainingCenterName} onChange={e => setTrainingCenterName(e.target.value)} className={inputClass} />
+            </FormField>
+            <FormField label="Enrollment No.">
+              <input value={enrollmentNumber} onChange={e => setEnrollmentNumber(e.target.value)} className={inputClass} />
+            </FormField>
+            <FormField label="Center Code">
+              <input value={trainingCenterCode} onChange={e => setTrainingCenterCode(e.target.value)} className={inputClass} />
+            </FormField>
+            <FormField label="Performance">
+              <select value={performanceText} onChange={e => setPerformanceText(e.target.value)} className={selectClass}>
+                {PERFORMANCE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Marks Scored">
+              <input type="number" value={marksScored} onChange={e => setMarksScored(Number(e.target.value))} className={inputClass} />
+            </FormField>
+            <FormField label="Grade">
+              <select value={grade} onChange={e => setGrade(e.target.value)} className={selectClass}>
+                {GRADE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </FormField>
+          </div>
 
           <FormField label="Issue Date">
             <input type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)} className={inputClass} />
           </FormField>
 
           <div className="flex justify-between pt-2">
-            <button onClick={() => setStep(2)} className="text-sm text-gray-500 hover:text-red-600">Back</button>
+            <button onClick={() => setStep(1)} className="text-sm text-gray-500 hover:text-red-600">Back</button>
             <button
-              onClick={() => setStep(4)}
+              onClick={() => setStep(3)}
               className="inline-flex items-center gap-1 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700"
             >
               Preview <ArrowRight size={14} />
@@ -546,13 +402,12 @@ export default function IssueCertificatePage() {
         </div>
       )}
 
-      {step === 4 && student && settings && selectedTemplate && (
+      {step === 3 && student && settings && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 space-y-3">
           <p className="text-sm font-medium text-gray-700">Preview & confirm</p>
-          <StepFourPreview
+          <StepThreePreview
             settings={settings}
             student={student}
-            selectedTemplate={selectedTemplate}
             salutation={salutation}
             studentName={studentName}
             fatherPrefix={fatherPrefix}
@@ -564,14 +419,11 @@ export default function IssueCertificatePage() {
             performanceText={performanceText}
             marksScored={marksScored}
             grade={grade}
-            enrollmentNumber={enrollmentNumber}
-            trainingCenterCode={trainingCenterCode}
-            typingSubjects={typingSubjects}
             qrPreview={qrPreview}
             certLogos={certLogos}
           />
           <div className="flex justify-between pt-2">
-            <button onClick={() => setStep(3)} className="text-sm text-gray-500 hover:text-red-600">
+            <button onClick={() => setStep(2)} className="text-sm text-gray-500 hover:text-red-600">
               Back to Edit
             </button>
             <button
@@ -579,11 +431,7 @@ export default function IssueCertificatePage() {
               disabled={submitting}
               className="inline-flex items-center gap-1 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50"
             >
-              {submitting ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <FileDown size={14} />
-              )}
+              {submitting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
               Confirm &amp; Issue
             </button>
           </div>
@@ -593,19 +441,17 @@ export default function IssueCertificatePage() {
   )
 }
 
-function StepFourPreview({
-  settings, student, selectedTemplate,
+function StepThreePreview({
+  settings, student,
   salutation, studentName, fatherPrefix, fatherName, issueDate,
   courseCode, courseName, trainingCenterName, performanceText, marksScored, grade,
-  enrollmentNumber, trainingCenterCode, typingSubjects, qrPreview, certLogos,
+  qrPreview, certLogos,
 }: {
   settings: CertificateSettings
   student: StudentRow
-  selectedTemplate: CertificateTemplate
   salutation: string; studentName: string; fatherPrefix: string; fatherName: string; issueDate: string
   courseCode: string; courseName: string; trainingCenterName: string; performanceText: string
-  marksScored: number; grade: string; enrollmentNumber: string; trainingCenterCode: string
-  typingSubjects: TypingSubject[]; qrPreview: string; certLogos: string[]
+  marksScored: number; grade: string; qrPreview: string; certLogos: string[]
 }) {
   const [url, setUrl] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -615,26 +461,19 @@ function StepFourPreview({
     let cancelled = false
     ;(async () => {
       try {
-        const isH = selectedTemplate.slug === 'certificate-of-qualification'
-        const blob = isH
-          ? await generateLandscapeBlob({
-              settings, certificateNumber: 'PREVIEW',
-              issueDate: formatDateDDMMYYYY(issueDate), qrCodeDataUrl: qrPreview,
-              salutation, studentName, fatherPrefix, fatherName,
-              studentPhotoUrl: student.photo_url, courseCode, courseName,
-              trainingCenterName, performanceText, percentage: marksScored, grade,
-              trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
-              certificationLogoUrls: certLogos,
-            })
-          : await generatePortraitBlob({
-              settings, certificateNumber: 'PREVIEW',
-              issueDate: formatDateDDMMYYYY(issueDate), qrCodeDataUrl: qrPreview,
-              salutation, studentName, fatherPrefix, fatherName,
-              studentPhotoUrl: student.photo_url, enrollmentNumber,
-              trainingCenterCode, trainingCenterName, typingSubjects, grade,
-              trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
-              certificationLogoUrls: certLogos,
-            })
+        const blob = await generateCertificateBlob(
+          student.course_id,
+          {
+            settings, certificateNumber: 'PREVIEW',
+            issueDate: formatDateDDMMYYYY(issueDate), qrCodeDataUrl: qrPreview,
+            salutation, studentName, fatherPrefix, fatherName,
+            studentPhotoUrl: student.photo_url, courseCode, courseName,
+            trainingCenterName, performanceText, percentage: marksScored, grade,
+            trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
+            certificationLogoUrls: certLogos,
+          },
+          supabase,
+        )
         if (cancelled) return
         const newUrl = URL.createObjectURL(blob)
         if (urlRef.current) URL.revokeObjectURL(urlRef.current)
@@ -663,74 +502,6 @@ function StepFourPreview({
           <Loader2 size={16} className="animate-spin mr-2" /> Generating preview…
         </div>
       )}
-    </div>
-  )
-}
-
-function TypingEditor({
-  subjects,
-  update,
-  add,
-  remove,
-}: {
-  subjects: TypingSubject[]
-  update: (i: number, p: Partial<TypingSubject>) => void
-  add: () => void
-  remove: (i: number) => void
-}) {
-  return (
-    <div className="border border-gray-200 rounded-lg p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-gray-700">Typing Subjects (max 5)</p>
-        {subjects.length < 5 ? (
-          <button
-            onClick={add}
-            className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700"
-          >
-            <Plus size={12} /> Add
-          </button>
-        ) : null}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-gray-500 border-b border-gray-200">
-              <th className="text-left py-1 pr-2">Subject</th>
-              <th className="text-left py-1 pr-2">Speed</th>
-              <th className="text-left py-1 pr-2">Max</th>
-              <th className="text-left py-1 pr-2">Min</th>
-              <th className="text-left py-1 pr-2">Obtained</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {subjects.map((s, i) => (
-              <tr key={i} className="border-b border-gray-100 last:border-b-0">
-                <td className="py-1 pr-2">
-                  <input value={s.name} onChange={e => update(i, { name: e.target.value })} className={`${inputClass} py-1.5`} />
-                </td>
-                <td className="py-1 pr-2">
-                  <input type="number" value={s.speed} onChange={e => update(i, { speed: Number(e.target.value) })} className={`${inputClass} py-1.5 w-20`} />
-                </td>
-                <td className="py-1 pr-2">
-                  <input type="number" value={s.max} onChange={e => update(i, { max: Number(e.target.value) })} className={`${inputClass} py-1.5 w-20`} />
-                </td>
-                <td className="py-1 pr-2">
-                  <input type="number" value={s.min} onChange={e => update(i, { min: Number(e.target.value) })} className={`${inputClass} py-1.5 w-20`} />
-                </td>
-                <td className="py-1 pr-2">
-                  <input type="number" value={s.obtained} onChange={e => update(i, { obtained: Number(e.target.value) })} className={`${inputClass} py-1.5 w-20`} />
-                </td>
-                <td className="py-1 pl-2 w-8">
-                  <button onClick={() => remove(i)} className="text-gray-400 hover:text-red-600 p-1">
-                    <Trash2 size={12} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   )
 }

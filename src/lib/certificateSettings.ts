@@ -3,7 +3,6 @@ import { getMarksheetSettings } from './marksheetSettings'
 import type {
   CertificateSettings,
   CertificateTemplate,
-  CourseCertificateMapping,
 } from '../types/certificate'
 
 export async function getCertificateSettings(): Promise<CertificateSettings> {
@@ -69,98 +68,3 @@ export async function listCertificateTemplates(): Promise<CertificateTemplate[]>
   return (data ?? []) as CertificateTemplate[]
 }
 
-export async function listCourseMappings(courseId?: string): Promise<CourseCertificateMapping[]> {
-  let q = supabase.from('uce_course_certificate_mapping').select('*')
-  if (courseId) q = q.eq('course_id', courseId)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []) as CourseCertificateMapping[]
-}
-
-export interface CourseMappingInput {
-  courseId: string
-  templateIds: string[]
-  defaultTemplateId: string | null
-  showTypingFields: boolean
-}
-
-export async function upsertCourseMapping(input: CourseMappingInput): Promise<void> {
-  const { error: delErr } = await supabase
-    .from('uce_course_certificate_mapping')
-    .delete()
-    .eq('course_id', input.courseId)
-  if (delErr) throw delErr
-
-  if (input.templateIds.length === 0) return
-
-  const rows = input.templateIds.map(tid => ({
-    course_id: input.courseId,
-    template_id: tid,
-    is_default: tid === input.defaultTemplateId,
-    show_typing_fields: input.showTypingFields,
-  }))
-  const { error } = await supabase.from('uce_course_certificate_mapping').insert(rows)
-  if (error) throw error
-}
-
-export async function upsertBulkCourseMappings(
-  courseIds: string[],
-  templateId: string,
-  showTypingFields: boolean,
-): Promise<void> {
-  if (courseIds.length === 0) return
-
-  // Delete existing mappings for all selected courses
-  const { error: delErr } = await supabase
-    .from('uce_course_certificate_mapping')
-    .delete()
-    .in('course_id', courseIds)
-  if (delErr) throw delErr
-
-  const rows = courseIds.map(cid => ({
-    course_id: cid,
-    template_id: templateId,
-    is_default: true,
-    show_typing_fields: showTypingFields,
-  }))
-  const { error } = await supabase.from('uce_course_certificate_mapping').insert(rows)
-  if (error) throw error
-}
-
-export async function deleteCourseMapping(courseId: string): Promise<void> {
-  const { error } = await supabase
-    .from('uce_course_certificate_mapping')
-    .delete()
-    .eq('course_id', courseId)
-  if (error) throw error
-}
-
-export async function deleteBulkCourseMappings(courseIds: string[]): Promise<void> {
-  if (courseIds.length === 0) return
-  const { error } = await supabase
-    .from('uce_course_certificate_mapping')
-    .delete()
-    .in('course_id', courseIds)
-  if (error) throw error
-}
-
-/** Determines which certificate template to auto-assign based on course name/type. */
-export function autoMapCertificateTemplate(
-  courseName: string,
-  courseType?: string,
-): 'portrait' | 'landscape' | null {
-  const name = courseName.toLowerCase()
-  const type = (courseType || '').toLowerCase()
-
-  if (name.includes('typing') || type.includes('typing')) return 'portrait'
-
-  if (
-    name.includes('diploma') || name.includes('certificate') ||
-    name.includes('training') || name.includes('skill') ||
-    name.includes('computer') || name.includes('programming') ||
-    name.includes('development') || type.includes('skill') ||
-    type.includes('training')
-  ) return 'landscape'
-
-  return null
-}

@@ -1,5 +1,10 @@
 import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb, StandardFonts, degrees } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  getProgramSlugForCourse,
+  getCertificateConfig,
+} from './certificate-registry'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,25 +41,6 @@ export interface LandscapeCertData {
   issueDate: string
   qrCodeDataUrl: string
   trainingCenterLogoUrl?: string | null
-  certificationLogoUrls?: string[]
-}
-
-export interface PortraitCertData {
-  settings: CertificateSettings
-  certificateNumber: string
-  salutation?: string
-  studentName: string
-  fatherPrefix: string
-  fatherName: string
-  studentPhotoUrl?: string | null
-  enrollmentNumber: string
-  trainingCenterCode: string
-  trainingCenterName: string
-  trainingCenterLogoUrl?: string | null
-  typingSubjects: Array<{ name: string; speed: number; max: number; min: number; obtained: number }>
-  grade: string
-  issueDate: string
-  qrCodeDataUrl: string
   certificationLogoUrls?: string[]
 }
 
@@ -118,7 +104,6 @@ async function embedUrl(pdfDoc: PDFDocument, url: string): Promise<PDFImage | nu
   try {
     if (/\.png$/i.test(url) || url.startsWith('data:image/png')) return await pdfDoc.embedPng(bytes)
     if (/\.jpe?g$/i.test(url) || url.startsWith('data:image/jp')) return await pdfDoc.embedJpg(bytes)
-    // Try PNG first, then JPG
     try { return await pdfDoc.embedPng(bytes) } catch { return await pdfDoc.embedJpg(bytes) }
   } catch { return null }
 }
@@ -135,7 +120,6 @@ async function embedAny(pdfDoc: PDFDocument, src: string): Promise<PDFImage | nu
   return embedUrl(pdfDoc, src)
 }
 
-// Badge paths matching actual files in public/
 const BADGE_PATHS = [
   '/ISO LOGOs.png',
   '/MSME loogo.png',
@@ -218,12 +202,11 @@ function drawDivider(page: PDFPage, cx: number, y: number, halfLen: number) {
 // ─── Template loader ──────────────────────────────────────────────────────────
 
 const A4_LANDSCAPE: [number, number] = [841.89, 595.28]
-const A4_PORTRAIT: [number, number] = [595.28, 841.89]
 
 /**
  * Builds a fresh A4 doc whose first page is painted with the template PDF's
- * first page (scaled to fill). This normalizes whatever size Canva exported at
- * (e.g. 2631×1860) down to A4 so the hardcoded layout coordinates remain valid.
+ * first page (scaled to fill). Our Canva exports are 2631×1860 — this
+ * normalizes them to A4 so the hardcoded layout coordinates remain valid.
  * Falls back to a blank A4 page if the template is missing or unparseable.
  */
 async function makeDocWithTemplate(
@@ -254,158 +237,188 @@ async function makeDocWithTemplate(
   return doc
 }
 
-async function loadOrBlankLandscape(): Promise<PDFDocument> {
-  return makeDocWithTemplate('/certificate-landscape-template.pdf', A4_LANDSCAPE)
-}
+// ─── Computer Software Courses — landscape ────────────────────────────────────
 
-async function loadOrBlankPortrait(): Promise<PDFDocument> {
-  return makeDocWithTemplate('/certificate-portrait-template.pdf', A4_PORTRAIT)
-}
-
-// ─── Landscape content ────────────────────────────────────────────────────────
-
-async function drawLandscapeContent(
-  pdfDoc: PDFDocument, page: PDFPage, fonts: FontSet,
-  data: LandscapeCertData, W: number, H: number
+/**
+ * Layout respects the template's tech-themed decorations:
+ *   - Top-left: 2 blue squares (small zone)
+ *   - Top-right: circuit traces + blue dots (~H*0.42 × ~H*0.34 in native size,
+ *     normalized to x > W-250, y > H-200 in A4 terms)
+ *   - Bottom-left: circuit traces (x < 200, y < 200)
+ *   - Bottom-right: hexagon cluster (x > W-260, y < 220)
+ *
+ * All dynamic content stays inside the "safe window" bounded by these zones.
+ */
+async function drawComputerSoftwareContent(
+  pdfDoc: PDFDocument,
+  page: PDFPage,
+  fonts: FontSet,
+  data: LandscapeCertData,
+  W: number,
+  H: number,
 ) {
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta
-  drawText(page, 'Reg. by Govt. of India', { x: 70, y: H - 70, size: 8, font: fonts.bodyBold })
+  // 1. Top meta — inside top bar but clear of TR circuit (x < W - 260)
+  drawText(page, 'Reg. by Govt. of India', {
+    x: 130, y: H - 72, size: 8, font: fonts.bodyBold,
+  })
   drawText(page, `Reg. No.-${settings.institute_reg_number ?? '—'}`, {
-    x: W - 70, y: H - 70, size: 8, font: fonts.bodyBold, align: 'right',
+    x: W - 270, y: H - 72, size: 8, font: fonts.bodyBold, align: 'right',
   })
 
   // 2. Brand title
-  drawBrandTitle(page, { cx, y: H - 98, size: 22, font: fonts.display })
+  drawBrandTitle(page, { cx, y: H - 100, size: 21, font: fonts.display })
 
-  // 3. ISO bar
+  // 3. ISO ribbon
   const isoText = 'An ISO 9001:2015 Certified Organization'
-  const isoW = fonts.bodyBold.widthOfTextAtSize(isoText, 9) + 24
-  const isoX = cx - isoW / 2
-  const isoY = H - 130
-  drawRect(page, isoX, isoY, isoW, 16, C.black)
-  drawText(page, isoText, { x: cx, y: isoY + 4, size: 9, font: fonts.bodyBold, color: C.white, align: 'center' })
+  const isoFontSize = 9
+  const isoTextW = fonts.bodyBold.widthOfTextAtSize(isoText, isoFontSize)
+  const isoW = isoTextW + 24
+  drawRect(page, cx - isoW / 2, H - 132, isoW, 16, C.black)
+  drawText(page, isoText, {
+    x: cx, y: H - 128, size: isoFontSize, font: fonts.bodyBold, color: C.white, align: 'center',
+  })
 
   // 4. Sub-headers
-  const subs = [settings.sub_header_line_1, settings.sub_header_line_2, settings.sub_header_line_3]
-  let subY = H - 150
-  for (const line of subs) {
+  let subY = H - 152
+  for (const line of [settings.sub_header_line_1, settings.sub_header_line_2, settings.sub_header_line_3]) {
     if (line) {
-      drawText(page, line, { x: cx, y: subY, size: 7.5, font: fonts.body, color: C.textSecondary, align: 'center' })
+      drawText(page, line, {
+        x: cx, y: subY, size: 7.5, font: fonts.body, color: C.textSecondary, align: 'center',
+      })
     }
     subY -= 11
   }
 
   // 5. Certificate title
   drawText(page, 'Certificate of Qualification', {
-    x: cx, y: H - 210, size: 34, font: fonts.script, color: C.navy, align: 'center',
+    x: cx, y: H - 212, size: 34, font: fonts.script, color: C.navy, align: 'center',
   })
 
   // 6. Divider
-  drawDivider(page, cx, H - 222, 95)
+  drawDivider(page, cx, H - 224, 95)
 
-  // 7. Presented to line
-  drawRect(page, cx - 110, H - 245, 4, 4, C.navy)
+  // 7. Presented to
+  drawRect(page, cx - 110, H - 247, 4, 4, C.navy)
   drawText(page, 'This Certificate Is Proudly Presented To', {
-    x: cx, y: H - 247, size: 10, font: fonts.body, color: C.textDark, align: 'center',
+    x: cx, y: H - 249, size: 10, font: fonts.body, color: C.textDark, align: 'center',
   })
-  drawRect(page, cx + 106, H - 245, 4, 4, C.navy)
+  drawRect(page, cx + 106, H - 247, 4, 4, C.navy)
 
   // 8. Student name
   const heroName = `${data.salutation} ${data.studentName}`.toUpperCase()
   drawText(page, heroName, {
-    x: cx, y: H - 278, size: 18, font: fonts.bodyBold, color: C.navy, align: 'center', letterSpacing: 1.5,
+    x: cx, y: H - 280, size: 18, font: fonts.bodyBold, color: C.navy, align: 'center', letterSpacing: 1.5,
   })
 
-  // 9. Body text
+  // 9. Body — keep narrow so it clears side decorations
   let bodyY = H - 305
-  const bSize = 10
   const bStep = 15
-
-  drawText(page, 'has successfully attended the', { x: cx, y: bodyY, size: bSize, font: fonts.body, align: 'center' })
+  drawText(page, 'has successfully attended the', { x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center' })
   bodyY -= bStep
-
-  const courseLine = `${data.courseCode} – ${data.courseName}`
-  drawText(page, courseLine, { x: cx, y: bodyY, size: 11, font: fonts.bodyBold, color: C.navy, align: 'center' })
+  drawText(page, `${data.courseCode} – ${data.courseName}`, {
+    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, color: C.navy, align: 'center',
+  })
   bodyY -= bStep
-
-  drawText(page, 'learning at UnSkills Computer Education', { x: cx, y: bodyY, size: bSize, font: fonts.body, align: 'center' })
+  drawText(page, 'learning at UnSkills Computer Education', {
+    x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center',
+  })
   bodyY -= bStep
-
-  drawText(page, `at ${data.trainingCenterName}`, { x: cx, y: bodyY, size: bSize, font: fonts.bodyBold, align: 'center' })
+  drawText(page, `at ${data.trainingCenterName}`, {
+    x: cx, y: bodyY, size: 10, font: fonts.bodyBold, align: 'center',
+  })
   bodyY -= bStep
-
   drawText(page, 'and entitled to all honors and privileges associated with this achievement', {
-    x: cx, y: bodyY, size: bSize, font: fonts.body, align: 'center',
+    x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center',
   })
   bodyY -= bStep
-
   drawText(page, `on ${data.issueDate} with Secured ${data.percentage}% marks and achieved Grade ${data.grade}`, {
-    x: cx, y: bodyY, size: bSize, font: fonts.bodyBold, align: 'center',
+    x: cx, y: bodyY, size: 10, font: fonts.bodyBold, align: 'center',
   })
 
-  // 10. Student photo
+  // 10. Training center logo (left, below header meta, above bottom-left circuit)
+  if (data.trainingCenterLogoUrl) {
+    const logo = await embedAny(pdfDoc, data.trainingCenterLogoUrl)
+    if (logo) page.drawImage(logo, { x: 140, y: H - 320, width: 60, height: 60 })
+  }
+
+  // 11. Student photo (right) — kept clear of TR circuit (y < H - 200) and BR hexagons (y > 220)
   if (data.studentPhotoUrl) {
     const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
     if (photo) {
-      const pW = 70, pH = 80, pX = W - 140, pY = H - 320
+      const pW = 70, pH = 80, pX = W - 205, pY = H - 320
       drawRect(page, pX - 1, pY - 1, pW + 2, pH + 2, C.black)
       page.drawImage(photo, { x: pX, y: pY, width: pW, height: pH })
     }
   }
 
-  // 11. Training center logo
-  if (data.trainingCenterLogoUrl) {
-    const logo = await embedAny(pdfDoc, data.trainingCenterLogoUrl)
-    if (logo) page.drawImage(logo, { x: 80, y: H - 310, width: 60, height: 60 })
-  }
-
-  // 12. Cert number + QR (bottom-left)
-  drawText(page, 'CERTIFICATE NUMBER', { x: 80, y: 165, size: 8, font: fonts.bodyBold })
-  drawText(page, data.certificateNumber, { x: 80, y: 148, size: 13, font: fonts.bodyBold, color: C.navy })
-
+  // 12. Certificate number + QR (bottom-left) — starts at x=220 to clear BL circuit
+  const certBlockX = 220
+  drawText(page, 'CERTIFICATE NUMBER', { x: certBlockX, y: 165, size: 8, font: fonts.bodyBold })
+  drawText(page, data.certificateNumber, {
+    x: certBlockX, y: 148, size: 13, font: fonts.bodyBold, color: C.navy,
+  })
   const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
   if (qr) {
-    drawRect(page, 79, 99, 52, 52, C.white, C.black, 0.5)
-    page.drawImage(qr, { x: 80, y: 100, width: 50, height: 50 })
+    drawRect(page, certBlockX - 1, 99, 52, 52, C.white, C.black, 0.5)
+    page.drawImage(qr, { x: certBlockX, y: 100, width: 50, height: 50 })
   }
-  if (settings.contact_email) drawText(page, settings.contact_email, { x: 140, y: 135, size: 8, font: fonts.body })
-  if (settings.website) drawText(page, settings.website, { x: 140, y: 122, size: 8, font: fonts.body })
+  if (settings.contact_email) drawText(page, settings.contact_email, {
+    x: certBlockX + 60, y: 135, size: 8, font: fonts.body,
+  })
+  if (settings.website) drawText(page, settings.website, {
+    x: certBlockX + 60, y: 122, size: 8, font: fonts.body,
+  })
 
-  // 13. Partner logos (center)
+  // 13. Partner logos — strip between cert block and signature block, away from bottom decorations
   const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
   const partnerBadges = badges.slice(0, 5)
-  const pAreaX = 310, pAreaW = 220, pStep = pAreaW / 5, pHeight = 28, pY = 115
+  const partnerAreaX = 400
+  const partnerAreaEnd = W - 300
+  const partnerAreaW = partnerAreaEnd - partnerAreaX
+  const pStep = partnerAreaW / 5
+  const pHeight = 28
+  const pY = 115
   for (let i = 0; i < partnerBadges.length; i++) {
     const img = partnerBadges[i]
     if (!img) continue
     const ar = img.width / img.height
     const w = pHeight * ar
-    const bx = pAreaX + i * pStep + pStep / 2 - w / 2
+    const bx = partnerAreaX + i * pStep + pStep / 2 - w / 2
     page.drawImage(img, { x: bx, y: pY, width: w, height: pHeight })
   }
 
-  // 14. Signature (right)
-  const sigRight = W - 70, sigW = 180
+  // 14. Signature (right) — right edge at W - 280 so it clears BR hexagons
+  const sigRight = W - 280
+  const sigW = 180
   if (settings.signature_image_url) {
     const sig = await embedAny(pdfDoc, settings.signature_image_url)
     if (sig) page.drawImage(sig, { x: sigRight - 110, y: 150, width: 110, height: 28 })
   }
   drawLine(page, sigRight - sigW + 30, 145, sigRight, 145, 0.8, C.black)
   if (settings.signatory_designation) {
-    drawText(page, settings.signatory_designation, { x: sigRight, y: 130, size: 9.5, font: fonts.bodyBold, align: 'right' })
+    drawText(page, settings.signatory_designation, {
+      x: sigRight, y: 130, size: 9.5, font: fonts.bodyBold, align: 'right',
+    })
   }
   if (settings.signatory_company_line) {
-    drawText(page, settings.signatory_company_line, { x: sigRight, y: 117, size: 8.5, font: fonts.body, align: 'right' })
+    drawText(page, settings.signatory_company_line, {
+      x: sigRight, y: 117, size: 8.5, font: fonts.body, align: 'right',
+    })
   }
   if (settings.signatory_reg_line) {
-    drawText(page, settings.signatory_reg_line, { x: sigRight, y: 105, size: 7, font: fonts.body, color: C.textSecondary, align: 'right' })
+    drawText(page, settings.signatory_reg_line, {
+      x: sigRight, y: 105, size: 7, font: fonts.body, color: C.textSecondary, align: 'right',
+    })
   }
 
-  // 15. Badge strip
-  const stripY = 72, stripH = 18, stripX0 = 80, stripX1 = W - 80
+  // 15. Badge strip — between x=220 (right of BL circuit) and W-280 (left of BR hexagons)
+  const stripY = 72
+  const stripH = 18
+  const stripX0 = 220
+  const stripX1 = W - 280
   const stripSp = (stripX1 - stripX0) / badges.length
   drawLine(page, stripX0, stripY + stripH + 3, stripX1, stripY + stripH + 3, 0.4, C.gold)
   for (let i = 0; i < badges.length; i++) {
@@ -417,7 +430,7 @@ async function drawLandscapeContent(
     page.drawImage(img, { x: bx, y: stripY, width: w, height: stripH })
   }
 
-  // 16. Footer
+  // 16. Footer — centered, narrow, within safe horizontal band
   if (settings.verification_url_base) {
     drawText(page, `To verify this certificate visit: ${settings.verification_url_base}`, {
       x: cx, y: 55, size: 7.5, font: fonts.body, align: 'center',
@@ -425,226 +438,66 @@ async function drawLandscapeContent(
   }
 }
 
-// ─── Portrait content ─────────────────────────────────────────────────────────
-
-async function drawPortraitContent(
-  pdfDoc: PDFDocument, page: PDFPage, fonts: FontSet,
-  data: PortraitCertData, W: number, H: number
-) {
-  const { settings } = data
-  const cx = W / 2
-  const safeLeft = 85, safeRight = W - 85
-  const safeW = safeRight - safeLeft
-
-  // 1. Top meta
-  drawText(page, `Certificate No : ${data.certificateNumber}`, { x: safeLeft, y: H - 105, size: 8, font: fonts.bodyBold })
-  drawText(page, `Reg. No.-${settings.institute_reg_number ?? '—'}`, {
-    x: safeRight, y: H - 105, size: 8, font: fonts.bodyBold, align: 'right',
-  })
-
-  // 2. Brand title
-  drawBrandTitle(page, { cx, y: H - 130, size: 16, font: fonts.display })
-
-  // 3. ISO bar
-  const isoText = 'An ISO 9001:2015 Certified Organization'
-  const isoW = fonts.bodyBold.widthOfTextAtSize(isoText, 8.5) + 20
-  drawRect(page, cx - isoW / 2, H - 162, isoW, 14, C.black)
-  drawText(page, isoText, { x: cx, y: H - 158, size: 8.5, font: fonts.bodyBold, color: C.white, align: 'center' })
-
-  // 4. Sub-headers
-  let subY = H - 180
-  for (const line of [settings.sub_header_line_1, settings.sub_header_line_2, settings.sub_header_line_3]) {
-    if (line) drawText(page, line, { x: cx, y: subY, size: 7, font: fonts.body, color: C.textSecondary, align: 'center' })
-    subY -= 10
-  }
-
-  // 5. Cert title
-  drawText(page, 'Computer Based Typing Examination', {
-    x: cx, y: H - 228, size: 24, font: fonts.script, color: C.navy, align: 'center',
-  })
-  drawDivider(page, cx, H - 240, 70)
-
-  // 6. Info table
-  const tY = H - 280, tH = 44
-  const c1 = safeLeft, c2 = safeLeft + safeW * 0.30, c3 = safeLeft + safeW * 0.55, cE = safeRight
-  drawRect(page, c1, tY + 22, safeW, 22, C.tableHeaderBg)
-  page.drawRectangle({ x: c1, y: tY, width: safeW, height: tH, borderColor: C.black, borderWidth: 0.8 })
-  drawLine(page, c1, tY + 22, cE, tY + 22, 0.8, C.black)
-  drawLine(page, c2, tY, c2, tY + tH, 0.8, C.black)
-  drawLine(page, c3, tY, c3, tY + tH, 0.8, C.black)
-
-  // Header row
-  drawText(page, 'Enrollment No.', { x: (c1 + c2) / 2, y: tY + 29, size: 9, font: fonts.bodyBold, align: 'center' })
-  drawText(page, 'Center Code', { x: (c2 + c3) / 2, y: tY + 29, size: 9, font: fonts.bodyBold, align: 'center' })
-  drawText(page, 'Authorised Training Center Name', { x: (c3 + cE) / 2, y: tY + 29, size: 8.5, font: fonts.bodyBold, align: 'center' })
-
-  // Data row
-  drawText(page, data.enrollmentNumber, { x: (c1 + c2) / 2, y: tY + 8, size: 9, font: fonts.bodyBold, align: 'center' })
-  drawText(page, data.trainingCenterCode, { x: (c2 + c3) / 2, y: tY + 8, size: 9, font: fonts.bodyBold, align: 'center' })
-  drawText(page, data.trainingCenterName, { x: (c3 + cE) / 2, y: tY + 8, size: 8.5, font: fonts.bodyBold, align: 'center' })
-
-  // 7. Student row
-  const sRowY = H - 340
-
-  if (data.trainingCenterLogoUrl) {
-    const logo = await embedAny(pdfDoc, data.trainingCenterLogoUrl)
-    if (logo) page.drawImage(logo, { x: safeLeft + 5, y: sRowY - 40, width: 45, height: 45 })
-  }
-
-  drawText(page, 'This certificate is Proudly Presented to', {
-    x: cx, y: sRowY - 5, size: 11, font: fonts.body, align: 'center',
-  })
-  drawText(page, `${data.salutation ?? ''} ${data.studentName}`.trim(), {
-    x: cx, y: sRowY - 25, size: 17, font: fonts.bodyBold, color: C.red, align: 'center',
-  })
-  drawText(page, `${data.fatherPrefix} ${data.fatherName}`, {
-    x: cx, y: sRowY - 42, size: 10, font: fonts.bodyBold, align: 'center',
-  })
-
-  if (data.studentPhotoUrl) {
-    const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
-    if (photo) {
-      const px = safeRight - 60, py = sRowY - 55
-      drawRect(page, px - 1, py - 1, 62, 72, C.black)
-      page.drawImage(photo, { x: px, y: py, width: 60, height: 70 })
-    }
-  }
-
-  // 8. Body paragraph
-  let bY = H - 420
-  const bStep = 18
-  drawText(page, 'has passed in the following subject of the', { x: cx, y: bY, size: 10, font: fonts.body, align: 'center' })
-  bY -= bStep
-  drawText(page, 'Computer Based Typing Examination', { x: cx, y: bY, size: 15, font: fonts.script, color: C.navy, align: 'center' })
-  bY -= bStep
-  drawText(page, 'Designed and developed as per the standard of', { x: cx, y: bY, size: 10, font: fonts.body, align: 'center' })
-  bY -= bStep
-  drawText(page, 'UnSkills FuturePath Tech Pvt. Ltd.', { x: cx, y: bY, size: 13, font: fonts.script, color: C.navy, align: 'center' })
-  bY -= 16
-  drawText(page, `held at ${data.trainingCenterName}`, { x: cx, y: bY, size: 10, font: fonts.body, align: 'center' })
-
-  // 9. Typing marks table
-  const subjects = data.typingSubjects ?? []
-  const numRows = subjects.length + 1
-  const rowH = 20
-  const ttY = H - 540
-  const ttH = rowH * numRows
-  const colFrac = [0.32, 0.18, 0.18, 0.16, 0.16]
-  const colX: number[] = [safeLeft]
-  for (const f of colFrac) colX.push(colX[colX.length - 1] + f * safeW)
-
-  drawRect(page, safeLeft, ttY + (numRows - 1) * rowH, safeW, rowH, C.tableHeaderBg)
-  page.drawRectangle({ x: safeLeft, y: ttY, width: safeW, height: ttH, borderColor: C.black, borderWidth: 0.6 })
-  for (let i = 1; i < colX.length - 1; i++) drawLine(page, colX[i], ttY, colX[i], ttY + ttH, 0.6, C.black)
-  for (let i = 1; i < numRows; i++) drawLine(page, safeLeft, ttY + i * rowH, safeRight, ttY + i * rowH, 0.6, C.black)
-
-  const headers = ['Name of the Subject', 'Speed W.P.M.', 'Maximum Marks', 'Minimum Marks', 'Marks Obtained']
-  const hY = ttY + (numRows - 1) * rowH + 7
-  for (let i = 0; i < headers.length; i++) {
-    drawText(page, headers[i], { x: (colX[i] + colX[i + 1]) / 2, y: hY, size: 8.5, font: fonts.bodyBold, align: 'center' })
-  }
-  for (let r = 0; r < subjects.length; r++) {
-    const sub = subjects[r]
-    const rowY = ttY + (numRows - 2 - r) * rowH + 7
-    const vals = [sub.name, String(sub.speed), String(sub.max), String(sub.min), String(sub.obtained)]
-    for (let i = 0; i < vals.length; i++) {
-      drawText(page, vals[i], { x: (colX[i] + colX[i + 1]) / 2, y: rowY, size: 8.5, font: fonts.bodyBold, align: 'center' })
-    }
-  }
-
-  // 10. Grade legend
-  let gY = ttY - 18
-  drawText(page, 'Grade System', { x: safeLeft, y: gY, size: 8.5, font: fonts.bodyBold })
-  for (const g of ['A+ : 85% & Above', 'A : 75% to 84%', 'B : 60% to 74%', 'C : 40% to 69%']) {
-    gY -= 10
-    drawText(page, g, { x: safeLeft, y: gY, size: 8, font: fonts.body })
-  }
-
-  // 11. QR + grade pills (bottom-left)
-  const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
-  if (qr) {
-    drawRect(page, safeLeft - 1, 205, 52, 52, C.white, C.black, 0.4)
-    page.drawImage(qr, { x: safeLeft, y: 206, width: 50, height: 50 })
-  }
-
-  // Grade pill
-  drawRect(page, safeLeft, 185, 44, 14, C.red)
-  drawText(page, 'Grade', { x: safeLeft + 22, y: 189, size: 8, font: fonts.bodyBold, color: C.white, align: 'center' })
-  drawRect(page, safeLeft + 44, 185, 40, 14, C.black)
-  drawText(page, data.grade, { x: safeLeft + 64, y: 189, size: 8, font: fonts.bodyBold, color: C.white, align: 'center' })
-
-  // Date pill
-  drawRect(page, safeLeft, 165, 74, 14, C.red)
-  drawText(page, 'Date of Issue', { x: safeLeft + 37, y: 169, size: 8, font: fonts.bodyBold, color: C.white, align: 'center' })
-  drawRect(page, safeLeft + 74, 165, 60, 14, C.black)
-  drawText(page, data.issueDate, { x: safeLeft + 104, y: 169, size: 8, font: fonts.bodyBold, color: C.white, align: 'center' })
-
-  // 12. Signature (right)
-  if (settings.signature_image_url) {
-    const sig = await embedAny(pdfDoc, settings.signature_image_url)
-    if (sig) page.drawImage(sig, { x: safeRight - 100, y: 220, width: 90, height: 26 })
-  }
-  drawLine(page, safeRight - 130, 215, safeRight, 215, 0.7, C.black)
-  if (settings.signatory_name) {
-    drawText(page, settings.signatory_name, { x: safeRight, y: 200, size: 9.5, font: fonts.bodyBold, align: 'right' })
-  }
-  if (settings.signatory_designation) {
-    drawText(page, settings.signatory_designation, { x: safeRight, y: 188, size: 8.5, font: fonts.body, align: 'right' })
-  }
-  if (settings.signatory_company_line) {
-    drawText(page, settings.signatory_company_line, { x: safeRight, y: 176, size: 8.5, font: fonts.body, align: 'right' })
-  }
-
-  // 13. Badge strip
-  const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
-  const stH = 16, stSp = safeW / badges.length
-  for (let i = 0; i < badges.length; i++) {
-    const img = badges[i]
-    if (!img) continue
-    const ar = img.width / img.height
-    const w = stH * ar
-    const bx = safeLeft + i * stSp + stSp / 2 - w / 2
-    page.drawImage(img, { x: bx, y: 140, width: w, height: stH })
-  }
-
-  // 14. Footer
-  if (settings.verification_url_base) {
-    drawText(page, `To verify this certificate visit: ${settings.verification_url_base}`, {
-      x: cx, y: 118, size: 7.5, font: fonts.body, align: 'center',
-    })
-  }
+/**
+ * Generator for the Computer Software Courses landscape certificate.
+ */
+export async function generateComputerSoftwareLandscapeCertificate(
+  data: LandscapeCertData,
+): Promise<Uint8Array> {
+  const pdfDoc = await makeDocWithTemplate(
+    '/certificates/computer-software-landscape.pdf',
+    A4_LANDSCAPE,
+  )
+  const fonts = await loadFonts(pdfDoc)
+  const page = pdfDoc.getPages()[0]
+  const { width: W, height: H } = page.getSize()
+  await drawComputerSoftwareContent(pdfDoc, page, fonts, data, W, H)
+  return pdfDoc.save()
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export async function generateLandscapeCertificate(data: LandscapeCertData): Promise<Uint8Array> {
-  const pdfDoc = await loadOrBlankLandscape()
-  const fonts = await loadFonts(pdfDoc)
-  const page = pdfDoc.getPages()[0]
-  const { width: W, height: H } = page.getSize()
-  await drawLandscapeContent(pdfDoc, page, fonts, data, W, H)
-  return pdfDoc.save()
+/**
+ * Main entry point. Resolves a student's course to its program, then dispatches
+ * to the matching program-specific generator. Throws with a clear message if the
+ * program isn't registered yet (so admins/students see a graceful error, not a
+ * broken PDF).
+ */
+export async function generateCertificate(
+  courseId: string,
+  certData: LandscapeCertData,
+  supabase: SupabaseClient,
+): Promise<Uint8Array> {
+  const programSlug = await getProgramSlugForCourse(courseId, supabase)
+  if (!programSlug) {
+    throw new Error(`Course ${courseId} has no associated program`)
+  }
+
+  const config = getCertificateConfig(programSlug)
+  if (!config) {
+    throw new Error(
+      `Certificate template for program "${programSlug}" is not yet available. ` +
+      `See certificate-registry.ts for the list of pending programs.`,
+    )
+  }
+
+  switch (config.generatorKey) {
+    case 'computer-software-landscape':
+      return generateComputerSoftwareLandscapeCertificate(certData)
+    default:
+      throw new Error(`Unknown generator key: ${config.generatorKey}`)
+  }
 }
 
-export async function generatePortraitCertificate(data: PortraitCertData): Promise<Uint8Array> {
-  const pdfDoc = await loadOrBlankPortrait()
-  const fonts = await loadFonts(pdfDoc)
-  const page = pdfDoc.getPages()[0]
-  const { width: W, height: H } = page.getSize()
-  await drawPortraitContent(pdfDoc, page, fonts, data, W, H)
-  return pdfDoc.save()
-}
-
-/** Convenience: returns a Blob for URL.createObjectURL() */
 function toBlob(bytes: Uint8Array): Blob {
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
   return new Blob([buf], { type: 'application/pdf' })
 }
 
-export async function generateLandscapeBlob(data: LandscapeCertData): Promise<Blob> {
-  return toBlob(await generateLandscapeCertificate(data))
-}
-
-export async function generatePortraitBlob(data: PortraitCertData): Promise<Blob> {
-  return toBlob(await generatePortraitCertificate(data))
+export async function generateCertificateBlob(
+  courseId: string,
+  certData: LandscapeCertData,
+  supabase: SupabaseClient,
+): Promise<Blob> {
+  return toBlob(await generateCertificate(courseId, certData, supabase))
 }

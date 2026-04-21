@@ -36,15 +36,6 @@ export interface CertificateSettings {
   updated_at: string
 }
 
-export interface CourseCertificateMapping {
-  id: string
-  course_id: string
-  template_id: string
-  is_default: boolean
-  show_typing_fields: boolean
-  created_at: string
-}
-
 export interface TypingSubject {
   name: string
   speed: number

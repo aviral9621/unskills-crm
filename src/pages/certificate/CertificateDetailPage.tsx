@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { getCertificateSettings } from '../../lib/certificateSettings'
-import { generateLandscapeBlob, generatePortraitBlob } from '../../lib/pdf/cert-generator'
+import { generateCertificateBlob } from '../../lib/pdf/cert-generator'
 import { toDataUrl } from '../../lib/pdf/marksheet'
 import { formatDateDDMMYYYY } from '../../lib/utils'
 import type { Certificate, CertificateSettings } from '../../types/certificate'
@@ -86,46 +86,31 @@ export default function CertificateDetailPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const slug = cert.template?.slug
+        if (!cert.course_id) throw new Error('Certificate has no course — cannot render')
         const formattedDate = formatDateDDMMYYYY(cert.issue_date)
-        const blob = slug === 'certificate-of-qualification'
-          ? await generateLandscapeBlob({
-              settings,
-              certificateNumber: cert.certificate_number,
-              issueDate: formattedDate,
-              qrCodeDataUrl: cert.qr_code_data_url ?? '',
-              salutation: cert.salutation ?? '',
-              studentName: cert.student_name,
-              fatherPrefix: cert.father_prefix ?? '',
-              fatherName: cert.father_name ?? '',
-              studentPhotoUrl: cert.student_photo_url,
-              courseCode: cert.course_code ?? '',
-              courseName: cert.course_name ?? '',
-              trainingCenterName: cert.training_center_name ?? '',
-              performanceText: cert.performance_text ?? '',
-              percentage: cert.marks_scored ?? 0,
-              grade: cert.grade ?? '',
-              trainingCenterLogoUrl: cert.branch?.center_logo_url ?? null,
-              certificationLogoUrls: certLogos,
-            })
-          : await generatePortraitBlob({
-              settings,
-              certificateNumber: cert.certificate_number,
-              issueDate: formattedDate,
-              qrCodeDataUrl: cert.qr_code_data_url ?? '',
-              salutation: cert.salutation ?? undefined,
-              studentName: cert.student_name,
-              fatherPrefix: cert.father_prefix ?? '',
-              fatherName: cert.father_name ?? '',
-              studentPhotoUrl: cert.student_photo_url,
-              enrollmentNumber: cert.enrollment_number ?? '',
-              trainingCenterCode: cert.training_center_code ?? '',
-              trainingCenterName: cert.training_center_name ?? '',
-              trainingCenterLogoUrl: cert.branch?.center_logo_url ?? null,
-              typingSubjects: cert.typing_subjects ?? [],
-              grade: cert.typing_grade ?? cert.grade ?? '',
-              certificationLogoUrls: certLogos,
-            })
+        const blob = await generateCertificateBlob(
+          cert.course_id,
+          {
+            settings,
+            certificateNumber: cert.certificate_number,
+            issueDate: formattedDate,
+            qrCodeDataUrl: cert.qr_code_data_url ?? '',
+            salutation: cert.salutation ?? '',
+            studentName: cert.student_name,
+            fatherPrefix: cert.father_prefix ?? '',
+            fatherName: cert.father_name ?? '',
+            studentPhotoUrl: cert.student_photo_url,
+            courseCode: cert.course_code ?? '',
+            courseName: cert.course_name ?? '',
+            trainingCenterName: cert.training_center_name ?? '',
+            performanceText: cert.performance_text ?? '',
+            percentage: cert.marks_scored ?? 0,
+            grade: cert.grade ?? '',
+            trainingCenterLogoUrl: cert.branch?.center_logo_url ?? null,
+            certificationLogoUrls: certLogos,
+          },
+          supabase,
+        )
         if (cancelled) return
         const url = URL.createObjectURL(blob)
         revokedUrl = url
@@ -142,11 +127,11 @@ export default function CertificateDetailPage() {
 
   async function handleDownload(c: CertificateRow, s: CertificateSettings, logos: string[] = certLogos) {
     try {
-      const slug = c.template?.slug
+      if (!c.course_id) throw new Error('Certificate has no course — cannot render')
       const formattedDate = formatDateDDMMYYYY(c.issue_date)
-      let blob: Blob
-      if (slug === 'certificate-of-qualification') {
-        blob = await generateLandscapeBlob({
+      const blob = await generateCertificateBlob(
+        c.course_id,
+        {
           settings: s,
           certificateNumber: c.certificate_number,
           issueDate: formattedDate,
@@ -164,27 +149,9 @@ export default function CertificateDetailPage() {
           grade: c.grade ?? '',
           trainingCenterLogoUrl: c.branch?.center_logo_url ?? null,
           certificationLogoUrls: logos,
-        })
-      } else {
-        blob = await generatePortraitBlob({
-          settings: s,
-          certificateNumber: c.certificate_number,
-          issueDate: formattedDate,
-          qrCodeDataUrl: c.qr_code_data_url ?? '',
-          salutation: c.salutation ?? undefined,
-          studentName: c.student_name,
-          fatherPrefix: c.father_prefix ?? '',
-          fatherName: c.father_name ?? '',
-          studentPhotoUrl: c.student_photo_url,
-          enrollmentNumber: c.enrollment_number ?? '',
-          trainingCenterCode: c.training_center_code ?? '',
-          trainingCenterName: c.training_center_name ?? '',
-          trainingCenterLogoUrl: c.branch?.center_logo_url ?? null,
-          typingSubjects: c.typing_subjects ?? [],
-          grade: c.typing_grade ?? c.grade ?? '',
-          certificationLogoUrls: logos,
-        })
-      }
+        },
+        supabase,
+      )
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

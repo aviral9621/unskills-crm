@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { generateLandscapeBlob, generatePortraitBlob } from '../../lib/pdf/cert-generator'
+import { generateComputerSoftwareLandscapeCertificate } from '../../lib/pdf/cert-generator'
 import { generateQRDataUrl } from '../../lib/pdf/generate-qr'
 import type { CertificateSettings } from '../../types/certificate'
 
@@ -24,10 +24,7 @@ const MOCK_SETTINGS: CertificateSettings = {
   updated_at: new Date().toISOString(),
 }
 
-type Tab = 'horizontal' | 'vertical'
-
 export default function CertificatePreviewPage() {
-  const [tab, setTab] = useState<Tab>('horizontal')
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -36,43 +33,25 @@ export default function CertificatePreviewPage() {
     ;(async () => {
       try {
         const qr = await generateQRDataUrl(`${MOCK_SETTINGS.verification_url_base}/US-861020001`)
-        const blob = tab === 'horizontal'
-          ? await generateLandscapeBlob({
-              settings: MOCK_SETTINGS,
-              certificateNumber: 'US-861020001',
-              issueDate: '19-04-2026',
-              qrCodeDataUrl: qr,
-              salutation: 'Mr.',
-              studentName: 'Rohit Kumar',
-              fatherPrefix: 'S/o',
-              fatherName: 'Ram Kumar',
-              studentPhotoUrl: null,
-              courseCode: 'ADCA',
-              courseName: 'Advance Diploma in Computer Application',
-              trainingCenterName: 'Ideal Computer Centre, Noida',
-              performanceText: 'Excellent',
-              percentage: 92,
-              grade: 'A+',
-            })
-          : await generatePortraitBlob({
-              settings: MOCK_SETTINGS,
-              certificateNumber: 'US-861020002',
-              issueDate: '19-04-2026',
-              qrCodeDataUrl: qr,
-              salutation: 'Mr.',
-              studentName: 'Bikram Kumar Baid',
-              fatherPrefix: 'S/o',
-              fatherName: 'Rajesh Baid',
-              studentPhotoUrl: null,
-              enrollmentNumber: 'UCE/2026/00142',
-              trainingCenterCode: 'US-86102',
-              trainingCenterName: 'Ideal Computer Centre, Noida',
-              typingSubjects: [
-                { name: 'HINDI TYPING', speed: 39, max: 100, min: 30, obtained: 88 },
-                { name: 'ENGLISH TYPING', speed: 41, max: 100, min: 30, obtained: 89 },
-              ],
-              grade: 'A+',
-            })
+        const bytes = await generateComputerSoftwareLandscapeCertificate({
+          settings: MOCK_SETTINGS,
+          certificateNumber: 'US-861020001',
+          issueDate: '19-04-2026',
+          qrCodeDataUrl: qr,
+          salutation: 'Mr.',
+          studentName: 'Rohit Kumar',
+          fatherPrefix: 'S/o',
+          fatherName: 'Ram Kumar',
+          studentPhotoUrl: null,
+          courseCode: 'ADCA',
+          courseName: 'Advance Diploma in Computer Application',
+          trainingCenterName: 'Ideal Computer Centre, Noida',
+          performanceText: 'Excellent',
+          percentage: 92,
+          grade: 'A+',
+        })
+        const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+        const blob = new Blob([buf], { type: 'application/pdf' })
         url = URL.createObjectURL(blob)
         setPdfUrl(url)
         setError(null)
@@ -81,23 +60,12 @@ export default function CertificatePreviewPage() {
       }
     })()
     return () => { if (url) URL.revokeObjectURL(url) }
-  }, [tab])
+  }, [])
 
   return (
     <div className="flex flex-col h-[calc(100vh-100px)]">
       <div className="flex items-center gap-2 mb-3">
-        <button
-          onClick={() => setTab('horizontal')}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${tab === 'horizontal' ? 'bg-red-600 text-white border-red-600' : 'border-gray-300'}`}
-        >
-          Horizontal (Qualification)
-        </button>
-        <button
-          onClick={() => setTab('vertical')}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${tab === 'vertical' ? 'bg-red-600 text-white border-red-600' : 'border-gray-300'}`}
-        >
-          Vertical (Typing)
-        </button>
+        <span className="text-sm font-medium">Computer Software Courses — Landscape</span>
         <span className="ml-auto text-xs text-gray-500">Dev preview – mock data</span>
       </div>
 
