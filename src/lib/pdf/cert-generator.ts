@@ -354,73 +354,59 @@ async function drawComputerSoftwareContent(
     }
   }
 
-  // 12. Certificate number + QR (bottom-left) — starts at x=220 to clear BL circuit
-  const certBlockX = 220
-  drawText(page, 'CERTIFICATE NUMBER', { x: certBlockX, y: 165, size: 8, font: fonts.bodyBold })
-  drawText(page, data.certificateNumber, {
-    x: certBlockX, y: 148, size: 13, font: fonts.bodyBold, color: C.navy,
-  })
+  // Bottom band layout (clear of BL circuit x<200, BR hexagons x>W-260, footer):
+  //   y=40-50:  verify URL (centered)
+  //   y=60-82:  badge strip (7 logos, x=220..W-280)
+  //   y=92:     gold divider
+  //   y=110-200: content row — QR/cert# left column | signature right column
+
+  // 12. Certificate number + QR (left column) — QR drops to 110 so cert# text sits cleanly above it
+  const certBlockX = 215
+  const qrSize = 54
+  const qrY = 108
   const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
   if (qr) {
-    drawRect(page, certBlockX - 1, 99, 52, 52, C.white, C.black, 0.5)
-    page.drawImage(qr, { x: certBlockX, y: 100, width: 50, height: 50 })
+    drawRect(page, certBlockX - 1, qrY - 1, qrSize + 2, qrSize + 2, C.white, C.black, 0.5)
+    page.drawImage(qr, { x: certBlockX, y: qrY, width: qrSize, height: qrSize })
   }
-  if (settings.contact_email) drawText(page, settings.contact_email, {
-    x: certBlockX + 60, y: 135, size: 8, font: fonts.body,
+  // Cert number text sits ABOVE the QR (QR top = qrY + qrSize = 162)
+  drawText(page, data.certificateNumber, {
+    x: certBlockX, y: 185, size: 13, font: fonts.bodyBold, color: C.navy,
   })
-  if (settings.website) drawText(page, settings.website, {
-    x: certBlockX + 60, y: 122, size: 8, font: fonts.body,
-  })
+  drawText(page, 'CERTIFICATE NUMBER', { x: certBlockX, y: 200, size: 7.5, font: fonts.bodyBold })
 
-  // 13. Partner logos — strip between cert block and signature block, away from bottom decorations
-  const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
-  const partnerBadges = badges.slice(0, 5)
-  const partnerAreaX = 400
-  const partnerAreaEnd = W - 300
-  const partnerAreaW = partnerAreaEnd - partnerAreaX
-  const pStep = partnerAreaW / 5
-  const pHeight = 28
-  const pY = 115
-  for (let i = 0; i < partnerBadges.length; i++) {
-    const img = partnerBadges[i]
-    if (!img) continue
-    const ar = img.width / img.height
-    const w = pHeight * ar
-    const bx = partnerAreaX + i * pStep + pStep / 2 - w / 2
-    page.drawImage(img, { x: bx, y: pY, width: w, height: pHeight })
-  }
-
-  // 14. Signature (right) — right edge at W - 280 so it clears BR hexagons
-  const sigRight = W - 280
-  const sigW = 180
+  // 13. Signature (right column) — right edge at W - 285 so it clears BR hexagons
+  const sigRight = W - 285
+  const sigLeft = sigRight - 160
   if (settings.signature_image_url) {
     const sig = await embedAny(pdfDoc, settings.signature_image_url)
-    if (sig) page.drawImage(sig, { x: sigRight - 110, y: 150, width: 110, height: 28 })
+    if (sig) page.drawImage(sig, { x: sigRight - 110, y: 168, width: 110, height: 30 })
   }
-  drawLine(page, sigRight - sigW + 30, 145, sigRight, 145, 0.8, C.black)
+  drawLine(page, sigLeft, 163, sigRight, 163, 0.8, C.black)
   if (settings.signatory_designation) {
     drawText(page, settings.signatory_designation, {
-      x: sigRight, y: 130, size: 9.5, font: fonts.bodyBold, align: 'right',
+      x: sigRight, y: 148, size: 9.5, font: fonts.bodyBold, align: 'right',
     })
   }
   if (settings.signatory_company_line) {
     drawText(page, settings.signatory_company_line, {
-      x: sigRight, y: 117, size: 8.5, font: fonts.body, align: 'right',
+      x: sigRight, y: 135, size: 8.5, font: fonts.body, align: 'right',
     })
   }
   if (settings.signatory_reg_line) {
     drawText(page, settings.signatory_reg_line, {
-      x: sigRight, y: 105, size: 7, font: fonts.body, color: C.textSecondary, align: 'right',
+      x: sigRight, y: 123, size: 7, font: fonts.body, color: C.textSecondary, align: 'right',
     })
   }
 
-  // 15. Badge strip — between x=220 (right of BL circuit) and W-280 (left of BR hexagons)
-  const stripY = 72
-  const stripH = 18
+  // 14. Badge strip — 7 logos between x=220 (right of BL circuit) and W-280 (left of BR hexagons)
+  const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
+  const stripY = 62
+  const stripH = 22
   const stripX0 = 220
   const stripX1 = W - 280
   const stripSp = (stripX1 - stripX0) / badges.length
-  drawLine(page, stripX0, stripY + stripH + 3, stripX1, stripY + stripH + 3, 0.4, C.gold)
+  drawLine(page, stripX0, stripY + stripH + 6, stripX1, stripY + stripH + 6, 0.4, C.gold)
   for (let i = 0; i < badges.length; i++) {
     const img = badges[i]
     if (!img) continue
@@ -430,10 +416,10 @@ async function drawComputerSoftwareContent(
     page.drawImage(img, { x: bx, y: stripY, width: w, height: stripH })
   }
 
-  // 16. Footer — centered, narrow, within safe horizontal band
+  // 15. Footer verify URL — centered, bottom
   if (settings.verification_url_base) {
     drawText(page, `To verify this certificate visit: ${settings.verification_url_base}`, {
-      x: cx, y: 55, size: 7.5, font: fonts.body, align: 'center',
+      x: cx, y: 44, size: 7.5, font: fonts.body, align: 'center',
     })
   }
 }
