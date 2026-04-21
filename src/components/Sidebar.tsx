@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, MessageSquare,
-  GraduationCap, BookOpen, BookText, Layers,
+  GraduationCap, BookOpen,
   FileText, Video, ClipboardList, ScrollText, Award,
   Briefcase,
   BarChart3, MonitorPlay,
@@ -47,10 +47,10 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
         children: [
           { label: 'Programs', path: '/admin/courses/programs' },
           { label: 'All Courses', path: '/admin/courses' },
+          { label: 'Subjects', path: '/admin/courses/subjects' },
+          { label: 'Batches', path: '/admin/courses/batches' },
         ],
       },
-      { label: 'Subjects', icon: BookText, path: '/admin/courses/subjects', permission: 'course' },
-      { label: 'Batches', icon: Layers, path: '/admin/courses/batches', permission: 'course' },
       {
         label: 'Study Material', icon: FileText, permission: 'material',
         children: [

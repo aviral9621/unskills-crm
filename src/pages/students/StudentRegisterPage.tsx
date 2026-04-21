@@ -23,11 +23,9 @@ const STEPS = [
 ] as const
 
 const GENDERS = ['male', 'female', 'other'] as const
-// Admission years: current session + next 2 upcoming sessions only.
-// Past years are not shown — no student registers with a historical admission year.
 const ADMISSION_YEARS = (() => {
   const cy = new Date().getFullYear()
-  return [0, 1, 2].map(i => `${cy + i}-${cy + i + 1}`)
+  return Array.from({ length: 8 }, (_, i) => cy - 5 + i).map(y => `${y}-${y + 1}`)
 })()
 
 const CATEGORIES = ['GEN', 'OBC', 'OBC-NCL', 'SC', 'ST', 'EWS', 'Other'] as const
