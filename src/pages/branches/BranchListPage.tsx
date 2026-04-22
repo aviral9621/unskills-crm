@@ -4,7 +4,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import {
   Building2, Plus, Search, MoreVertical,
   Pencil, Wallet, PlusCircle, Power, X, Trash2, Loader2, AlertTriangle,
-  MapPin, Phone, ChevronRight,
+  MapPin, Phone, ChevronRight, FileText, Download,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -14,6 +14,7 @@ import type { Branch, BranchCategory } from '../../types'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import { viewAtcCertificate, downloadAtcCertificate } from '../../lib/atcCertificate'
 
 const colHelper = createColumnHelper<Branch>()
 type StatusFilter = 'all' | 'active' | 'inactive'
@@ -38,6 +39,10 @@ export default function BranchListPage() {
   // Toggle confirm
   const [toggleTarget, setToggleTarget] = useState<Branch | null>(null)
   const [toggling, setToggling] = useState(false)
+
+  // ATC certificate action state (shared loading flag so the spinner shows
+  // on the clicked row while the PDF is being generated in the background).
+  const [atcBusyId, setAtcBusyId] = useState<string | null>(null)
 
   // Delete confirm (super admin only)
   const [deleteTarget, setDeleteTarget] = useState<Branch | null>(null)
@@ -138,6 +143,29 @@ export default function BranchListPage() {
       toast.error((err as Error).message || 'Failed to delete branch')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleViewAtc(branch: Branch) {
+    setAtcBusyId(branch.id)
+    try {
+      await viewAtcCertificate(branch.id)
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to open certificate')
+    } finally {
+      setAtcBusyId(null)
+    }
+  }
+
+  async function handleDownloadAtc(branch: Branch) {
+    setAtcBusyId(branch.id)
+    try {
+      await downloadAtcCertificate(branch.id, branch.name)
+      toast.success('Certificate downloaded')
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to download certificate')
+    } finally {
+      setAtcBusyId(null)
     }
   }
 
@@ -380,6 +408,15 @@ export default function BranchListPage() {
               <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet?add=true`) }}
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"><PlusCircle size={16} /> Add Balance</button>
               <div className="border-t border-gray-100 my-1" />
+              <button onClick={() => { setMenuOpen(null); handleViewAtc(menuBranch) }} disabled={atcBusyId === menuBranch.id}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60">
+                {atcBusyId === menuBranch.id ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} View Certificate
+              </button>
+              <button onClick={() => { setMenuOpen(null); handleDownloadAtc(menuBranch) }} disabled={atcBusyId === menuBranch.id}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60">
+                {atcBusyId === menuBranch.id ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Download Certificate
+              </button>
+              <div className="border-t border-gray-100 my-1" />
               <button onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium ${menuBranch.is_active ? 'text-amber-600 hover:bg-amber-50 active:bg-amber-100' : 'text-green-600 hover:bg-green-50 active:bg-green-100'}`}>
                 <Power size={16} /> {menuBranch.is_active ? 'Deactivate' : 'Activate'}
@@ -401,6 +438,15 @@ export default function BranchListPage() {
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Wallet size={14} /> View Wallet</button>
             <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet?add=true`) }}
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><PlusCircle size={14} /> Add Balance</button>
+            <div className="border-t border-gray-100 my-1" />
+            <button onClick={() => { setMenuOpen(null); handleViewAtc(menuBranch) }} disabled={atcBusyId === menuBranch.id}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60">
+              {atcBusyId === menuBranch.id ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />} View Certificate
+            </button>
+            <button onClick={() => { setMenuOpen(null); handleDownloadAtc(menuBranch) }} disabled={atcBusyId === menuBranch.id}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60">
+              {atcBusyId === menuBranch.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Download Certificate
+            </button>
             <div className="border-t border-gray-100 my-1" />
             <button onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
               className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm ${menuBranch.is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-green-600 hover:bg-green-50'}`}>
