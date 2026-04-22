@@ -27,6 +27,7 @@ export interface CertificateSettings {
 export interface LandscapeCertData {
   settings: CertificateSettings
   certificateNumber: string
+  enrollmentNumber?: string
   salutation: string
   studentName: string
   fatherPrefix: string
@@ -264,7 +265,8 @@ async function drawComputerSoftwareContent(
   drawText(page, 'Reg. by Govt. of India', {
     x: 130, y: H - 72, size: 8, font: fonts.bodyBold,
   })
-  drawText(page, `Reg. No.-${settings.institute_reg_number ?? '—'}`, {
+  const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
+  drawText(page, `Reg. No.-${regNoValue}`, {
     x: W - 270, y: H - 72, size: 8, font: fonts.bodyBold, align: 'right',
   })
 
@@ -399,21 +401,24 @@ async function drawComputerSoftwareContent(
     })
   }
 
-  // 14. Badge strip — 7 logos between x=220 (right of BL circuit) and W-280 (left of BR hexagons)
+  // 14. Badge strip — 7 logos between x=205 (right of BL circuit) and W-265 (left of BR hexagons)
   const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
   const stripY = 62
   const stripH = 22
-  const stripX0 = 220
-  const stripX1 = W - 280
+  const stripX0 = 205
+  const stripX1 = W - 265
   const stripSp = (stripX1 - stripX0) / badges.length
+  const maxBadgeW = stripSp - 8  // 4 px padding each side prevents overlap
   drawLine(page, stripX0, stripY + stripH + 6, stripX1, stripY + stripH + 6, 0.4, C.gold)
   for (let i = 0; i < badges.length; i++) {
     const img = badges[i]
     if (!img) continue
     const ar = img.width / img.height
-    const w = stripH * ar
+    const w = Math.min(stripH * ar, maxBadgeW)
+    const h = w / ar
     const bx = stripX0 + i * stripSp + stripSp / 2 - w / 2
-    page.drawImage(img, { x: bx, y: stripY, width: w, height: stripH })
+    const by = stripY + (stripH - h) / 2
+    page.drawImage(img, { x: bx, y: by, width: w, height: h })
   }
 
   // 15. Footer verify URL — centered, bottom

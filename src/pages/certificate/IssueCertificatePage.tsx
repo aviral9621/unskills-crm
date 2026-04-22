@@ -222,6 +222,7 @@ export default function IssueCertificatePage() {
         {
           settings,
           certificateNumber: certNumber,
+          enrollmentNumber: enrollmentNumber || student.registration_no,
           issueDate: formattedDate,
           qrCodeDataUrl: qrDataUrl,
           salutation,
@@ -408,6 +409,7 @@ export default function IssueCertificatePage() {
           <StepThreePreview
             settings={settings}
             student={student}
+            enrollmentNumber={enrollmentNumber}
             salutation={salutation}
             studentName={studentName}
             fatherPrefix={fatherPrefix}
@@ -442,13 +444,14 @@ export default function IssueCertificatePage() {
 }
 
 function StepThreePreview({
-  settings, student,
+  settings, student, enrollmentNumber,
   salutation, studentName, fatherPrefix, fatherName, issueDate,
   courseCode, courseName, trainingCenterName, performanceText, marksScored, grade,
   qrPreview, certLogos,
 }: {
   settings: CertificateSettings
   student: StudentRow
+  enrollmentNumber: string
   salutation: string; studentName: string; fatherPrefix: string; fatherName: string; issueDate: string
   courseCode: string; courseName: string; trainingCenterName: string; performanceText: string
   marksScored: number; grade: string; qrPreview: string; certLogos: string[]
@@ -465,6 +468,7 @@ function StepThreePreview({
           student.course_id,
           {
             settings, certificateNumber: 'PREVIEW',
+            enrollmentNumber: enrollmentNumber || student.registration_no,
             issueDate: formatDateDDMMYYYY(issueDate), qrCodeDataUrl: qrPreview,
             salutation, studentName, fatherPrefix, fatherName,
             studentPhotoUrl: student.photo_url, courseCode, courseName,
