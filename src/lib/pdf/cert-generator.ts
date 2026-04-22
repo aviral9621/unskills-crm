@@ -809,16 +809,16 @@ async function drawSkillsDevelopmentContent(
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — placed in the OUTER white band that sits between the outer
-  //    tan/gold border and the thin inner navy frame line (per client spec).
-  //    y=H-62 puts the text cleanly in that 25pt-tall gap, well above all L-
-  //    corner brackets and the brand title below.
+  // 1. Top meta — placed in the white band INSIDE the inner navy frame, just
+  //    below the L-corner brackets (which end at ~y=H-90) and above the brand
+  //    title. This is the "white space between the top and bottom border line"
+  //    the client asked for — a clean strip clearly inside the certificate area.
   drawText(page, 'Reg. by Govt. of India', {
-    x: 100, y: H - 62, size: 9, font: fonts.bodyBold,
+    x: 100, y: H - 95, size: 9, font: fonts.bodyBold,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
   drawText(page, `Reg. No.-${regNoValue}`, {
-    x: W - 100, y: H - 62, size: 9, font: fonts.bodyBold, align: 'right',
+    x: W - 100, y: H - 95, size: 9, font: fonts.bodyBold, align: 'right',
   })
 
   // 2. Brand title "UNSKILLS COMPUTER EDUCATION" — UNSKILLS red, rest black.
@@ -1045,18 +1045,18 @@ async function drawBeauticianContent(
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — placed in the OUTER white band between the rose-gold border
-  //    and the inner thin maroon frame line, per client spec ("on the top").
+  // 1. Top meta — placed in the white band INSIDE the inner maroon frame,
+  //    just below the L-corner brackets. Clean strip above the brand title
+  //    (the specific spot the client marked with red arrows).
   drawText(page, 'Reg. by Govt. of India', {
-    x: 100, y: H - 62, size: 9, font: fonts.bodyBold,
+    x: 100, y: H - 95, size: 9, font: fonts.bodyBold,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
   drawText(page, `Reg. No.-${regNoValue}`, {
-    x: W - 100, y: H - 62, size: 9, font: fonts.bodyBold, align: 'right',
+    x: W - 100, y: H - 95, size: 9, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title — UNSKILLS in maroon, rest black. Lifted to H-128 since
-  //    the reg meta is now out of the way in the outer band.
+  // 2. Brand title — UNSKILLS in maroon, rest black.
   drawBrandTitle(page, {
     cx, y: H - 128, size: 26, font: fonts.display,
     leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
@@ -1269,20 +1269,22 @@ async function drawSummerTrainingContent(
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — placed at the very top, just inside the inner white zone
-  //    above the corner icons ({} + calendar). Matches the "on the top" spec.
+  // 1. Top meta — pushed further down than the other bespoke certs because
+  //    the template's thick orange band dominates the top area. Landing at
+  //    H-110 places it cleanly below the orange band + corner icons, still
+  //    leaving room above the brand title at H-138.
   drawText(page, 'Reg. by Govt. of India', {
-    x: 100, y: H - 68, size: 9, font: fonts.bodyBold,
+    x: 100, y: H - 110, size: 9, font: fonts.bodyBold,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
   drawText(page, `Reg. No.-${regNoValue}`, {
-    x: W - 100, y: H - 68, size: 9, font: fonts.bodyBold, align: 'right',
+    x: W - 100, y: H - 110, size: 9, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title — UNSKILLS orange, rest black. Lifted since reg meta now
-  //    sits above the corner icons.
+  // 2. Brand title — UNSKILLS orange, rest black. Lowered to H-138 to clear
+  //    the reg meta above while keeping the rest of the layout unchanged.
   drawBrandTitle(page, {
-    cx, y: H - 128, size: 26, font: fonts.display,
+    cx, y: H - 138, size: 26, font: fonts.display,
     leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
     baseColor: C.black, accentColor: C.orange,
   })
