@@ -97,28 +97,25 @@ async function fetchBytes(path: string): Promise<ArrayBuffer | null> {
 async function loadFonts(pdfDoc: PDFDocument): Promise<FontSet> {
   pdfDoc.registerFontkit(fontkit)
 
-  const [scriptBytes, displayBytes, sansBytes, sansBoldBytes] = await Promise.all([
+  // Body uses the Standard PDF Helvetica set so every viewer renders it
+  // correctly without subsetting — previous DM Sans WOFF embed triggered
+  // Acrobat's "cannot extract embedded font" warning.
+  const body = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const bodyBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+
+  // Custom decorative fonts: brand title + cert title. Ligatures disabled so
+  // "fi" doesn't render as "{" (pdf-lib subset name table quirk).
+  const opts = { features: { liga: false, dlig: false, clig: false } } as const
+  const [scriptBytes, displayBytes] = await Promise.all([
     fetchBytes('/fonts/GreatVibes-Regular.ttf'),
     fetchBytes('/fonts/ArchivoBlack-Regular.ttf'),
-    fetchBytes('/fonts/dm-sans-400.woff'),
-    fetchBytes('/fonts/dm-sans-700.woff'),
   ])
-
-  // DM Sans (body) + Archivo Black (display) + Great Vibes (script) — client
-  // wants a "professional modern" typographic feel. Ligatures are disabled
-  // on every custom font because pdf-lib's subsetter does not round-trip the
-  // "fi" glyph ID correctly (renders it as "{" in viewers). Standard fonts
-  // have no ligatures so the flag is ignored there.
-  const opts = { features: { liga: false, dlig: false, clig: false } } as const
-  async function tryEmbed(bytes: ArrayBuffer | null, fallback: StandardFonts) {
-    if (!bytes) return pdfDoc.embedFont(fallback)
-    try { return await pdfDoc.embedFont(bytes, opts) } catch { return pdfDoc.embedFont(fallback) }
-  }
-
-  const body = await tryEmbed(sansBytes, StandardFonts.Helvetica)
-  const bodyBold = await tryEmbed(sansBoldBytes, StandardFonts.HelveticaBold)
-  const script = await tryEmbed(scriptBytes, StandardFonts.TimesRoman)
-  const display = await tryEmbed(displayBytes, StandardFonts.HelveticaBold)
+  const script = scriptBytes
+    ? await pdfDoc.embedFont(scriptBytes, opts).catch(() => pdfDoc.embedFont(StandardFonts.TimesRomanItalic))
+    : await pdfDoc.embedFont(StandardFonts.TimesRomanItalic)
+  const display = displayBytes
+    ? await pdfDoc.embedFont(displayBytes, opts).catch(() => pdfDoc.embedFont(StandardFonts.HelveticaBold))
+    : await pdfDoc.embedFont(StandardFonts.HelveticaBold)
 
   return { body, bodyBold, script, display }
 }
@@ -758,23 +755,25 @@ async function drawHardwareNetworkingContent(
     x: sigRight, y: 145, size: 9, font: fonts.body, align: 'right',
   })
 
-  // 11. Corporate office (above the bottom navy bar)
+  // 11. Bottom footer stack. Measured bar positions on this template:
+  //     navy bar ..... y = 39 .. 57  (19 pt thick)
+  //     orange line .. y = 63 .. 67  (thin separator)
+  //     clear zone ... y = 68 .. ~105
+  // Corporate address at y≈100 (dark), Mail us at y≈80 (dark, above orange
+  // separator), verify URL at y≈48 (white text centered inside navy bar).
   if (settings.corporate_office_address) {
     drawText(page, `Corporate Office : ${settings.corporate_office_address}`, {
-      x: cx, y: 108, size: 9.5, font: fonts.bodyBold, color: C.textDark, align: 'center',
-    })
-  }
-
-  // 12. Verify URL + email — painted in white on top of the template's navy
-  // bottom bar so it reads like a single integrated strip.
-  if (settings.verification_url_base) {
-    drawText(page, `To verify this certificate visit : ${settings.verification_url_base}`, {
-      x: cx, y: 75, size: 9.5, font: fonts.bodyBold, color: C.white, align: 'center',
+      x: cx, y: 100, size: 9.5, font: fonts.bodyBold, color: C.textDark, align: 'center',
     })
   }
   if (settings.contact_email) {
     drawText(page, `Mail us : ${settings.contact_email}`, {
-      x: cx, y: 60, size: 8.5, font: fonts.body, color: C.white, align: 'center',
+      x: cx, y: 82, size: 8.5, font: fonts.body, color: C.textDark, align: 'center',
+    })
+  }
+  if (settings.verification_url_base) {
+    drawText(page, `To verify this certificate visit : ${settings.verification_url_base}`, {
+      x: cx, y: 44, size: 9, font: fonts.bodyBold, color: C.white, align: 'center',
     })
   }
 }
