@@ -52,10 +52,15 @@ const C = {
   navy: rgb(0.043, 0.141, 0.278),
   red: rgb(0.784, 0.063, 0.180),
   gold: rgb(0.722, 0.525, 0.043),
+  maroon: rgb(0.357, 0.086, 0.125),       // #5B1620 — beautician border
+  roseGold: rgb(0.714, 0.486, 0.400),     // #B67C66 — beautician accent
+  orange: rgb(0.980, 0.588, 0.180),       // #FA962E — summer accent
+  teal: rgb(0.059, 0.243, 0.282),         // #0F3E48 — skills-dev border
+  hnBlue: rgb(0.102, 0.220, 0.412),       // #1A3869 — hardware primary
+  hnOrange: rgb(0.925, 0.455, 0.133),     // #EC7422 — hardware accent
   white: rgb(1, 1, 1),
   textDark: rgb(0.039, 0.039, 0.039),
   textSecondary: rgb(0.29, 0.29, 0.29),
-  tableHeaderBg: rgb(0.96, 0.96, 0.96),
 }
 
 // ─── Font set ─────────────────────────────────────────────────────────────────
@@ -63,8 +68,8 @@ const C = {
 interface FontSet {
   body: PDFFont
   bodyBold: PDFFont
-  script: PDFFont    // Great Vibes
-  display: PDFFont   // Archivo Black
+  script: PDFFont
+  display: PDFFont
 }
 
 async function fetchBytes(path: string): Promise<ArrayBuffer | null> {
@@ -166,12 +171,26 @@ function drawText(
   }
 }
 
-function drawBrandTitle(page: PDFPage, opts: { cx: number; y: number; size: number; font: PDFFont }) {
-  const { cx, y, size, font } = opts
+/**
+ * Draws the "UN SKILLS ..." brand title with the accent word in color.
+ * Accepts a theme so each program can use its own accent color and trailing text.
+ */
+function drawBrandTitle(
+  page: PDFPage,
+  opts: {
+    cx: number; y: number; size: number; font: PDFFont
+    leading: string     // e.g., 'UN '
+    accent: string      // e.g., 'SKILLS'
+    trailing: string    // e.g., ' COMPUTER EDUCATION'
+    baseColor: ReturnType<typeof rgb>
+    accentColor: ReturnType<typeof rgb>
+  },
+) {
+  const { cx, y, size, font, leading, accent, trailing, baseColor, accentColor } = opts
   const parts = [
-    { text: 'UN', color: C.black },
-    { text: 'SKILLS', color: C.red },
-    { text: ' COMPUTER EDUCATION', color: C.black },
+    { text: leading, color: baseColor },
+    { text: accent, color: accentColor },
+    { text: trailing, color: baseColor },
   ]
   const tmSize = size * 0.4
   let totalW = 0
@@ -183,7 +202,7 @@ function drawBrandTitle(page: PDFPage, opts: { cx: number; y: number; size: numb
     page.drawText(p.text, { x: curX, y, size, font, color: p.color })
     curX += font.widthOfTextAtSize(p.text, size)
   }
-  page.drawText('TM', { x: curX, y: y + size * 0.5, size: tmSize, font, color: C.black })
+  page.drawText('TM', { x: curX, y: y + size * 0.5, size: tmSize, font, color: baseColor })
 }
 
 function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number, t: number, color: ReturnType<typeof rgb>) {
@@ -194,21 +213,27 @@ function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, col
   page.drawRectangle({ x, y, width: w, height: h, color, borderColor, borderWidth })
 }
 
-function drawDivider(page: PDFPage, cx: number, y: number, halfLen: number) {
-  drawLine(page, cx - halfLen, y, cx - 8, y, 0.8, C.gold)
-  page.drawRectangle({ x: cx - 3, y: y - 3, width: 6, height: 6, color: C.navy, rotate: degrees(45) })
-  drawLine(page, cx + 8, y, cx + halfLen, y, 0.8, C.gold)
+function drawDivider(
+  page: PDFPage,
+  cx: number,
+  y: number,
+  halfLen: number,
+  lineColor: ReturnType<typeof rgb>,
+  diamondColor: ReturnType<typeof rgb>,
+) {
+  drawLine(page, cx - halfLen, y, cx - 8, y, 0.8, lineColor)
+  page.drawRectangle({ x: cx - 3, y: y - 3, width: 6, height: 6, color: diamondColor, rotate: degrees(45) })
+  drawLine(page, cx + 8, y, cx + halfLen, y, 0.8, lineColor)
 }
 
 // ─── Template loader ──────────────────────────────────────────────────────────
 
 const A4_LANDSCAPE: [number, number] = [841.89, 595.28]
+const A4_PORTRAIT: [number, number] = [595.28, 841.89]
 
 /**
- * Builds a fresh A4 doc whose first page is painted with the template PDF's
- * first page (scaled to fill). Our Canva exports are 2631×1860 — this
- * normalizes them to A4 so the hardcoded layout coordinates remain valid.
- * Falls back to a blank A4 page if the template is missing or unparseable.
+ * Builds a fresh doc whose first page is painted with the template PDF's first
+ * page (scaled to fill). Falls back to a blank page if the template is missing.
  */
 async function makeDocWithTemplate(
   templatePath: string,
@@ -238,30 +263,55 @@ async function makeDocWithTemplate(
   return doc
 }
 
-// ─── Computer Software Courses — landscape ────────────────────────────────────
+// ─── Landscape theme ──────────────────────────────────────────────────────────
 
 /**
- * Layout respects the template's tech-themed decorations:
- *   - Top-left: 2 blue squares (small zone)
- *   - Top-right: circuit traces + blue dots (~H*0.42 × ~H*0.34 in native size,
- *     normalized to x > W-250, y > H-200 in A4 terms)
- *   - Bottom-left: circuit traces (x < 200, y < 200)
- *   - Bottom-right: hexagon cluster (x > W-260, y < 220)
- *
- * All dynamic content stays inside the "safe window" bounded by these zones.
+ * Theme config for a landscape certificate. Each program's decorative template
+ * PDF dictates which zones are "safe" for dynamic content; the theme lets us
+ * tune colors, brand text, and positions without duplicating the full layout.
  */
-async function drawComputerSoftwareContent(
+interface LandscapeTheme {
+  // Brand title split for multi-color rendering
+  brandLeading: string
+  brandAccent: string
+  brandTrailing: string
+
+  // Color palette
+  primary: ReturnType<typeof rgb>    // main accent — cert title, name, signature
+  accent: ReturnType<typeof rgb>     // brand accent word color
+  gold: ReturnType<typeof rgb>       // divider gold
+
+  // ISO ribbon background/text (some themes invert)
+  isoBg: ReturnType<typeof rgb>
+  isoText: ReturnType<typeof rgb>
+
+  // Positions (pt from origin, landscape 841.89 × 595.28)
+  logoX: number        // training-center logo left edge
+  photoX: number       // student photo left edge
+  certBlockX: number   // cert number + QR column
+  sigRightX: number    // signature right edge
+  stripX0: number      // badge strip left
+  stripX1: number      // badge strip right
+  stripY: number       // badge strip baseline
+}
+
+/**
+ * Shared landscape drawer. Every landscape program uses the same field set and
+ * visual rhythm — only colors, brand text, and safe-zone boundaries vary.
+ */
+async function drawLandscapeContent(
   pdfDoc: PDFDocument,
   page: PDFPage,
   fonts: FontSet,
   data: LandscapeCertData,
+  theme: LandscapeTheme,
   W: number,
   H: number,
 ) {
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — inside top bar but clear of TR circuit (x < W - 260)
+  // 1. Top meta
   drawText(page, 'Reg. by Govt. of India', {
     x: 130, y: H - 72, size: 8, font: fonts.bodyBold,
   })
@@ -271,16 +321,20 @@ async function drawComputerSoftwareContent(
   })
 
   // 2. Brand title
-  drawBrandTitle(page, { cx, y: H - 100, size: 21, font: fonts.display })
+  drawBrandTitle(page, {
+    cx, y: H - 100, size: 21, font: fonts.display,
+    leading: theme.brandLeading, accent: theme.brandAccent, trailing: theme.brandTrailing,
+    baseColor: C.black, accentColor: theme.accent,
+  })
 
   // 3. ISO ribbon
   const isoText = 'An ISO 9001:2015 Certified Organization'
   const isoFontSize = 9
   const isoTextW = fonts.bodyBold.widthOfTextAtSize(isoText, isoFontSize)
   const isoW = isoTextW + 24
-  drawRect(page, cx - isoW / 2, H - 132, isoW, 16, C.black)
+  drawRect(page, cx - isoW / 2, H - 132, isoW, 16, theme.isoBg)
   drawText(page, isoText, {
-    x: cx, y: H - 128, size: isoFontSize, font: fonts.bodyBold, color: C.white, align: 'center',
+    x: cx, y: H - 128, size: isoFontSize, font: fonts.bodyBold, color: theme.isoText, align: 'center',
   })
 
   // 4. Sub-headers
@@ -296,32 +350,32 @@ async function drawComputerSoftwareContent(
 
   // 5. Certificate title
   drawText(page, 'Certificate of Qualification', {
-    x: cx, y: H - 212, size: 34, font: fonts.script, color: C.navy, align: 'center',
+    x: cx, y: H - 212, size: 34, font: fonts.script, color: theme.primary, align: 'center',
   })
 
   // 6. Divider
-  drawDivider(page, cx, H - 224, 95)
+  drawDivider(page, cx, H - 224, 95, theme.gold, theme.primary)
 
   // 7. Presented to
-  drawRect(page, cx - 110, H - 247, 4, 4, C.navy)
+  drawRect(page, cx - 110, H - 247, 4, 4, theme.primary)
   drawText(page, 'This Certificate Is Proudly Presented To', {
     x: cx, y: H - 249, size: 10, font: fonts.body, color: C.textDark, align: 'center',
   })
-  drawRect(page, cx + 106, H - 247, 4, 4, C.navy)
+  drawRect(page, cx + 106, H - 247, 4, 4, theme.primary)
 
   // 8. Student name
   const heroName = `${data.salutation} ${data.studentName}`.toUpperCase()
   drawText(page, heroName, {
-    x: cx, y: H - 280, size: 18, font: fonts.bodyBold, color: C.navy, align: 'center', letterSpacing: 1.5,
+    x: cx, y: H - 280, size: 18, font: fonts.bodyBold, color: theme.primary, align: 'center', letterSpacing: 1.5,
   })
 
-  // 9. Body — keep narrow so it clears side decorations
+  // 9. Body
   let bodyY = H - 305
   const bStep = 15
   drawText(page, 'has successfully attended the', { x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center' })
   bodyY -= bStep
   drawText(page, `${data.courseCode} – ${data.courseName}`, {
-    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, color: C.navy, align: 'center',
+    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, color: theme.primary, align: 'center',
   })
   bodyY -= bStep
   drawText(page, 'learning at UnSkills Computer Education', {
@@ -340,45 +394,37 @@ async function drawComputerSoftwareContent(
     x: cx, y: bodyY, size: 10, font: fonts.bodyBold, align: 'center',
   })
 
-  // 10. Training center logo (left, below header meta, above bottom-left circuit)
+  // 10. Training center logo
   if (data.trainingCenterLogoUrl) {
     const logo = await embedAny(pdfDoc, data.trainingCenterLogoUrl)
-    if (logo) page.drawImage(logo, { x: 140, y: H - 320, width: 60, height: 60 })
+    if (logo) page.drawImage(logo, { x: theme.logoX, y: H - 320, width: 60, height: 60 })
   }
 
-  // 11. Student photo (right) — kept clear of TR circuit (y < H - 200) and BR hexagons (y > 220)
+  // 11. Student photo
   if (data.studentPhotoUrl) {
     const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
     if (photo) {
-      const pW = 70, pH = 80, pX = W - 205, pY = H - 320
+      const pW = 70, pH = 80, pX = theme.photoX, pY = H - 320
       drawRect(page, pX - 1, pY - 1, pW + 2, pH + 2, C.black)
       page.drawImage(photo, { x: pX, y: pY, width: pW, height: pH })
     }
   }
 
-  // Bottom band layout (clear of BL circuit x<200, BR hexagons x>W-260, footer):
-  //   y=40-50:  verify URL (centered)
-  //   y=60-82:  badge strip (7 logos, x=220..W-280)
-  //   y=92:     gold divider
-  //   y=110-200: content row — QR/cert# left column | signature right column
-
-  // 12. Certificate number + QR (left column) — QR drops to 110 so cert# text sits cleanly above it
-  const certBlockX = 215
+  // 12. Cert number + QR (left column)
   const qrSize = 54
   const qrY = 108
   const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
   if (qr) {
-    drawRect(page, certBlockX - 1, qrY - 1, qrSize + 2, qrSize + 2, C.white, C.black, 0.5)
-    page.drawImage(qr, { x: certBlockX, y: qrY, width: qrSize, height: qrSize })
+    drawRect(page, theme.certBlockX - 1, qrY - 1, qrSize + 2, qrSize + 2, C.white, C.black, 0.5)
+    page.drawImage(qr, { x: theme.certBlockX, y: qrY, width: qrSize, height: qrSize })
   }
-  // Cert number text sits ABOVE the QR (QR top = qrY + qrSize = 162)
   drawText(page, data.certificateNumber, {
-    x: certBlockX, y: 185, size: 13, font: fonts.bodyBold, color: C.navy,
+    x: theme.certBlockX, y: 185, size: 13, font: fonts.bodyBold, color: theme.primary,
   })
-  drawText(page, 'CERTIFICATE NUMBER', { x: certBlockX, y: 200, size: 7.5, font: fonts.bodyBold })
+  drawText(page, 'CERTIFICATE NUMBER', { x: theme.certBlockX, y: 200, size: 7.5, font: fonts.bodyBold })
 
-  // 13. Signature (right column) — right edge at W - 285 so it clears BR hexagons
-  const sigRight = W - 285
+  // 13. Signature (right column)
+  const sigRight = theme.sigRightX
   const sigLeft = sigRight - 160
   if (settings.signature_image_url) {
     const sig = await embedAny(pdfDoc, settings.signature_image_url)
@@ -401,15 +447,15 @@ async function drawComputerSoftwareContent(
     })
   }
 
-  // 14. Badge strip — 7 logos between x=205 (right of BL circuit) and W-265 (left of BR hexagons)
+  // 14. Badge strip
   const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
-  const stripY = 62
   const stripH = 22
-  const stripX0 = 205
-  const stripX1 = W - 265
+  const stripX0 = theme.stripX0
+  const stripX1 = theme.stripX1
+  const stripY = theme.stripY
   const stripSp = (stripX1 - stripX0) / badges.length
-  const maxBadgeW = stripSp - 8  // 4 px padding each side prevents overlap
-  drawLine(page, stripX0, stripY + stripH + 6, stripX1, stripY + stripH + 6, 0.4, C.gold)
+  const maxBadgeW = stripSp - 8
+  drawLine(page, stripX0, stripY + stripH + 6, stripX1, stripY + stripH + 6, 0.4, theme.gold)
   for (let i = 0; i < badges.length; i++) {
     const img = badges[i]
     if (!img) continue
@@ -421,7 +467,7 @@ async function drawComputerSoftwareContent(
     page.drawImage(img, { x: bx, y: by, width: w, height: h })
   }
 
-  // 15. Footer verify URL — centered, bottom
+  // 15. Footer verify URL
   if (settings.verification_url_base) {
     drawText(page, `To verify this certificate visit: ${settings.verification_url_base}`, {
       x: cx, y: 44, size: 7.5, font: fonts.body, align: 'center',
@@ -429,20 +475,300 @@ async function drawComputerSoftwareContent(
   }
 }
 
-/**
- * Generator for the Computer Software Courses landscape certificate.
- */
-export async function generateComputerSoftwareLandscapeCertificate(
+// ─── Program-specific landscape themes ────────────────────────────────────────
+
+// Computer Software — original tech-themed template (navy + red + gold)
+const THEME_COMPUTER_SOFTWARE: LandscapeTheme = {
+  brandLeading: 'UN ',
+  brandAccent: 'SKILLS',
+  brandTrailing: ' COMPUTER EDUCATION',
+  primary: C.navy, accent: C.red, gold: C.gold,
+  isoBg: C.black, isoText: C.white,
+  logoX: 140, photoX: 841.89 - 205,
+  certBlockX: 215, sigRightX: 841.89 - 285,
+  stripX0: 205, stripX1: 841.89 - 265, stripY: 62,
+}
+
+// Hardware & Networking — blueprint style with big corner circuits
+// Decorations: network-graph (TL), RJ45 cable (TR), circuit board (BL), server rack (BR)
+// Content zone is tighter — badge strip pulled in on both sides.
+const THEME_HARDWARE_NETWORKING: LandscapeTheme = {
+  brandLeading: 'UN ',
+  brandAccent: 'SKILLS',
+  brandTrailing: ' HARDWARE & NETWORKING',
+  primary: C.hnBlue, accent: C.hnOrange, gold: C.hnOrange,
+  isoBg: C.hnBlue, isoText: C.white,
+  logoX: 250, photoX: 841.89 - 310,
+  certBlockX: 320, sigRightX: 841.89 - 360,
+  stripX0: 300, stripX1: 841.89 - 340, stripY: 70,
+}
+
+// Skills Development — double-frame navy/gold with red diamonds
+const THEME_SKILLS_DEVELOPMENT: LandscapeTheme = {
+  brandLeading: 'UN ',
+  brandAccent: 'SKILLS',
+  brandTrailing: ' DEVELOPMENT CENTER',
+  primary: C.teal, accent: C.red, gold: C.gold,
+  isoBg: C.teal, isoText: C.white,
+  logoX: 140, photoX: 841.89 - 205,
+  certBlockX: 215, sigRightX: 841.89 - 285,
+  stripX0: 205, stripX1: 841.89 - 265, stripY: 62,
+}
+
+// Beautician — maroon & rose-gold elegance
+const THEME_BEAUTICIAN: LandscapeTheme = {
+  brandLeading: 'UN ',
+  brandAccent: 'SKILLS',
+  brandTrailing: ' BEAUTICIAN ACADEMY',
+  primary: C.maroon, accent: C.maroon, gold: C.roseGold,
+  isoBg: C.maroon, isoText: C.white,
+  logoX: 140, photoX: 841.89 - 205,
+  certBlockX: 215, sigRightX: 841.89 - 285,
+  stripX0: 205, stripX1: 841.89 - 265, stripY: 62,
+}
+
+// Summer Training — navy + orange energetic frame
+const THEME_SUMMER_TRAINING: LandscapeTheme = {
+  brandLeading: 'UN ',
+  brandAccent: 'SKILLS',
+  brandTrailing: ' SUMMER TRAINING',
+  primary: C.navy, accent: C.orange, gold: C.orange,
+  isoBg: C.navy, isoText: C.white,
+  logoX: 140, photoX: 841.89 - 205,
+  certBlockX: 215, sigRightX: 841.89 - 285,
+  stripX0: 205, stripX1: 841.89 - 265, stripY: 62,
+}
+
+// ─── Landscape generator factory ──────────────────────────────────────────────
+
+async function generateLandscapeCertificate(
   data: LandscapeCertData,
+  theme: LandscapeTheme,
+  templatePath: string,
 ): Promise<Uint8Array> {
-  const pdfDoc = await makeDocWithTemplate(
-    '/certificates/computer-software-landscape.pdf',
-    A4_LANDSCAPE,
-  )
+  const pdfDoc = await makeDocWithTemplate(templatePath, A4_LANDSCAPE)
   const fonts = await loadFonts(pdfDoc)
   const page = pdfDoc.getPages()[0]
   const { width: W, height: H } = page.getSize()
-  await drawComputerSoftwareContent(pdfDoc, page, fonts, data, W, H)
+  await drawLandscapeContent(pdfDoc, page, fonts, data, theme, W, H)
+  return pdfDoc.save()
+}
+
+// Exported for legacy imports (unchanged name).
+export async function generateComputerSoftwareLandscapeCertificate(
+  data: LandscapeCertData,
+): Promise<Uint8Array> {
+  return generateLandscapeCertificate(
+    data,
+    THEME_COMPUTER_SOFTWARE,
+    '/certificates/computer-software-landscape.pdf',
+  )
+}
+
+// ─── Typing — portrait ────────────────────────────────────────────────────────
+
+/**
+ * Typing Course portrait. Template is a tall decorative frame with small corner
+ * icons (keyboard TL, document TR, pencil BL, clock BR) and side diamonds at
+ * y ≈ H/2. The full central rectangle (x: 75–520, y: 90–770) is clear.
+ *
+ * Layout (A4 portrait, 595.28 × 841.89):
+ *   y = H - 70 .. H - 210  header block (reg line, brand, ISO, sub-headers)
+ *   y = H - 240 .. H - 280  certificate title + divider + "presented to"
+ *   y = H - 310             student name
+ *   y = H - 340 .. H - 470  logo / photo / body text stacked vertically
+ *   y =  200 .. 260         cert number + QR (centered)
+ *   y =  120 .. 180         signature block (centered)
+ *   y =   70 .. 100         badge strip (horizontal, 7 badges) + divider
+ *   y =   40                footer verify URL
+ */
+async function drawTypingPortraitContent(
+  pdfDoc: PDFDocument,
+  page: PDFPage,
+  fonts: FontSet,
+  data: LandscapeCertData,
+  W: number,
+  H: number,
+) {
+  const { settings } = data
+  const cx = W / 2
+
+  // 1. Top meta
+  drawText(page, 'Reg. by Govt. of India', {
+    x: 80, y: H - 80, size: 8, font: fonts.bodyBold,
+  })
+  const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
+  drawText(page, `Reg. No.-${regNoValue}`, {
+    x: W - 80, y: H - 80, size: 8, font: fonts.bodyBold, align: 'right',
+  })
+
+  // 2. Brand title
+  drawBrandTitle(page, {
+    cx, y: H - 112, size: 18, font: fonts.display,
+    leading: 'UN ', accent: 'SKILLS', trailing: ' TYPING INSTITUTE',
+    baseColor: C.black, accentColor: C.red,
+  })
+
+  // 3. ISO ribbon
+  const isoText = 'An ISO 9001:2015 Certified Organization'
+  const isoFontSize = 9
+  const isoTextW = fonts.bodyBold.widthOfTextAtSize(isoText, isoFontSize)
+  const isoW = isoTextW + 24
+  drawRect(page, cx - isoW / 2, H - 142, isoW, 16, C.navy)
+  drawText(page, isoText, {
+    x: cx, y: H - 138, size: isoFontSize, font: fonts.bodyBold, color: C.white, align: 'center',
+  })
+
+  // 4. Sub-headers
+  let subY = H - 162
+  for (const line of [settings.sub_header_line_1, settings.sub_header_line_2, settings.sub_header_line_3]) {
+    if (line) {
+      drawText(page, line, {
+        x: cx, y: subY, size: 7.5, font: fonts.body, color: C.textSecondary, align: 'center',
+      })
+    }
+    subY -= 11
+  }
+
+  // 5. Certificate title
+  drawText(page, 'Certificate of Qualification', {
+    x: cx, y: H - 225, size: 32, font: fonts.script, color: C.navy, align: 'center',
+  })
+
+  // 6. Divider
+  drawDivider(page, cx, H - 237, 90, C.gold, C.navy)
+
+  // 7. Presented to
+  drawRect(page, cx - 110, H - 258, 4, 4, C.navy)
+  drawText(page, 'This Certificate Is Proudly Presented To', {
+    x: cx, y: H - 260, size: 10, font: fonts.body, color: C.textDark, align: 'center',
+  })
+  drawRect(page, cx + 106, H - 258, 4, 4, C.navy)
+
+  // 8. Student name
+  const heroName = `${data.salutation} ${data.studentName}`.toUpperCase()
+  drawText(page, heroName, {
+    x: cx, y: H - 295, size: 18, font: fonts.bodyBold, color: C.navy, align: 'center', letterSpacing: 1.5,
+  })
+
+  // 9. Training center logo (left of photo row)
+  const photoRowY = H - 400
+  if (data.trainingCenterLogoUrl) {
+    const logo = await embedAny(pdfDoc, data.trainingCenterLogoUrl)
+    if (logo) page.drawImage(logo, { x: 90, y: photoRowY, width: 60, height: 60 })
+  }
+
+  // 10. Student photo (right)
+  if (data.studentPhotoUrl) {
+    const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
+    if (photo) {
+      const pW = 70, pH = 80, pX = W - 160, pY = photoRowY - 10
+      drawRect(page, pX - 1, pY - 1, pW + 2, pH + 2, C.black)
+      page.drawImage(photo, { x: pX, y: pY, width: pW, height: pH })
+    }
+  }
+
+  // 11. Body (centered between logo and photo)
+  let bodyY = H - 335
+  const bStep = 14
+  drawText(page, 'has successfully attended the', { x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center' })
+  bodyY -= bStep
+  drawText(page, `${data.courseCode} – ${data.courseName}`, {
+    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, color: C.navy, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, 'learning at UnSkills Typing Institute', {
+    x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, `at ${data.trainingCenterName}`, {
+    x: cx, y: bodyY, size: 10, font: fonts.bodyBold, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, 'and entitled to all honors and privileges', {
+    x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, 'associated with this achievement', {
+    x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, `on ${data.issueDate} with Secured ${data.percentage}% marks and achieved Grade ${data.grade}`, {
+    x: cx, y: bodyY, size: 10, font: fonts.bodyBold, align: 'center',
+  })
+
+  // 12. Cert number + QR (center, below body)
+  const qrSize = 52
+  const qrY = 160
+  const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
+  if (qr) {
+    const qrX = cx - qrSize - 6
+    drawRect(page, qrX - 1, qrY - 1, qrSize + 2, qrSize + 2, C.white, C.black, 0.5)
+    page.drawImage(qr, { x: qrX, y: qrY, width: qrSize, height: qrSize })
+  }
+  drawText(page, data.certificateNumber, {
+    x: cx + 4, y: qrY + 32, size: 12, font: fonts.bodyBold, color: C.navy,
+  })
+  drawText(page, 'CERTIFICATE NUMBER', {
+    x: cx + 4, y: qrY + 46, size: 7.5, font: fonts.bodyBold,
+  })
+
+  // 13. Signature (centered, below QR row)
+  const sigCenterX = cx
+  const sigY = 125
+  if (settings.signature_image_url) {
+    const sig = await embedAny(pdfDoc, settings.signature_image_url)
+    if (sig) page.drawImage(sig, { x: sigCenterX - 55, y: sigY + 2, width: 110, height: 28 })
+  }
+  drawLine(page, sigCenterX - 80, sigY - 2, sigCenterX + 80, sigY - 2, 0.8, C.black)
+  if (settings.signatory_designation) {
+    drawText(page, settings.signatory_designation, {
+      x: sigCenterX, y: sigY - 14, size: 9, font: fonts.bodyBold, align: 'center',
+    })
+  }
+  if (settings.signatory_company_line) {
+    drawText(page, settings.signatory_company_line, {
+      x: sigCenterX, y: sigY - 24, size: 8, font: fonts.body, align: 'center',
+    })
+  }
+
+  // 14. Badge strip — 7 logos, thin row above footer (tight below signature)
+  // Move badges slightly higher so they don't overlap bottom frame — y = 82 with stripH 18
+  const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
+  const stripY = 78
+  const stripH = 18
+  const stripX0 = 95
+  const stripX1 = W - 95
+  const stripSp = (stripX1 - stripX0) / badges.length
+  const maxBadgeW = stripSp - 4
+  drawLine(page, stripX0, stripY + stripH + 4, stripX1, stripY + stripH + 4, 0.4, C.gold)
+  for (let i = 0; i < badges.length; i++) {
+    const img = badges[i]
+    if (!img) continue
+    const ar = img.width / img.height
+    const w = Math.min(stripH * ar, maxBadgeW)
+    const h = w / ar
+    const bx = stripX0 + i * stripSp + stripSp / 2 - w / 2
+    const by = stripY + (stripH - h) / 2
+    page.drawImage(img, { x: bx, y: by, width: w, height: h })
+  }
+
+  // 15. Footer verify URL
+  if (settings.verification_url_base) {
+    drawText(page, `To verify this certificate visit: ${settings.verification_url_base}`, {
+      x: cx, y: 54, size: 7, font: fonts.body, align: 'center',
+    })
+  }
+}
+
+async function generateTypingPortraitCertificate(
+  data: LandscapeCertData,
+): Promise<Uint8Array> {
+  const pdfDoc = await makeDocWithTemplate('/certificates/typing-portrait.pdf', A4_PORTRAIT)
+  const fonts = await loadFonts(pdfDoc)
+  const page = pdfDoc.getPages()[0]
+  const { width: W, height: H } = page.getSize()
+  await drawTypingPortraitContent(pdfDoc, page, fonts, data, W, H)
   return pdfDoc.save()
 }
 
@@ -474,7 +800,32 @@ export async function generateCertificate(
 
   switch (config.generatorKey) {
     case 'computer-software-landscape':
-      return generateComputerSoftwareLandscapeCertificate(certData)
+      return generateLandscapeCertificate(
+        certData, THEME_COMPUTER_SOFTWARE,
+        '/certificates/computer-software-landscape.pdf',
+      )
+    case 'hardware-networking-landscape':
+      return generateLandscapeCertificate(
+        certData, THEME_HARDWARE_NETWORKING,
+        '/certificates/hardware-networking-landscape.pdf',
+      )
+    case 'skills-development-landscape':
+      return generateLandscapeCertificate(
+        certData, THEME_SKILLS_DEVELOPMENT,
+        '/certificates/skills-development-landscape.pdf',
+      )
+    case 'beautician-landscape':
+      return generateLandscapeCertificate(
+        certData, THEME_BEAUTICIAN,
+        '/certificates/beautician-landscape.pdf',
+      )
+    case 'summer-training-landscape':
+      return generateLandscapeCertificate(
+        certData, THEME_SUMMER_TRAINING,
+        '/certificates/summer-training-landscape.pdf',
+      )
+    case 'typing-portrait':
+      return generateTypingPortraitCertificate(certData)
     default:
       throw new Error(`Unknown generator key: ${config.generatorKey}`)
   }
