@@ -18,9 +18,12 @@ import { Lock } from 'lucide-react'
 interface StudentRow {
   id: string; registration_no: string; name: string; phone: string
   total_fee: number; net_fee: number; is_active: boolean; created_at: string
-  course?: { name: string } | null; branch?: { name: string } | null
+  course?: { name: string; program?: { slug: string; name: string } | null } | null
+  branch?: { name: string } | null
   paid?: number; locked?: boolean
 }
+
+interface ProgramRow { slug: string; name: string }
 
 const colHelper = createColumnHelper<StudentRow>()
 
@@ -36,6 +39,8 @@ export default function StudentListPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [programFilter, setProgramFilter] = useState<string>('all')
+  const [programs, setPrograms] = useState<ProgramRow[]>([])
 
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
@@ -44,12 +49,16 @@ export default function StudentListPage() {
   const [toggling, setToggling] = useState(false)
 
   useEffect(() => { fetchStudents() }, [])
+  useEffect(() => {
+    supabase.from('uce_programs').select('slug, name').order('display_order')
+      .then(({ data }) => setPrograms((data ?? []) as ProgramRow[]))
+  }, [])
   useEffect(() => { const h = () => setMenuOpen(null); window.addEventListener('scroll', h, true); return () => window.removeEventListener('scroll', h, true) }, [])
 
   async function fetchStudents() {
     setLoading(true)
     try {
-      let q = supabase.from('uce_students').select('id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, course:uce_courses(name), branch:uce_branches(name)')
+      let q = supabase.from('uce_students').select('id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, course:uce_courses(name, program:uce_programs(slug, name)), branch:uce_branches(name)')
       if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
       const { data, error } = await q.order('created_at', { ascending: false })
       if (error) throw error
@@ -93,9 +102,10 @@ export default function StudentListPage() {
     let r = students
     if (statusFilter === 'active') r = r.filter(s => s.is_active)
     else if (statusFilter === 'inactive') r = r.filter(s => !s.is_active)
+    if (programFilter !== 'all') r = r.filter(s => s.course?.program?.slug === programFilter)
     if (search.trim()) { const q = search.toLowerCase(); r = r.filter(s => s.name.toLowerCase().includes(q) || s.registration_no.toLowerCase().includes(q) || s.phone.includes(q)) }
     return r
-  }, [students, statusFilter, search])
+  }, [students, statusFilter, programFilter, search])
 
   const columns = useMemo(() => [
     colHelper.accessor('registration_no', { header: 'Reg No', cell: i => <span className="text-xs font-mono font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">{i.getValue()}</span> }),
@@ -172,17 +182,28 @@ export default function StudentListPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-4">
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3">
-          <div className="relative flex-1">
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3 sm:flex-wrap">
+          <div className="relative w-full sm:w-72">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input type="text" placeholder="Search by name, reg no, phone..." value={search} onChange={e => setSearch(e.target.value)}
               className="w-full pl-9 pr-8 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-sm placeholder:text-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
             {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X size={14} /></button>}
           </div>
+          <select value={programFilter} onChange={e => setProgramFilter(e.target.value)}
+            className="px-3 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none">
+            <option value="all">All Programs</option>
+            {programs.map(p => <option key={p.slug} value={p.slug}>{p.name}</option>)}
+          </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
             className="px-3 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none">
             <option value="all">All Status</option><option value="active">Active</option><option value="inactive">Inactive</option>
           </select>
+          {(programFilter !== 'all' || statusFilter !== 'all' || search) && (
+            <button onClick={() => { setProgramFilter('all'); setStatusFilter('all'); setSearch('') }}
+              className="text-xs text-gray-500 hover:text-red-600 underline underline-offset-2 sm:ml-auto">
+              Clear filters
+            </button>
+          )}
         </div>
       </div>
 
