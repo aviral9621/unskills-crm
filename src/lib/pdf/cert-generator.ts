@@ -633,14 +633,13 @@ async function drawHardwareNetworkingContent(
   const photoW = 80, photoH = 95
   const photoX = W - 95 - photoW
   const photoY = H - 310
+  // Only draw the photo frame if there's actually a photo — no placeholder.
   if (data.studentPhotoUrl) {
     const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
     if (photo) {
       drawRect(page, photoX - 1, photoY - 1, photoW + 2, photoH + 2, C.white, C.hnBlue, 1)
       page.drawImage(photo, { x: photoX, y: photoY, width: photoW, height: photoH })
     }
-  } else {
-    drawRect(page, photoX, photoY, photoW, photoH, C.white, C.hnBlue, 1)
   }
 
   // 6. Certificate title — big serif caps, centered between the logo + photo.
@@ -810,20 +809,21 @@ async function drawSkillsDevelopmentContent(
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — clear of the L-corner bracket arms. Brackets measured from
-  //    screenshot to end at ~y=H-120, so text placed at H-126 with x=135
-  //    gives a comfortable 6+pt gap on every side.
+  // 1. Top meta — placed in the OUTER white band that sits between the outer
+  //    tan/gold border and the thin inner navy frame line (per client spec).
+  //    y=H-62 puts the text cleanly in that 25pt-tall gap, well above all L-
+  //    corner brackets and the brand title below.
   drawText(page, 'Reg. by Govt. of India', {
-    x: 135, y: H - 126, size: 10, font: fonts.bodyBold,
+    x: 100, y: H - 62, size: 9, font: fonts.bodyBold,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
   drawText(page, `Reg. No.-${regNoValue}`, {
-    x: W - 135, y: H - 126, size: 10, font: fonts.bodyBold, align: 'right',
+    x: W - 100, y: H - 62, size: 9, font: fonts.bodyBold, align: 'right',
   })
 
   // 2. Brand title "UNSKILLS COMPUTER EDUCATION" — UNSKILLS red, rest black.
   drawBrandTitle(page, {
-    cx, y: H - 138, size: 26, font: fonts.display,
+    cx, y: H - 128, size: 26, font: fonts.display,
     leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
     baseColor: C.black, accentColor: C.red,
   })
@@ -857,14 +857,13 @@ async function drawSkillsDevelopmentContent(
   const photoW = 80, photoH = 95
   const photoX = W - 120 - photoW
   const photoY = H - 310
+  // Only draw the photo frame if there's actually a photo — no placeholder.
   if (data.studentPhotoUrl) {
     const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
     if (photo) {
       drawRect(page, photoX - 1, photoY - 1, photoW + 2, photoH + 2, C.white, C.teal, 1)
       page.drawImage(photo, { x: photoX, y: photoY, width: photoW, height: photoH })
     }
-  } else {
-    drawRect(page, photoX, photoY, photoW, photoH, C.white, C.teal, 1)
   }
 
   // 6. Certificate title — elegant serif italic (Times Roman Bold Italic,
@@ -1046,19 +1045,20 @@ async function drawBeauticianContent(
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — clear of L-corner bracket arms (brackets end at ~y=H-120;
-  //    text at H-126/x=135 gives comfortable clearance on all sides).
+  // 1. Top meta — placed in the OUTER white band between the rose-gold border
+  //    and the inner thin maroon frame line, per client spec ("on the top").
   drawText(page, 'Reg. by Govt. of India', {
-    x: 135, y: H - 126, size: 10, font: fonts.bodyBold,
+    x: 100, y: H - 62, size: 9, font: fonts.bodyBold,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
   drawText(page, `Reg. No.-${regNoValue}`, {
-    x: W - 135, y: H - 126, size: 10, font: fonts.bodyBold, align: 'right',
+    x: W - 100, y: H - 62, size: 9, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title — UNSKILLS in maroon, rest black.
+  // 2. Brand title — UNSKILLS in maroon, rest black. Lifted to H-128 since
+  //    the reg meta is now out of the way in the outer band.
   drawBrandTitle(page, {
-    cx, y: H - 138, size: 26, font: fonts.display,
+    cx, y: H - 128, size: 26, font: fonts.display,
     leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
     baseColor: C.black, accentColor: C.maroon,
   })
@@ -1092,14 +1092,13 @@ async function drawBeauticianContent(
   const photoW = 80, photoH = 95
   const photoX = W - 120 - photoW
   const photoY = H - 310
+  // Only draw the photo frame if there's actually a photo — no placeholder.
   if (data.studentPhotoUrl) {
     const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
     if (photo) {
       drawRect(page, photoX - 1, photoY - 1, photoW + 2, photoH + 2, C.white, C.maroon, 1)
       page.drawImage(photo, { x: photoX, y: photoY, width: photoW, height: photoH })
     }
-  } else {
-    drawRect(page, photoX, photoY, photoW, photoH, C.white, C.maroon, 1)
   }
 
   // 6. Certificate title — elegant serif italic in maroon.
@@ -1270,18 +1269,20 @@ async function drawSummerTrainingContent(
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — placed inside the inner white zone below the orange top band.
+  // 1. Top meta — placed at the very top, just inside the inner white zone
+  //    above the corner icons ({} + calendar). Matches the "on the top" spec.
   drawText(page, 'Reg. by Govt. of India', {
-    x: 115, y: H - 112, size: 10, font: fonts.bodyBold,
+    x: 100, y: H - 68, size: 9, font: fonts.bodyBold,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
   drawText(page, `Reg. No.-${regNoValue}`, {
-    x: W - 115, y: H - 112, size: 10, font: fonts.bodyBold, align: 'right',
+    x: W - 100, y: H - 68, size: 9, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title — UNSKILLS orange, rest black.
+  // 2. Brand title — UNSKILLS orange, rest black. Lifted since reg meta now
+  //    sits above the corner icons.
   drawBrandTitle(page, {
-    cx, y: H - 138, size: 26, font: fonts.display,
+    cx, y: H - 128, size: 26, font: fonts.display,
     leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
     baseColor: C.black, accentColor: C.orange,
   })
@@ -1315,14 +1316,13 @@ async function drawSummerTrainingContent(
   const photoW = 80, photoH = 95
   const photoX = W - 115 - photoW
   const photoY = H - 310
+  // Only draw the photo frame if there's actually a photo — no placeholder.
   if (data.studentPhotoUrl) {
     const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
     if (photo) {
       drawRect(page, photoX - 1, photoY - 1, photoW + 2, photoH + 2, C.white, C.navy, 1)
       page.drawImage(photo, { x: photoX, y: photoY, width: photoW, height: photoH })
     }
-  } else {
-    drawRect(page, photoX, photoY, photoW, photoH, C.white, C.navy, 1)
   }
 
   // 6. Certificate title — elegant serif italic in navy.
