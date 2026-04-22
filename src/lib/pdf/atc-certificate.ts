@@ -1,14 +1,18 @@
 /**
  * Authorised Training Center (ATC) Certificate generator.
  *
- * Unlike the student certificates (which overlay content on a prepainted
- * JPG template), the ATC certificate is drawn fully programmatically — a
- * decorative navy/gold border, the UnSkills masthead, the "Certificate"
- * title, a body block, the QR block, the signature block, and the badge
- * footer are all rendered with pdf-lib primitives. This keeps the layout
- * deterministic and removes any dependency on an external template file.
+ * PORTRAIT A4 (595.28 × 841.89 pt). The decorative border + greek-key
+ * ornamentation is supplied by the fixed template asset at
+ *   /public/Branch Certificate.pdf
+ * which we embed as the page background — all dynamic text/logos/QR are
+ * overlaid inside that template's inner safe zone.
  *
- * Page: A4 landscape (841.89 × 595.28 pt).
+ * The template has:
+ *   • Thick navy outer border (~35pt from page edge)
+ *   • Gold inner rectangular frame (~55pt in)
+ *   • Greek-key ornament at top-center and bottom-center
+ *   • Small navy corner squares and gold corner brackets
+ * Inner safe zone for content: x ∈ [75, W-75], y ∈ [60, H-70].
  */
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb, degrees } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
@@ -25,15 +29,15 @@ export interface AtcCertificateData {
   courseType: string
   issueDate: string        // DD-MM-YYYY
   renewalDate: string      // DD-MM-YYYY
-  verificationUrlBase: string  // e.g. https://www.unskillseducation.org
-  regNumber?: string       // fallback: 220102
+  verificationUrlBase: string
+  regNumber?: string
   contactPhone?: string
   contactEmail?: string
   headOfficeAddress?: string
   website?: string
   signatoryName?: string
   signatureImageUrl?: string | null
-  unskillsLogoUrl?: string // path under /public, e.g. /MAIN LOGO FOR ALL CARDS.png
+  unskillsLogoUrl?: string
 }
 
 // ─── Colours ─────────────────────────────────────────────────────────────────
@@ -55,7 +59,6 @@ interface FontSet {
   body: PDFFont
   bodyBold: PDFFont
   serifItalic: PDFFont
-  serifBold: PDFFont
   display: PDFFont
 }
 
@@ -74,17 +77,14 @@ async function loadFonts(doc: PDFDocument): Promise<FontSet> {
   const body = await doc.embedFont(StandardFonts.Helvetica)
   const bodyBold = await doc.embedFont(StandardFonts.HelveticaBold)
   const serifItalic = await doc.embedFont(StandardFonts.TimesRomanBoldItalic)
-  const serifBold = await doc.embedFont(StandardFonts.TimesRomanBold)
 
-  // Montserrat-ExtraBold replacement via ArchivoBlack (already bundled for the
-  // other certs). Falls back to HelveticaBold if the font fetch fails.
   const displayBytes = await fetchBytes('/fonts/ArchivoBlack-Regular.ttf')
   const displayOpts = { features: { liga: false, dlig: false, clig: false } } as const
   const display = displayBytes
     ? await doc.embedFont(displayBytes, displayOpts).catch(() => bodyBold)
     : bodyBold
 
-  return { body, bodyBold, serifItalic, serifBold, display }
+  return { body, bodyBold, serifItalic, display }
 }
 
 async function embedAny(doc: PDFDocument, src: string): Promise<PDFImage | null> {
@@ -138,22 +138,12 @@ function drawRect(page: PDFPage, x: number, y: number, w: number, h: number, col
   page.drawRectangle({ x, y, width: w, height: h, color, borderColor: border, borderWidth })
 }
 
-function strokeRect(page: PDFPage, x: number, y: number, w: number, h: number, color: ReturnType<typeof rgb>, borderWidth: number) {
-  page.drawRectangle({ x, y, width: w, height: h, borderColor: color, borderWidth })
-}
-
 function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number, t: number, color: ReturnType<typeof rgb>) {
   page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: t, color })
 }
 
-/** Two-colour "UNSKILLS COMPUTER" masthead (red + black). */
-function drawMasthead(
-  page: PDFPage,
-  fonts: FontSet,
-  cx: number,
-  y: number,
-  size: number,
-) {
+/** Two-colour "UNSKILLS COMPUTER" masthead (red + black) + TM. */
+function drawMasthead(page: PDFPage, fonts: FontSet, cx: number, y: number, size: number) {
   const redWord = 'UNSKILLS'
   const blackWord = ' COMPUTER'
   const tmSize = size * 0.35
@@ -169,24 +159,22 @@ function drawMasthead(
   page.drawText('TM', { x, y: y + size * 0.55, size: tmSize, font: fonts.display, color: C.black })
 }
 
-/** Red circular CERTIFIED stamp (drawn with pdf-lib — no external image). */
+/** Red circular CERTIFIED stamp. */
 function drawCertifiedStamp(page: PDFPage, fonts: FontSet, cx: number, cy: number, r: number) {
   page.drawCircle({ x: cx, y: cy, size: r, borderColor: C.stampRed, borderWidth: 2 })
   page.drawCircle({ x: cx, y: cy, size: r - 6, borderColor: C.stampRed, borderWidth: 0.8 })
   drawText(page, 'CERTIFIED', {
-    x: cx, y: cy + 3, size: 9, font: fonts.bodyBold, color: C.stampRed, align: 'center', letterSpacing: 1,
+    x: cx, y: cy + 3, size: 8.5, font: fonts.bodyBold, color: C.stampRed, align: 'center', letterSpacing: 1,
   })
   drawText(page, 'AUTHENTIC', {
     x: cx, y: cy - 10, size: 5.5, font: fonts.bodyBold, color: C.stampRed, align: 'center', letterSpacing: 0.5,
   })
-  // Subtle inner tick
   drawLine(page, cx - 10, cy - 2, cx - 3, cy - 7, 1.2, C.stampRed)
   drawLine(page, cx - 3, cy - 7, cx + 9, cy + 5, 1.2, C.stampRed)
 }
 
-/** Wax-seal-style emblem for the bottom-right corner. */
+/** Wax-seal emblem for the bottom-right corner. */
 function drawWaxSeal(page: PDFPage, fonts: FontSet, cx: number, cy: number, r: number) {
-  // Outer scalloped wax (approximated with two concentric circles + radial ticks)
   page.drawCircle({ x: cx, y: cy, size: r + 4, color: C.wax })
   for (let i = 0; i < 12; i++) {
     const ang = (i * Math.PI) / 6
@@ -197,20 +185,15 @@ function drawWaxSeal(page: PDFPage, fonts: FontSet, cx: number, cy: number, r: n
   page.drawCircle({ x: cx, y: cy, size: r, color: C.waxHighlight })
   page.drawCircle({ x: cx, y: cy, size: r - 4, borderColor: C.wax, borderWidth: 0.8 })
   drawText(page, 'UNSKILLS', {
-    x: cx, y: cy + 2, size: 7.5, font: fonts.bodyBold, color: C.wax, align: 'center', letterSpacing: 0.8,
+    x: cx, y: cy + 2, size: 7, font: fonts.bodyBold, color: C.wax, align: 'center', letterSpacing: 0.6,
   })
   drawText(page, 'ATC', {
     x: cx, y: cy - 9, size: 9, font: fonts.bodyBold, color: C.wax, align: 'center', letterSpacing: 1.5,
   })
 }
 
-/** Footer logos row (ISO, MSME, Skill India, NSDC, Digital India, IAF). */
-async function drawFooterBadges(
-  doc: PDFDocument,
-  page: PDFPage,
-  y: number,
-  width: number,
-) {
+/** Footer badges row (small logos centred in a given width). */
+async function drawFooterBadges(doc: PDFDocument, page: PDFPage, y: number, totalWidth: number) {
   const paths = [
     '/ISO LOGOs.png',
     '/MSME loogo.png',
@@ -220,25 +203,31 @@ async function drawFooterBadges(
     '/IAF LOGO.png',
   ]
   const images = await Promise.all(paths.map(p => embedAny(doc, p)))
+  const W = page.getWidth()
   const count = images.filter(Boolean).length
   if (count === 0) return
 
-  const rowH = 20
-  const slotW = width / count
+  const rowH = 18
+  const slotW = totalWidth / count
   let slot = 0
   for (const img of images) {
     if (!img) continue
     const ar = img.width / img.height
+    const maxW = slotW - 6
     const h = rowH
-    const w = Math.min(h * ar, slotW - 8)
-    const actualH = w / ar
-    const x = (page.getWidth() - width) / 2 + slot * slotW + (slotW - w) / 2
+    let w = h * ar
+    let actualH = h
+    if (w > maxW) {
+      w = maxW
+      actualH = w / ar
+    }
+    const x = (W - totalWidth) / 2 + slot * slotW + (slotW - w) / 2
     page.drawImage(img, { x, y: y + (rowH - actualH) / 2, width: w, height: actualH })
     slot++
   }
 }
 
-/** Centered text that wraps if longer than maxWidth. Returns the y of the last baseline. */
+/** Wrap centered text, returns baseline of last line. */
 function drawCenteredWrapped(
   page: PDFPage,
   text: string,
@@ -261,7 +250,6 @@ function drawCenteredWrapped(
     }
   }
   if (current) lines.push(current)
-
   const step = lineStep ?? size + 3
   let yy = y
   for (const line of lines) {
@@ -271,222 +259,236 @@ function drawCenteredWrapped(
   return yy + step
 }
 
+// ─── Portrait template loader ────────────────────────────────────────────────
+
+const A4_PORTRAIT: [number, number] = [595.28, 841.89]
+const TEMPLATE_PATH = '/Branch Certificate.pdf'
+
+async function makeDocWithTemplate(): Promise<PDFDocument> {
+  const doc = await PDFDocument.create()
+  const page = doc.addPage(A4_PORTRAIT)
+  const [W, H] = A4_PORTRAIT
+
+  const bytes = await fetchBytes(TEMPLATE_PATH)
+  if (bytes) {
+    try {
+      const [embedded] = await doc.embedPdf(bytes, [0])
+      if (embedded) {
+        const s = embedded.size()
+        const scale = Math.max(W / s.width, H / s.height)
+        page.drawPage(embedded, {
+          x: (W - s.width * scale) / 2,
+          y: (H - s.height * scale) / 2,
+          width: s.width * scale,
+          height: s.height * scale,
+        })
+      }
+    } catch {
+      // If the template fails to embed for any reason, we still return a blank
+      // A4 portrait page so the rest of the generator keeps working.
+    }
+  }
+  return doc
+}
+
 // ─── Main generator ──────────────────────────────────────────────────────────
 
-const A4_LANDSCAPE: [number, number] = [841.89, 595.28]
-
-export async function generateAtcCertificate(
-  data: AtcCertificateData,
-): Promise<Uint8Array> {
-  const doc = await PDFDocument.create()
-  const page = doc.addPage(A4_LANDSCAPE)
-  const [W, H] = A4_LANDSCAPE
+export async function generateAtcCertificate(data: AtcCertificateData): Promise<Uint8Array> {
+  const doc = await makeDocWithTemplate()
+  const page = doc.getPages()[0]
+  const { width: W, height: H } = page.getSize()
   const cx = W / 2
+  const LEFT = 75
+  const RIGHT = W - 75
   const fonts = await loadFonts(doc)
 
-  // ── Background + decorative borders ───────────────────────────────────────
-  drawRect(page, 0, 0, W, H, C.white)
-  // Outer navy frame
-  strokeRect(page, 22, 22, W - 44, H - 44, C.navy, 6)
-  // Thin inner gold frame
-  strokeRect(page, 38, 38, W - 76, H - 76, C.gold, 1.2)
-  // Corner gold ticks for visual refinement
-  const tickLen = 14
-  for (const [cornerX, cornerY, dx, dy] of [
-    [38, H - 38, 1, -1], [W - 38, H - 38, -1, -1],
-    [38, 38, 1, 1], [W - 38, 38, -1, 1],
-  ] as const) {
-    drawLine(page, cornerX + dx * 3, cornerY, cornerX + dx * tickLen, cornerY, 1.5, C.gold)
-    drawLine(page, cornerX, cornerY + dy * 3, cornerX, cornerY + dy * tickLen, 1.5, C.gold)
-  }
+  // ── 1. TOP META (just below the top greek-key ornament) ──────────────────
+  drawText(page, 'Reg. by Govt. of India', {
+    x: LEFT + 10, y: H - 80, size: 8.5, font: fonts.bodyBold, color: C.textDark,
+  })
+  drawText(page, `Reg. No.: ${data.regNumber || '220102'}`, {
+    x: RIGHT - 10, y: H - 80, size: 8.5, font: fonts.bodyBold, align: 'right', color: C.textDark,
+  })
 
-  // ── TOP HEADER ────────────────────────────────────────────────────────────
-  // Top-left fixed UnSkills logo
+  // ── 2. TOP-LEFT UNSKILLS LOGO (fixed branding) ───────────────────────────
   if (data.unskillsLogoUrl) {
     const logo = await embedAny(doc, data.unskillsLogoUrl)
     if (logo) {
       const ar = logo.width / logo.height
-      const lh = 52
-      const lw = Math.min(lh * ar, 80)
-      page.drawImage(logo, { x: 58, y: H - 110, width: lw, height: lh })
+      const h = 46
+      const w = Math.min(h * ar, 70)
+      page.drawImage(logo, { x: LEFT + 5, y: H - 138, width: w, height: h })
     }
   }
 
-  // Top-left / top-right reg lines
-  drawText(page, 'Reg. by Govt. of India', {
-    x: 150, y: H - 70, size: 9, font: fonts.bodyBold, color: C.textDark,
-  })
-  drawText(page, `Reg. No.: ${data.regNumber || '220102'}`, {
-    x: W - 60, y: H - 70, size: 9, font: fonts.bodyBold, align: 'right', color: C.textDark,
-  })
-
-  // Masthead
-  drawMasthead(page, fonts, cx, H - 100, 26)
-
-  // Unit / alliance / ISO lines
+  // ── 3. BRAND MASTHEAD + AFFILIATION LINES ────────────────────────────────
+  drawMasthead(page, fonts, cx, H - 112, 20)
   drawText(page, 'A Unit of: UnSkills FuturePath Tech Pvt. Ltd.  |  Regd. by Govt. of India Reg. No. 220102', {
-    x: cx, y: H - 125, size: 8.5, font: fonts.body, color: C.textDark, align: 'center',
+    x: cx, y: H - 135, size: 7.5, font: fonts.body, color: C.textDark, align: 'center',
   })
   drawText(page, 'Alliance with Skills India, MSME, NITI Aayog, NSDC, Labour Department', {
-    x: cx, y: H - 138, size: 8.5, font: fonts.body, color: C.textDark, align: 'center',
+    x: cx, y: H - 147, size: 7.5, font: fonts.body, color: C.textDark, align: 'center',
   })
-  // Black ISO strip
+
+  // ── 4. ISO STRIP (black/navy ribbon) ─────────────────────────────────────
   const isoText = 'AN ISO 9001:2015 CERTIFIED ORGANIZATION'
-  const isoSize = 10
+  const isoSize = 9
   const isoTextW = fonts.bodyBold.widthOfTextAtSize(isoText, isoSize)
-  const isoStripW = isoTextW + 30
-  drawRect(page, cx - isoStripW / 2, H - 162, isoStripW, 16, C.black)
+  const isoStripW = isoTextW + 28
+  drawRect(page, cx - isoStripW / 2, H - 170, isoStripW, 15, C.black)
   drawText(page, isoText, {
-    x: cx, y: H - 158, size: isoSize, font: fonts.bodyBold, color: C.white, align: 'center', letterSpacing: 0.4,
+    x: cx, y: H - 166, size: isoSize, font: fonts.bodyBold, color: C.white, align: 'center', letterSpacing: 0.3,
   })
 
-  // ── CERTIFICATE TITLE ─────────────────────────────────────────────────────
+  // ── 5. CERTIFICATE TITLE ─────────────────────────────────────────────────
   drawText(page, 'Certificate', {
-    x: cx, y: H - 205, size: 40, font: fonts.serifItalic, color: C.navy, align: 'center',
+    x: cx, y: H - 210, size: 36, font: fonts.serifItalic, color: C.navy, align: 'center',
   })
-  drawLine(page, cx - 110, H - 215, cx - 15, H - 215, 0.8, C.gold)
-  drawLine(page, cx + 15, H - 215, cx + 110, H - 215, 0.8, C.gold)
-  page.drawRectangle({ x: cx - 3, y: H - 218, width: 6, height: 6, color: C.red, rotate: degrees(45) })
+  // Gold divider with red diamond accent
+  drawLine(page, cx - 90, H - 222, cx - 12, H - 222, 0.8, C.gold)
+  drawLine(page, cx + 12, H - 222, cx + 90, H - 222, 0.8, C.gold)
+  page.drawRectangle({
+    x: cx - 3, y: H - 225, width: 6, height: 6, color: C.red, rotate: degrees(45),
+  })
 
-  // ── MIDDLE CONTENT — left/right logos flank the body ──────────────────────
-  // Left body: branch logo (dynamic)
+  // ── 6. SIDE LOGOS (flanking the body) ────────────────────────────────────
+  // Branch logo on the LEFT, UnSkills logo on the RIGHT.
+  const sideLogoSize = 60
+  const sideLogoY = H - 375
   if (data.branchLogoUrl) {
     const blogo = await embedAny(doc, data.branchLogoUrl)
     if (blogo) {
       const ar = blogo.width / blogo.height
-      const size = 70
+      const w = Math.min(sideLogoSize * ar, sideLogoSize + 8)
+      const h = w / ar
       page.drawImage(blogo, {
-        x: 75, y: H - 340,
-        width: size, height: size / ar,
+        x: LEFT + (sideLogoSize - w) / 2 + 5,
+        y: sideLogoY + (sideLogoSize - h) / 2,
+        width: w, height: h,
       })
     }
   }
-  // Right body: UnSkills logo (fixed branding)
   if (data.unskillsLogoUrl) {
     const uLogo = await embedAny(doc, data.unskillsLogoUrl)
     if (uLogo) {
       const ar = uLogo.width / uLogo.height
-      const size = 70
+      const w = Math.min(sideLogoSize * ar, sideLogoSize + 8)
+      const h = w / ar
       page.drawImage(uLogo, {
-        x: W - 75 - size, y: H - 340,
-        width: size, height: size / ar,
+        x: RIGHT - sideLogoSize - 5 + (sideLogoSize - w) / 2,
+        y: sideLogoY + (sideLogoSize - h) / 2,
+        width: w, height: h,
       })
     }
   }
 
-  // Body text (between the logos, centred)
+  // ── 7. MAIN BODY CONTENT ─────────────────────────────────────────────────
+  const bodyCx = cx
+  const bodyMaxW = W - 260    // leave room for side logos
   drawText(page, 'AUTHORISED TRAINING CENTER (ATC)', {
-    x: cx, y: H - 240, size: 14, font: fonts.bodyBold, color: C.red, align: 'center', letterSpacing: 1,
+    x: bodyCx, y: H - 260, size: 12.5, font: fonts.bodyBold, color: C.red, align: 'center', letterSpacing: 0.9,
   })
   drawText(page, 'In acceptance to the terms and conditions, certified that', {
-    x: cx, y: H - 260, size: 10.5, font: fonts.body, color: C.textDark, align: 'center',
+    x: bodyCx, y: H - 280, size: 9.5, font: fonts.body, color: C.textDark, align: 'center',
   })
-
-  // Branch name — big bold red, wrapped if long
+  // Branch name (wrapped if long)
   const nameEndY = drawCenteredWrapped(page, data.branchName.toUpperCase(), {
-    cx, y: H - 288, maxWidth: W - 320,
-    size: 20, font: fonts.bodyBold, color: C.red, lineStep: 23,
+    cx: bodyCx, y: H - 310, maxWidth: bodyMaxW,
+    size: 16, font: fonts.bodyBold, color: C.red, lineStep: 19,
   })
-
   // Address (wrapped)
-  drawCenteredWrapped(page, data.branchAddress, {
-    cx, y: nameEndY - 18, maxWidth: W - 340,
-    size: 10, font: fonts.body, color: C.textDark, lineStep: 12,
+  const addrEndY = drawCenteredWrapped(page, data.branchAddress, {
+    cx: bodyCx, y: nameEndY - 16, maxWidth: bodyMaxW,
+    size: 9.5, font: fonts.body, color: C.textDark, lineStep: 11.5,
   })
 
-  // Applicant Name + ATC Code (single line, two fields)
-  const infoY = H - 348
+  // Applicant Name + ATC Code (two-line block, centered)
+  const infoY = Math.min(addrEndY - 22, H - 410)
   drawText(page, `Applicant Name : ${data.ownerName || 'Branch Director'}`, {
-    x: cx - 12, y: infoY, size: 11, font: fonts.bodyBold, color: C.navy, align: 'right',
-  })
-  drawText(page, '|', {
-    x: cx, y: infoY, size: 12, font: fonts.bodyBold, color: C.gold, align: 'center',
+    x: bodyCx, y: infoY, size: 10.5, font: fonts.bodyBold, color: C.navy, align: 'center',
   })
   drawText(page, `ATC Code : ${data.atcCode}`, {
-    x: cx + 12, y: infoY, size: 11, font: fonts.bodyBold, color: C.navy,
+    x: bodyCx, y: infoY - 16, size: 10.5, font: fonts.bodyBold, color: C.navy, align: 'center',
   })
 
   // Ampersand
   drawText(page, '&', {
-    x: cx, y: H - 378, size: 22, font: fonts.serifItalic, color: C.gold, align: 'center',
+    x: bodyCx, y: infoY - 42, size: 20, font: fonts.serifItalic, color: C.gold, align: 'center',
   })
 
-  // Course type line
+  // Course type
   drawText(page, `to conduct ${data.courseType} courses,`, {
-    x: cx, y: H - 404, size: 11, font: fonts.body, color: C.textDark, align: 'center',
+    x: bodyCx, y: infoY - 68, size: 10.5, font: fonts.body, color: C.textDark, align: 'center',
   })
   drawText(page, 'designed and developed by UnSkills FuturePath Tech Pvt. Ltd.', {
-    x: cx, y: H - 418, size: 11, font: fonts.bodyBold, color: C.textDark, align: 'center',
+    x: bodyCx, y: infoY - 82, size: 10.5, font: fonts.bodyBold, color: C.textDark, align: 'center',
   })
 
-  // ── BOTTOM ROW: dates | stamp | QR | seal | signature ─────────────────────
-
-  // Dates (bottom-left)
-  drawText(page, `Date of Issue      :  ${data.issueDate}`, {
-    x: 72, y: 175, size: 9.5, font: fonts.bodyBold, color: C.textDark,
-  })
-  drawText(page, `Date of Renewal :  ${data.renewalDate}`, {
-    x: 72, y: 160, size: 9.5, font: fonts.bodyBold, color: C.textDark,
-  })
-
-  // Certified stamp (left of centre)
-  drawCertifiedStamp(page, fonts, 195, 125, 32)
-
-  // QR code (centre-bottom)
+  // ── 8. QR CODE (centered, below body) ────────────────────────────────────
   const qrDataUrl = await generateQRDataUrl(
     `${(data.verificationUrlBase || '').replace(/\/+$/, '')}/verify/atc/${encodeURIComponent(data.atcCode)}`,
   )
   const qr = await embedAny(doc, qrDataUrl)
+  const qrSize = 78
+  const qrY = 265
   if (qr) {
-    const qrSize = 72
-    drawRect(page, cx - qrSize / 2 - 2, 92 - 2, qrSize + 4, qrSize + 4, C.white, C.navy, 0.6)
-    page.drawImage(qr, { x: cx - qrSize / 2, y: 92, width: qrSize, height: qrSize })
-    drawText(page, 'Scan to verify', {
-      x: cx, y: 80, size: 7.5, font: fonts.body, color: C.textSecondary, align: 'center',
-    })
+    drawRect(page, cx - qrSize / 2 - 2, qrY - 2, qrSize + 4, qrSize + 4, C.white, C.navy, 0.6)
+    page.drawImage(qr, { x: cx - qrSize / 2, y: qrY, width: qrSize, height: qrSize })
   }
+  drawText(page, 'Scan to verify', {
+    x: cx, y: qrY - 12, size: 7.5, font: fonts.body, color: C.textSecondary, align: 'center',
+  })
 
-  // Wax seal (right of centre)
-  drawWaxSeal(page, fonts, W - 195, 125, 28)
+  // ── 9. STAMP (bottom-left) + SEAL (bottom-right) ─────────────────────────
+  drawCertifiedStamp(page, fonts, LEFT + 55, 235, 30)
+  drawWaxSeal(page, fonts, RIGHT - 55, 235, 28)
 
-  // Signature (bottom-right)
-  const sigRight = W - 72
+  // ── 10. DATES (left) + SIGNATURE (right) ─────────────────────────────────
+  drawText(page, `Date of Issue      :  ${data.issueDate}`, {
+    x: LEFT + 5, y: 175, size: 9, font: fonts.bodyBold, color: C.textDark,
+  })
+  drawText(page, `Date of Renewal :  ${data.renewalDate}`, {
+    x: LEFT + 5, y: 161, size: 9, font: fonts.bodyBold, color: C.textDark,
+  })
+
+  // Signature block (right)
+  const sigRight = RIGHT - 5
+  const sigLeft = sigRight - 140
   if (data.signatureImageUrl) {
     const sig = await embedAny(doc, data.signatureImageUrl)
     if (sig) {
-      page.drawImage(sig, { x: sigRight - 110, y: 170, width: 110, height: 32 })
+      page.drawImage(sig, { x: sigRight - 100, y: 175, width: 100, height: 28 })
     }
   } else if (data.signatoryName) {
     drawText(page, data.signatoryName, {
-      x: sigRight, y: 178, size: 18, font: fonts.serifItalic, color: C.textDark, align: 'right',
+      x: sigRight, y: 180, size: 16, font: fonts.serifItalic, color: C.textDark, align: 'right',
     })
   }
-  drawLine(page, sigRight - 150, 167, sigRight, 167, 0.8, C.black)
+  drawLine(page, sigLeft, 170, sigRight, 170, 0.8, C.black)
   drawText(page, 'Signature Authorised', {
-    x: sigRight, y: 153, size: 10, font: fonts.bodyBold, color: C.navy, align: 'right',
+    x: sigRight, y: 158, size: 9.5, font: fonts.bodyBold, color: C.navy, align: 'right',
   })
 
-  // ── FOOTER: contact line + logo row ───────────────────────────────────────
+  // ── 11. FOOTER (contact + head office + badges) ──────────────────────────
   const contactPhone = data.contactPhone || '8382898686 / 9838382898'
   const website = data.website || 'www.unskillseducation.org'
   const headOffice = data.headOfficeAddress || '2nd Floor Ranipur Road Mariahu Jaunpur Uttar Pradesh, India - 222161'
 
   drawText(page, `Contact : ${contactPhone}   |   Website : ${website}`, {
-    x: cx, y: 70, size: 8.5, font: fonts.bodyBold, color: C.textDark, align: 'center',
+    x: cx, y: 128, size: 8.5, font: fonts.bodyBold, color: C.textDark, align: 'center',
   })
-  drawText(page, `Head Office : ${headOffice}`, {
-    x: cx, y: 58, size: 7.5, font: fonts.body, color: C.textSecondary, align: 'center',
+  drawCenteredWrapped(page, `Head Office : ${headOffice}`, {
+    cx, y: 114, maxWidth: W - 170,
+    size: 7.5, font: fonts.body, color: C.textSecondary, lineStep: 10,
   })
 
-  // Small footer badges row (kept clear of the decorative bottom border)
-  await drawFooterBadges(doc, page, 44, W - 240)
+  // Small footer badges row (above the bottom greek-key ornament)
+  await drawFooterBadges(doc, page, 68, W - 200)
 
   return doc.save()
 }
 
-export async function generateAtcCertificateBlob(
-  data: AtcCertificateData,
-): Promise<Blob> {
+export async function generateAtcCertificateBlob(data: AtcCertificateData): Promise<Blob> {
   const bytes = await generateAtcCertificate(data)
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
   return new Blob([buf], { type: 'application/pdf' })

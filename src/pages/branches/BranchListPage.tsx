@@ -71,8 +71,8 @@ export default function BranchListPage() {
     const btn = menuBtnRefs.current.get(branchId)
     if (!btn) return
     const rect = btn.getBoundingClientRect()
-    const menuW = 192      // w-48
-    const menuH = 244      // ~5 items + divider; flips up if not enough room below
+    const menuW = 224      // w-56
+    const menuH = 330      // ~7 items + dividers; flips up if not enough room below
     const vh = window.innerHeight
     const vw = window.innerWidth
     // Vertical: prefer below, flip above if it would overflow
@@ -430,8 +430,8 @@ export default function BranchListPage() {
             </div>
           </div>
 
-          {/* Desktop: floating dropdown */}
-          <div className="hidden md:block fixed z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, left: menuPos.left }}>
+          {/* Desktop: floating dropdown (widened so "Download Certificate" fits on one line) */}
+          <div className="hidden md:block fixed z-50 w-56 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, left: menuPos.left }}>
             <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/edit`) }}
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Pencil size={14} /> Edit Branch</button>
             <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet`) }}
