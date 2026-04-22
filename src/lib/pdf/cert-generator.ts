@@ -530,18 +530,10 @@ const THEME_COMPUTER_SOFTWARE: LandscapeTheme = {
 // theme — so the client's elegant serif title + strict layout hierarchy
 // matches the Hardware & Networking standard.
 
-// NOTE: Beautician uses a bespoke drawer (see generateBeauticianCertificate
-// below) — not the generic landscape theme — so layout precision matches the
-// Hardware & Networking and Skills Development standard.
+// NOTE: Beautician and Summer Training use bespoke drawers (see below) — not
+// the generic landscape theme — so layout precision matches the H&N standard.
 
-// Summer Training — navy + orange energetic frame
-const THEME_SUMMER_TRAINING: LandscapeTheme = {
-  primary: C.navy, accent: C.orange, gold: C.orange,
-  isoBg: C.navy, isoText: C.white,
-  logoX: 140, photoX: 841.89 - 205,
-  certBlockX: 215, sigRightX: 841.89 - 265,
-  stripX0: 205, stripX1: 841.89 - 265, stripY: 95,
-}
+// NOTE: Summer Training uses a bespoke drawer (see generateSummerTrainingCertificate).
 
 // ─── Landscape generator factory ──────────────────────────────────────────────
 
@@ -818,14 +810,15 @@ async function drawSkillsDevelopmentContent(
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — pushed 15pt further from each edge so text never touches the
-  //    L-corner bracket arms that extend ~25pt inward from the inner border.
+  // 1. Top meta — clear of the L-corner bracket arms. Brackets measured from
+  //    screenshot to end at ~y=H-120, so text placed at H-126 with x=135
+  //    gives a comfortable 6+pt gap on every side.
   drawText(page, 'Reg. by Govt. of India', {
-    x: 120, y: H - 115, size: 10, font: fonts.bodyBold,
+    x: 135, y: H - 126, size: 10, font: fonts.bodyBold,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
   drawText(page, `Reg. No.-${regNoValue}`, {
-    x: W - 120, y: H - 115, size: 10, font: fonts.bodyBold, align: 'right',
+    x: W - 135, y: H - 126, size: 10, font: fonts.bodyBold, align: 'right',
   })
 
   // 2. Brand title "UNSKILLS COMPUTER EDUCATION" — UNSKILLS red, rest black.
@@ -859,10 +852,10 @@ async function drawSkillsDevelopmentContent(
   const logoY = H - 300
   if (data.trainingCenterLogoUrl) {
     const logo = await embedAny(pdfDoc, data.trainingCenterLogoUrl)
-    if (logo) page.drawImage(logo, { x: 105, y: logoY, width: 80, height: 80 })
+    if (logo) page.drawImage(logo, { x: 120, y: logoY, width: 80, height: 80 })
   }
   const photoW = 80, photoH = 95
-  const photoX = W - 105 - photoW
+  const photoX = W - 120 - photoW
   const photoY = H - 310
   if (data.studentPhotoUrl) {
     const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
@@ -883,9 +876,10 @@ async function drawSkillsDevelopmentContent(
   // Gold diamond divider echoes the frame's accent diamonds.
   drawDivider(page, cx, H - 252, 95, C.gold, C.red)
 
-  // 7. Body — tight 9-line block mirroring Hardware & Networking rhythm.
-  let bodyY = H - 275
-  const bStep = 13
+  // 7. Body — 9 lines with breathing room (bStep=15). Starts at H-265 so the
+  // last line lands at ~207, leaving a comfortable 10pt gap above the sig line.
+  let bodyY = H - 265
+  const bStep = 15
   drawText(page, 'This is to certify that', {
     x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
   })
@@ -922,9 +916,9 @@ async function drawSkillsDevelopmentContent(
     x: cx, y: bodyY, size: 11, font: fonts.bodyBold, align: 'center',
   })
 
-  // 8. QR + "Certificate No." teal pill + "Date of Issue" (bottom-left cluster)
+  // 8. QR + "Certificate No." teal pill (auto-width) + "Date of Issue"
   const qrSize = 52
-  const qrX = 110
+  const qrX = 128
   const qrY = 155
   const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
   if (qr) {
@@ -933,10 +927,11 @@ async function drawSkillsDevelopmentContent(
   }
   const pillX = qrX + qrSize + 8
   const pillY = qrY + qrSize - 24
-  const pillW = 200
+  const certNoText = `Certificate No. : ${data.certificateNumber}`
+  const pillW = fonts.bodyBold.widthOfTextAtSize(certNoText, 10) + 20
   const pillH = 22
   drawRect(page, pillX, pillY, pillW, pillH, C.teal)
-  drawText(page, `Certificate No. : ${data.certificateNumber}`, {
+  drawText(page, certNoText, {
     x: pillX + pillW / 2, y: pillY + 7, size: 10, font: fonts.bodyBold, color: C.white, align: 'center',
   })
   drawText(page, `Date of Issue : ${data.issueDate}`, {
@@ -949,8 +944,8 @@ async function drawSkillsDevelopmentContent(
   if (visibleBadges.length > 0) {
     const badgeY = 160
     const badgeH = 30
-    const badgeX0 = 360
-    const badgeX1 = W - 260
+    const badgeX0 = 370
+    const badgeX1 = W - 270
     const badgeSp = (badgeX1 - badgeX0) / visibleBadges.length
     for (let i = 0; i < visibleBadges.length; i++) {
       const img = visibleBadges[i]
@@ -965,7 +960,7 @@ async function drawSkillsDevelopmentContent(
   }
 
   // 10. Signature (bottom-right)
-  const sigRight = W - 105
+  const sigRight = W - 120
   const sigLeft = sigRight - 150
   if (settings.signature_image_url) {
     const sig = await embedAny(pdfDoc, settings.signature_image_url)
@@ -1051,13 +1046,14 @@ async function drawBeauticianContent(
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — clear of L-corner bracket arms.
+  // 1. Top meta — clear of L-corner bracket arms (brackets end at ~y=H-120;
+  //    text at H-126/x=135 gives comfortable clearance on all sides).
   drawText(page, 'Reg. by Govt. of India', {
-    x: 120, y: H - 115, size: 10, font: fonts.bodyBold,
+    x: 135, y: H - 126, size: 10, font: fonts.bodyBold,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
   drawText(page, `Reg. No.-${regNoValue}`, {
-    x: W - 120, y: H - 115, size: 10, font: fonts.bodyBold, align: 'right',
+    x: W - 135, y: H - 126, size: 10, font: fonts.bodyBold, align: 'right',
   })
 
   // 2. Brand title — UNSKILLS in maroon, rest black.
@@ -1112,9 +1108,9 @@ async function drawBeauticianContent(
   })
   drawDivider(page, cx, H - 252, 95, C.roseGold, C.maroon)
 
-  // 7. Body — 9 lines matching Skills Development rhythm.
-  let bodyY = H - 275
-  const bStep = 13
+  // 7. Body — 9 lines with breathing room (bStep=15, start H-265).
+  let bodyY = H - 265
+  const bStep = 15
   drawText(page, 'This is to certify that', {
     x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
   })
@@ -1151,7 +1147,7 @@ async function drawBeauticianContent(
     x: cx, y: bodyY, size: 11, font: fonts.bodyBold, align: 'center',
   })
 
-  // 8. QR + maroon pill + Date of Issue (bottom-left cluster)
+  // 8. QR + maroon pill (auto-width) + Date of Issue (bottom-left cluster)
   const qrSize = 52
   const qrX = 128
   const qrY = 155
@@ -1162,10 +1158,11 @@ async function drawBeauticianContent(
   }
   const pillX = qrX + qrSize + 8
   const pillY = qrY + qrSize - 24
-  const pillW = 200
+  const certNoText = `Certificate No. : ${data.certificateNumber}`
+  const pillW = fonts.bodyBold.widthOfTextAtSize(certNoText, 10) + 20
   const pillH = 22
   drawRect(page, pillX, pillY, pillW, pillH, C.maroon)
-  drawText(page, `Certificate No. : ${data.certificateNumber}`, {
+  drawText(page, certNoText, {
     x: pillX + pillW / 2, y: pillY + 7, size: 10, font: fonts.bodyBold, color: C.white, align: 'center',
   })
   drawText(page, `Date of Issue : ${data.issueDate}`, {
@@ -1248,6 +1245,228 @@ async function generateBeauticianCertificate(
   const page = pdfDoc.getPages()[0]
   const { width: W, height: H } = page.getSize()
   await drawBeauticianContent(pdfDoc, page, fonts, data, W, H)
+  return pdfDoc.save()
+}
+
+// ─── Summer Training — bespoke landscape layout ───────────────────────────────
+
+/**
+ * Dedicated Summer Training landscape certificate. Template has thick orange/
+ * yellow horizontal bands at top and bottom, corner icons ({}, calendar,
+ * lightbulb, rocket) on the frame, and orange diamonds at the side midpoints.
+ * Content uses the navy + orange palette; a painted navy verify strip at the
+ * bottom mirrors the H&N design.
+ *
+ * Safe-zone: x ∈ [105, W-105], y ∈ [105, H-110]
+ */
+async function drawSummerTrainingContent(
+  pdfDoc: PDFDocument,
+  page: PDFPage,
+  fonts: FontSet,
+  data: LandscapeCertData,
+  W: number,
+  H: number,
+) {
+  const { settings } = data
+  const cx = W / 2
+
+  // 1. Top meta — placed inside the inner white zone below the orange top band.
+  drawText(page, 'Reg. by Govt. of India', {
+    x: 115, y: H - 112, size: 10, font: fonts.bodyBold,
+  })
+  const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
+  drawText(page, `Reg. No.-${regNoValue}`, {
+    x: W - 115, y: H - 112, size: 10, font: fonts.bodyBold, align: 'right',
+  })
+
+  // 2. Brand title — UNSKILLS orange, rest black.
+  drawBrandTitle(page, {
+    cx, y: H - 138, size: 26, font: fonts.display,
+    leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
+    baseColor: C.black, accentColor: C.orange,
+  })
+
+  // 3. Navy ISO ribbon
+  const isoText = 'An ISO 9001:2015 Certified Organization'
+  const isoSize = 11
+  const isoW = fonts.bodyBold.widthOfTextAtSize(isoText, isoSize) + 28
+  drawRect(page, cx - isoW / 2, H - 170, isoW, 18, C.navy)
+  drawText(page, isoText, {
+    x: cx, y: H - 165, size: isoSize, font: fonts.bodyBold, color: C.white, align: 'center',
+  })
+
+  // 4. Three sub-header lines
+  let subY = H - 188
+  for (const line of [settings.sub_header_line_1, settings.sub_header_line_2, settings.sub_header_line_3]) {
+    if (line) {
+      drawText(page, line, {
+        x: cx, y: subY, size: 8, font: fonts.body, color: C.textDark, align: 'center',
+      })
+    }
+    subY -= 11
+  }
+
+  // 5. Branch logo (left) + student photo (right)
+  const logoY = H - 300
+  if (data.trainingCenterLogoUrl) {
+    const logo = await embedAny(pdfDoc, data.trainingCenterLogoUrl)
+    if (logo) page.drawImage(logo, { x: 115, y: logoY, width: 80, height: 80 })
+  }
+  const photoW = 80, photoH = 95
+  const photoX = W - 115 - photoW
+  const photoY = H - 310
+  if (data.studentPhotoUrl) {
+    const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
+    if (photo) {
+      drawRect(page, photoX - 1, photoY - 1, photoW + 2, photoH + 2, C.white, C.navy, 1)
+      page.drawImage(photo, { x: photoX, y: photoY, width: photoW, height: photoH })
+    }
+  } else {
+    drawRect(page, photoX, photoY, photoW, photoH, C.white, C.navy, 1)
+  }
+
+  // 6. Certificate title — elegant serif italic in navy.
+  drawText(page, 'Certificate of Qualification', {
+    x: cx, y: H - 238, size: 30, font: fonts.serifItalic, color: C.navy, align: 'center',
+  })
+  drawDivider(page, cx, H - 252, 95, C.orange, C.orange)
+
+  // 7. Body — 9 lines with breathing room.
+  let bodyY = H - 265
+  const bStep = 15
+  drawText(page, 'This is to certify that', {
+    x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, `Mr./Miss/Mrs  ${data.studentName.toUpperCase()}`, {
+    x: cx, y: bodyY, size: 12, font: fonts.bodyBold, color: C.textDark, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, `${data.fatherPrefix}/ Mr. ${data.fatherName.toUpperCase()}`, {
+    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, 'has successfully completed the', {
+    x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, `${data.courseCode} - ${data.courseName}`, {
+    x: cx, y: bodyY, size: 12.5, font: fonts.bodyBold, color: C.orange, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, `his/her performance during the course has been ${data.performanceText || 'Excellent'}`, {
+    x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, `He/She scored ${data.percentage} marks & secured the Grade "${data.grade}"`, {
+    x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, 'We wish him/her for bright future', {
+    x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
+  })
+  bodyY -= bStep
+  drawText(page, `Held at ${data.trainingCenterName}`, {
+    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, align: 'center',
+  })
+
+  // 8. QR + orange pill (auto-width) + Date of Issue (bottom-left cluster)
+  const qrSize = 52
+  const qrX = 115
+  const qrY = 155
+  const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
+  if (qr) {
+    drawRect(page, qrX - 1, qrY - 1, qrSize + 2, qrSize + 2, C.white, C.black, 0.5)
+    page.drawImage(qr, { x: qrX, y: qrY, width: qrSize, height: qrSize })
+  }
+  const pillX = qrX + qrSize + 8
+  const pillY = qrY + qrSize - 24
+  const certNoText = `Certificate No. : ${data.certificateNumber}`
+  const pillW = fonts.bodyBold.widthOfTextAtSize(certNoText, 10) + 20
+  const pillH = 22
+  drawRect(page, pillX, pillY, pillW, pillH, C.orange)
+  drawText(page, certNoText, {
+    x: pillX + pillW / 2, y: pillY + 7, size: 10, font: fonts.bodyBold, color: C.white, align: 'center',
+  })
+  drawText(page, `Date of Issue : ${data.issueDate}`, {
+    x: pillX, y: pillY - 16, size: 10, font: fonts.bodyBold, color: C.textDark,
+  })
+
+  // 9. Badge row (bottom-center)
+  const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
+  const visibleBadges = badges.slice(0, Math.min(4, badges.length))
+  if (visibleBadges.length > 0) {
+    const badgeY = 160
+    const badgeH = 30
+    const badgeX0 = 370
+    const badgeX1 = W - 270
+    const badgeSp = (badgeX1 - badgeX0) / visibleBadges.length
+    for (let i = 0; i < visibleBadges.length; i++) {
+      const img = visibleBadges[i]
+      if (!img) continue
+      const ar = img.width / img.height
+      const w = Math.min(badgeH * ar, badgeSp - 6)
+      const h = w / ar
+      const bx = badgeX0 + i * badgeSp + badgeSp / 2 - w / 2
+      const by = badgeY + (badgeH - h) / 2
+      page.drawImage(img, { x: bx, y: by, width: w, height: h })
+    }
+  }
+
+  // 10. Signature (bottom-right)
+  const sigRight = W - 115
+  const sigLeft = sigRight - 150
+  if (settings.signature_image_url) {
+    const sig = await embedAny(pdfDoc, settings.signature_image_url)
+    if (sig) page.drawImage(sig, { x: sigRight - 110, y: 200, width: 110, height: 30 })
+  } else if (settings.signatory_name) {
+    drawText(page, settings.signatory_name, {
+      x: sigRight, y: 207, size: 18, font: fonts.script, color: C.textDark, align: 'right',
+    })
+  }
+  drawLine(page, sigLeft, 197, sigRight, 197, 0.8, C.black)
+  drawText(page, settings.signatory_name || 'Er. Ankitvish', {
+    x: sigRight, y: 184, size: 10.5, font: fonts.bodyBold, color: C.navy, align: 'right',
+  })
+  drawText(page, settings.signatory_designation || 'Chief Executive Officer', {
+    x: sigRight, y: 171, size: 9.5, font: fonts.bodyBold, align: 'right',
+  })
+  drawText(page, settings.signatory_company_line || 'UnSkills FuturePath Tech Pvt. Ltd.', {
+    x: sigRight, y: 159, size: 8.5, font: fonts.body, align: 'right',
+  })
+
+  // 11. Bottom footer: corporate → navy verify strip → mail us.
+  const verifyStripH = 18
+  const verifyStripY = 113
+  if (settings.corporate_office_address) {
+    drawText(page, `Corporate Office : ${settings.corporate_office_address}`, {
+      x: cx, y: 138, size: 9.5, font: fonts.bodyBold, color: C.textDark, align: 'center',
+    })
+  }
+  drawRect(page, 115, verifyStripY, W - 230, verifyStripH, C.navy)
+  if (settings.verification_url_base) {
+    drawText(page, `To verify this certificate visit : ${settings.verification_url_base}`, {
+      x: cx, y: verifyStripY + 5, size: 9, font: fonts.bodyBold, color: C.white, align: 'center',
+    })
+  }
+  if (settings.contact_email) {
+    drawText(page, `Mail us : ${settings.contact_email}`, {
+      x: cx, y: 100, size: 8.5, font: fonts.body, color: C.textDark, align: 'center',
+    })
+  }
+}
+
+async function generateSummerTrainingCertificate(
+  data: LandscapeCertData,
+): Promise<Uint8Array> {
+  const pdfDoc = await makeDocWithTemplate(
+    '/certificates/summer-training-landscape.jpg',
+    A4_LANDSCAPE,
+  )
+  const fonts = await loadFonts(pdfDoc)
+  const page = pdfDoc.getPages()[0]
+  const { width: W, height: H } = page.getSize()
+  await drawSummerTrainingContent(pdfDoc, page, fonts, data, W, H)
   return pdfDoc.save()
 }
 
@@ -1642,10 +1861,7 @@ export async function generateCertificate(
     case 'beautician-landscape':
       return generateBeauticianCertificate(certData)
     case 'summer-training-landscape':
-      return generateLandscapeCertificate(
-        certData, THEME_SUMMER_TRAINING,
-        '/certificates/summer-training-landscape.jpg',
-      )
+      return generateSummerTrainingCertificate(certData)
     case 'typing-portrait':
       return generateTypingPortraitCertificate(certData)
     default:
