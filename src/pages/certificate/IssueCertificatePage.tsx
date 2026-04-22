@@ -9,7 +9,7 @@ import {
   getCertificateSettings,
   listCertificateTemplates,
 } from '../../lib/certificateSettings'
-import { generateCertificateBlob } from '../../lib/pdf/cert-generator'
+import { generateCertificateBlob, type TypingSubjectRow } from '../../lib/pdf/cert-generator'
 import { canIssueCertificate } from '../../lib/pdf/certificate-registry'
 import { generateQRDataUrl } from '../../lib/pdf/generate-qr'
 import { toDataUrl } from '../../lib/pdf/marksheet'
@@ -56,6 +56,7 @@ export default function IssueCertificatePage() {
   const [students, setStudents] = useState<StudentRow[]>([])
   const [student, setStudent] = useState<StudentRow | null>(null)
   const [programName, setProgramName] = useState<string | null>(null)
+  const [programSlug, setProgramSlug] = useState<string | null>(null)
 
   // Step 2 — form fields
   const [salutation, setSalutation] = useState('Mr.')
@@ -72,6 +73,12 @@ export default function IssueCertificatePage() {
   const [performanceText, setPerformanceText] = useState('Excellent')
   const [marksScored, setMarksScored] = useState<number>(0)
   const [grade, setGrade] = useState('A+')
+  // Typing-specific — subjects table with speed + marks
+  const [typingSubjects, setTypingSubjects] = useState<TypingSubjectRow[]>([
+    { subject: 'Hindi Typing', speedWpm: 0, maxMarks: 100, minMarks: 30, obtainedMarks: 0 },
+    { subject: 'English Typing', speedWpm: 0, maxMarks: 100, minMarks: 30, obtainedMarks: 0 },
+  ])
+  const isTyping = programSlug === 'typing'
 
   // Step 3
   const [qrPreview, setQrPreview] = useState('')
@@ -150,6 +157,7 @@ export default function IssueCertificatePage() {
 
     setStudent(st)
     setProgramName(check.programName ?? null)
+    setProgramSlug(check.programSlug ?? null)
     setStudentName(st.name)
     setFatherName(st.father_name ?? '')
     setCourseCode(st.course?.code ?? '')
@@ -201,8 +209,8 @@ export default function IssueCertificatePage() {
         performance_text: performanceText,
         marks_scored: marksScored,
         grade,
-        typing_subjects: null,
-        typing_grade: null,
+        typing_subjects: isTyping ? typingSubjects : null,
+        typing_grade: isTyping ? grade : null,
         qr_code_data_url: qrDataUrl,
         qr_target_url: qrTarget,
         issue_date: issueDate,
@@ -233,11 +241,13 @@ export default function IssueCertificatePage() {
           courseCode,
           courseName,
           trainingCenterName,
+          trainingCenterCode: centerCode,
           performanceText,
           percentage: marksScored,
           grade,
           trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
           certificationLogoUrls: certLogos,
+          typingSubjects: isTyping ? typingSubjects : undefined,
         },
         supabase,
       )
@@ -391,6 +401,85 @@ export default function IssueCertificatePage() {
             <input type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)} className={inputClass} />
           </FormField>
 
+          {isTyping && (
+            <div className="space-y-2 border-t border-gray-200 pt-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-700">Typing Subjects</p>
+                <button
+                  type="button"
+                  onClick={() => setTypingSubjects([
+                    ...typingSubjects,
+                    { subject: '', speedWpm: 0, maxMarks: 100, minMarks: 30, obtainedMarks: 0 },
+                  ])}
+                  className="text-xs text-red-600 hover:underline"
+                >
+                  + Add Subject
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border border-gray-200 rounded-lg">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-2 py-1 text-left font-medium">Subject</th>
+                      <th className="px-2 py-1 text-center font-medium w-20">Speed (WPM)</th>
+                      <th className="px-2 py-1 text-center font-medium w-20">Max</th>
+                      <th className="px-2 py-1 text-center font-medium w-20">Min</th>
+                      <th className="px-2 py-1 text-center font-medium w-20">Obtained</th>
+                      <th className="w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {typingSubjects.map((row, i) => (
+                      <tr key={i} className="border-t border-gray-100">
+                        <td className="p-1">
+                          <input
+                            value={row.subject}
+                            onChange={e => {
+                              const next = [...typingSubjects]
+                              next[i] = { ...next[i], subject: e.target.value }
+                              setTypingSubjects(next)
+                            }}
+                            placeholder="e.g., Hindi Typing"
+                            className="w-full px-2 py-1 text-xs rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-red-400"
+                          />
+                        </td>
+                        {(['speedWpm', 'maxMarks', 'minMarks', 'obtainedMarks'] as const).map(k => (
+                          <td key={k} className="p-1">
+                            <input
+                              type="number"
+                              value={row[k]}
+                              onChange={e => {
+                                const next = [...typingSubjects]
+                                next[i] = { ...next[i], [k]: Number(e.target.value) }
+                                setTypingSubjects(next)
+                              }}
+                              className="w-full px-2 py-1 text-xs text-center rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-red-400"
+                            />
+                          </td>
+                        ))}
+                        <td className="p-1 text-center">
+                          {typingSubjects.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setTypingSubjects(typingSubjects.filter((_, j) => j !== i))}
+                              className="text-gray-400 hover:text-red-600 text-xs"
+                              title="Remove row"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-gray-500">
+                These marks render as a table on the typing certificate. "Marks Scored" above is ignored for typing.
+              </p>
+            </div>
+          )}
+
           <div className="flex justify-between pt-2">
             <button onClick={() => setStep(1)} className="text-sm text-gray-500 hover:text-red-600">Back</button>
             <button
@@ -418,11 +507,13 @@ export default function IssueCertificatePage() {
             courseCode={courseCode}
             courseName={courseName}
             trainingCenterName={trainingCenterName}
+            trainingCenterCode={trainingCenterCode}
             performanceText={performanceText}
             marksScored={marksScored}
             grade={grade}
             qrPreview={qrPreview}
             certLogos={certLogos}
+            typingSubjects={isTyping ? typingSubjects : undefined}
           />
           <div className="flex justify-between pt-2">
             <button onClick={() => setStep(2)} className="text-sm text-gray-500 hover:text-red-600">
@@ -446,15 +537,17 @@ export default function IssueCertificatePage() {
 function StepThreePreview({
   settings, student, enrollmentNumber,
   salutation, studentName, fatherPrefix, fatherName, issueDate,
-  courseCode, courseName, trainingCenterName, performanceText, marksScored, grade,
-  qrPreview, certLogos,
+  courseCode, courseName, trainingCenterName, trainingCenterCode, performanceText, marksScored, grade,
+  qrPreview, certLogos, typingSubjects,
 }: {
   settings: CertificateSettings
   student: StudentRow
   enrollmentNumber: string
   salutation: string; studentName: string; fatherPrefix: string; fatherName: string; issueDate: string
-  courseCode: string; courseName: string; trainingCenterName: string; performanceText: string
+  courseCode: string; courseName: string; trainingCenterName: string; trainingCenterCode: string
+  performanceText: string
   marksScored: number; grade: string; qrPreview: string; certLogos: string[]
+  typingSubjects?: TypingSubjectRow[]
 }) {
   const [url, setUrl] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -472,9 +565,12 @@ function StepThreePreview({
             issueDate: formatDateDDMMYYYY(issueDate), qrCodeDataUrl: qrPreview,
             salutation, studentName, fatherPrefix, fatherName,
             studentPhotoUrl: student.photo_url, courseCode, courseName,
-            trainingCenterName, performanceText, percentage: marksScored, grade,
+            trainingCenterName,
+            trainingCenterCode,
+            performanceText, percentage: marksScored, grade,
             trainingCenterLogoUrl: student.branch?.center_logo_url ?? null,
             certificationLogoUrls: certLogos,
+            typingSubjects,
           },
           supabase,
         )
