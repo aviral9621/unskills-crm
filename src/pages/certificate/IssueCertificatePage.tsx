@@ -185,7 +185,10 @@ export default function IssueCertificatePage() {
       if (numErr) throw numErr
       const certNumber = numData as string
 
-      const qrTarget = `${settings.verification_url_base}/${certNumber}`
+      // Point QR to the public certificate-verification route on the website,
+      // not just the domain root — otherwise scans land on the homepage.
+      const base = (settings.verification_url_base || '').replace(/\/+$/, '')
+      const qrTarget = `${base}/verify/certificate/${encodeURIComponent(certNumber)}`
       const qrDataUrl = await generateQRDataUrl(qrTarget)
       const formattedDate = formatDateDDMMYYYY(issueDate)
 
