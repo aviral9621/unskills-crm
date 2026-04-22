@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npm create:*)",
-      "mcp__mcp-registry__search_mcp_registry"
+      "mcp__mcp-registry__search_mcp_registry",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)"
     ]
   }
 }
