@@ -1515,6 +1515,29 @@ function drawTableCell(
   }
 }
 
+/**
+ * Typing Portrait — rebuilt with precise, balanced layout.
+ *
+ * Safe zone (inside the inner navy frame, clear of the L-corner brackets):
+ *   x ∈ [90, W-90], y ∈ [85, H-95]
+ *
+ * Vertical rhythm (descending y, H = 841.89):
+ *   H-100  top meta (Cert No / Reg No)
+ *   H-128  brand title (UN SKILLS COMPUTER EDUCATION™)
+ *   H-158  ISO ribbon (navy bg, white text)
+ *   H-178+ three sub-header lines
+ *   H-238  cursive main title "Computer Based Typing Examination"
+ *   H-258  gold divider
+ *   H-320  candidate 3-column info table (data row bottom)
+ *   H-355  "This certificate is Proudly Presented to"
+ *   H-378  student name (red bold)
+ *   H-400  father name
+ *   H-425..H-477  5-line body block (bStep=13)
+ *   H-505..H-549  marks table (header + 2 rows)
+ *   y=270..226    grade legend (left) + Grade/Date boxes (right)
+ *   y=135..205    QR (left) + badges (center) + signature (right)
+ *   y=90, 105     footer (mail us + verify URL)
+ */
 async function drawTypingPortraitContent(
   pdfDoc: PDFDocument,
   page: PDFPage,
@@ -1525,69 +1548,67 @@ async function drawTypingPortraitContent(
 ) {
   const { settings } = data
   const cx = W / 2
-  // Pull content inward from the decorative corner icons (keyboard TL, document
-  // TR, pencil BL, clock BR) so nothing sits on them.
-  const LEFT = 95
-  const RIGHT = W - 95
+  const LEFT = 90
+  const RIGHT = W - 90
 
-  // 1. Top meta — Certificate No (left) | Reg. No (right), dropped below the
-  // top-left keyboard icon and top-right document icon.
+  // 1. Top meta — safely below the inner frame + L-corner brackets.
   drawText(page, `Certificate No.: ${data.certificateNumber}`, {
-    x: LEFT, y: H - 95, size: 8, font: fonts.bodyBold,
+    x: LEFT, y: H - 100, size: 8, font: fonts.bodyBold,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
   drawText(page, `Reg. No.: ${regNoValue}`, {
-    x: RIGHT, y: H - 95, size: 8, font: fonts.bodyBold, align: 'right',
+    x: RIGHT, y: H - 100, size: 8, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title — fixed company name across every program.
+  // 2. Brand title "UN SKILLS COMPUTER EDUCATION™"
   drawBrandTitle(page, {
-    cx, y: H - 123, size: 22, font: fonts.display,
+    cx, y: H - 128, size: 20, font: fonts.display,
     leading: 'UN ', accent: 'SKILLS', trailing: ' COMPUTER EDUCATION',
     baseColor: C.black, accentColor: C.red,
   })
 
-  // 3. ISO ribbon
+  // 3. ISO ribbon — navy bg, white bold text.
   const isoText = 'An ISO 9001:2015 Certified Organization'
-  const isoFontSize = 9
-  const isoW = fonts.bodyBold.widthOfTextAtSize(isoText, isoFontSize) + 24
-  drawRect(page, cx - isoW / 2, H - 153, isoW, 16, C.navy)
+  const isoSize = 10
+  const isoW = fonts.bodyBold.widthOfTextAtSize(isoText, isoSize) + 26
+  drawRect(page, cx - isoW / 2, H - 162, isoW, 17, C.navy)
   drawText(page, isoText, {
-    x: cx, y: H - 149, size: isoFontSize, font: fonts.bodyBold, color: C.white, align: 'center',
+    x: cx, y: H - 157, size: isoSize, font: fonts.bodyBold, color: C.white, align: 'center',
   })
 
-  // 4. Sub-headers
-  let subY = H - 172
+  // 4. Sub-headers (3 lines)
+  let subY = H - 178
   for (const line of [settings.sub_header_line_1, settings.sub_header_line_2, settings.sub_header_line_3]) {
     if (line) {
       drawText(page, line, {
-        x: cx, y: subY, size: 7.5, font: fonts.body, color: C.textSecondary, align: 'center',
+        x: cx, y: subY, size: 8, font: fonts.body, color: C.textDark, align: 'center',
       })
     }
     subY -= 11
   }
 
-  // 5. Title — "Computer Based Typing Examination"
+  // 5. Main cursive title — GreatVibes (fonts.script). Elegant and readable.
   drawText(page, 'Computer Based Typing Examination', {
-    x: cx, y: H - 220, size: 18, font: fonts.bodyBold, color: C.navy, align: 'center',
+    x: cx, y: H - 238, size: 28, font: fonts.script, color: C.navy, align: 'center',
   })
-  drawLine(page, cx - 140, H - 227, cx + 140, H - 227, 0.8, C.gold)
+  drawLine(page, cx - 130, H - 258, cx + 130, H - 258, 0.8, C.gold)
 
-  // 6. 3-column header table — Enrollment | Center Code | Training Center
-  const tbl1Y = H - 268
+  // 6. Candidate 3-column info table
+  const tbl1DataY = H - 320   // bottom of data row
   const tbl1H = 22
+  const tbl1TotalW = RIGHT - LEFT
   const tbl1Cols = [
-    { w: 125, label: 'Enrollment No.', value: data.enrollmentNumber || '—' },
-    { w: 105, label: 'Center Code',    value: data.trainingCenterCode || '—' },
-    { w: RIGHT - LEFT - 230, label: 'Authorised Training Center Name', value: data.trainingCenterName || '—' },
+    { w: 130, label: 'Enrollment No.', value: data.enrollmentNumber || '—' },
+    { w: 110, label: 'Center Code', value: data.trainingCenterCode || '—' },
+    { w: tbl1TotalW - 240, label: 'Authorised Training Center Name', value: data.trainingCenterName || '—' },
   ]
+  // header row (above data row, gray bg)
   let tbl1X = LEFT
-  // header row (gray bg)
   for (const c of tbl1Cols) {
     drawTableCell(page, {
-      x: tbl1X, y: tbl1Y + tbl1H, w: c.w, h: tbl1H,
+      x: tbl1X, y: tbl1DataY + tbl1H, w: c.w, h: tbl1H,
       bg: C.tableHeaderBg, borderColor: C.black, borderWidth: 0.6,
-      text: c.label, textFont: fonts.bodyBold, textSize: 8.5,
+      text: c.label, textFont: fonts.bodyBold, textSize: 9,
     })
     tbl1X += c.w
   }
@@ -1595,65 +1616,69 @@ async function drawTypingPortraitContent(
   tbl1X = LEFT
   for (const c of tbl1Cols) {
     drawTableCell(page, {
-      x: tbl1X, y: tbl1Y, w: c.w, h: tbl1H,
+      x: tbl1X, y: tbl1DataY, w: c.w, h: tbl1H,
       borderColor: C.black, borderWidth: 0.6,
-      text: c.value, textFont: fonts.body, textSize: 9, textColor: C.navy,
+      text: c.value, textFont: fonts.bodyBold, textSize: 9, textColor: C.navy,
     })
     tbl1X += c.w
   }
 
-  // 7. "This certificate is Proudly Presented to"
+  // 7. Student section intro
   drawText(page, 'This certificate is Proudly Presented to', {
-    x: cx, y: H - 330, size: 11, font: fonts.bodyBold, color: C.textDark, align: 'center',
+    x: cx, y: H - 355, size: 11, font: fonts.body, color: C.textDark, align: 'center',
   })
 
-  // 8. Branch logo (left) + Student name (center, red) + Student photo (right)
-  const rowY = H - 395
+  // 8. Student name (red bold, letter-spaced)
+  drawText(page, data.studentName.toUpperCase(), {
+    x: cx, y: H - 378, size: 18, font: fonts.bodyBold, color: C.red, align: 'center', letterSpacing: 1,
+  })
+
+  // 9. Father name
+  drawText(page, `${data.fatherPrefix} Mr. ${data.fatherName.toUpperCase()}`, {
+    x: cx, y: H - 400, size: 11, font: fonts.bodyBold, color: C.textDark, align: 'center',
+  })
+
+  // 10. Branch logo (left) + student photo (right) — flanking the body text.
+  const logoSize = 58
+  const logoY = 385
   if (data.trainingCenterLogoUrl) {
     const logo = await embedAny(pdfDoc, data.trainingCenterLogoUrl)
-    if (logo) page.drawImage(logo, { x: LEFT, y: rowY - 5, width: 60, height: 60 })
+    if (logo) page.drawImage(logo, { x: LEFT, y: logoY, width: logoSize, height: logoSize })
   }
-  const heroName = data.studentName.toUpperCase()
-  drawText(page, heroName, {
-    x: cx, y: H - 368, size: 20, font: fonts.bodyBold, color: C.red, align: 'center', letterSpacing: 1,
-  })
-  drawText(page, `${data.fatherPrefix} Mr. ${data.fatherName.toUpperCase()}`, {
-    x: cx, y: H - 392, size: 10.5, font: fonts.bodyBold, color: C.textDark, align: 'center',
-  })
   if (data.studentPhotoUrl) {
     const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
     if (photo) {
-      const pW = 60, pH = 70, pX = RIGHT - pW, pY = rowY - 5
-      drawRect(page, pX - 1, pY - 1, pW + 2, pH + 2, C.black)
+      const pW = 58, pH = 72, pX = RIGHT - pW, pY = 380
+      drawRect(page, pX - 1, pY - 1, pW + 2, pH + 2, C.white, C.navy, 1)
       page.drawImage(photo, { x: pX, y: pY, width: pW, height: pH })
     }
   }
 
-  // 9. Body (5 lines)
-  let bodyY = H - 420
+  // 11. Body text (5 lines, centered between logo and photo)
+  let bodyY = H - 425
   const bStep = 13
   drawText(page, 'has passed in the following subject of the', {
-    x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center',
+    x: cx, y: bodyY, size: 10, font: fonts.body, color: C.textDark, align: 'center',
   })
   bodyY -= bStep
   drawText(page, 'Computer Based Typing Examination', {
-    x: cx, y: bodyY, size: 10, font: fonts.bodyBold, color: C.navy, align: 'center',
+    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, color: C.navy, align: 'center',
   })
   bodyY -= bStep
   drawText(page, 'Designed and developed as per the standard of', {
-    x: cx, y: bodyY, size: 10, font: fonts.body, align: 'center',
+    x: cx, y: bodyY, size: 10, font: fonts.body, color: C.textDark, align: 'center',
   })
   bodyY -= bStep
   drawText(page, 'UnSkills FuturePath Tech Pvt. Ltd.', {
-    x: cx, y: bodyY, size: 10, font: fonts.bodyBold, color: C.textDark, align: 'center',
+    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, color: C.textDark, align: 'center',
   })
   bodyY -= bStep
   drawText(page, `held at ${data.trainingCenterName}`, {
-    x: cx, y: bodyY, size: 10, font: fonts.bodyBold, align: 'center',
+    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, color: C.textDark, align: 'center',
   })
 
-  // 10. Subject marks table (5 cols) — falls back to a single row from
-  // percentage if typingSubjects wasn't supplied.
+  // 12. Marks table (5 cols) — falls back to a single row if typingSubjects
+  //     wasn't supplied by the caller.
   const subjects: TypingSubjectRow[] = data.typingSubjects && data.typingSubjects.length > 0
     ? data.typingSubjects
     : [{
@@ -1664,15 +1689,15 @@ async function drawTypingPortraitContent(
         obtainedMarks: data.percentage,
       }]
 
-  const tbl2HeaderY = H - 500
+  const tbl2HeaderY = H - 505   // bottom of header row (spans H-505..H-483)
   const tbl2RowH = 22
   const tbl2TotalW = RIGHT - LEFT
   const tbl2Cols = [
-    { w: tbl2TotalW - 4 * 72, label: 'Name of the Subject', key: 'subject',       align: 'left'   as const },
-    { w: 72, label: 'Speed W.P.M.',   key: 'speedWpm',      align: 'center' as const },
-    { w: 72, label: 'Maximum Marks',  key: 'maxMarks',      align: 'center' as const },
-    { w: 72, label: 'Minimum Marks',  key: 'minMarks',      align: 'center' as const },
-    { w: 72, label: 'Marks Obtained', key: 'obtainedMarks', align: 'center' as const },
+    { w: tbl2TotalW - 4 * 68, label: 'Name of the Subject', key: 'subject', align: 'left' as const },
+    { w: 68, label: 'Speed W.P.M.', key: 'speedWpm', align: 'center' as const },
+    { w: 68, label: 'Maximum Marks', key: 'maxMarks', align: 'center' as const },
+    { w: 68, label: 'Minimum Marks', key: 'minMarks', align: 'center' as const },
+    { w: 68, label: 'Marks Obtained', key: 'obtainedMarks', align: 'center' as const },
   ]
   // header
   let tbl2X = LEFT
@@ -1697,17 +1722,16 @@ async function drawTypingPortraitContent(
         x, y, w: c.w, h: tbl2RowH,
         borderColor: C.black, borderWidth: 0.6,
         text, textFont: c.key === 'subject' ? fonts.bodyBold : fonts.body,
-        textSize: 9, textColor: c.key === 'subject' ? C.navy : C.textDark,
+        textSize: 9.5, textColor: c.key === 'subject' ? C.navy : C.textDark,
         textAlign: c.align, padX: 6,
       })
       x += c.w
     }
   }
 
-  // 11. Grade system legend (left) + Grade & Date boxes (right)
-  //     Anchored below the marks table; keep above the QR / signature row.
-  const gradeRowTop = tbl2HeaderY - tbl2RowH * (subjects.length + 1) - 10
-  // Legend
+  // 13. Grade legend (left) + Grade/Date boxes (right)
+  //     Positioned between the marks table and the bottom cluster.
+  const gradeLegendTop = 270
   const legendLines = [
     'Grade System',
     'A+ : 85% & Above',
@@ -1716,97 +1740,101 @@ async function drawTypingPortraitContent(
     'C  : 40% to 59%',
   ]
   for (let i = 0; i < legendLines.length; i++) {
-    const y = gradeRowTop - i * 11
-    const bold = i === 0
     drawText(page, legendLines[i], {
-      x: LEFT, y, size: 8.5, font: bold ? fonts.bodyBold : fonts.body,
+      x: LEFT, y: gradeLegendTop - i * 11, size: 8.5,
+      font: i === 0 ? fonts.bodyBold : fonts.body,
       color: C.textDark,
     })
   }
-  // Grade + Date of Issue boxes — right side
+  // Grade + Date boxes on the right
   const boxW = 180
-  const boxH = 20
+  const boxH = 22
   const boxX = RIGHT - boxW
-  // Grade row
+  const gradeBoxY = 248
+  const dateBoxY = 222
   drawTableCell(page, {
-    x: boxX, y: gradeRowTop - 8, w: 70, h: boxH,
+    x: boxX, y: gradeBoxY, w: 80, h: boxH,
     bg: C.red, borderColor: C.black, borderWidth: 0.6,
-    text: 'Grade', textFont: fonts.bodyBold, textSize: 9.5, textColor: C.white,
+    text: 'Grade', textFont: fonts.bodyBold, textSize: 10, textColor: C.white,
   })
   drawTableCell(page, {
-    x: boxX + 70, y: gradeRowTop - 8, w: boxW - 70, h: boxH,
+    x: boxX + 80, y: gradeBoxY, w: boxW - 80, h: boxH,
     borderColor: C.black, borderWidth: 0.6,
-    text: data.grade, textFont: fonts.bodyBold, textSize: 11, textColor: C.navy,
+    text: data.grade, textFont: fonts.bodyBold, textSize: 12, textColor: C.navy,
   })
-  // Date of Issue row
   drawTableCell(page, {
-    x: boxX, y: gradeRowTop - 8 - boxH - 4, w: 100, h: boxH,
+    x: boxX, y: dateBoxY, w: 80, h: boxH,
     bg: C.red, borderColor: C.black, borderWidth: 0.6,
-    text: 'Date of Issue', textFont: fonts.bodyBold, textSize: 9.5, textColor: C.white,
+    text: 'Date of Issue', textFont: fonts.bodyBold, textSize: 10, textColor: C.white,
   })
   drawTableCell(page, {
-    x: boxX + 100, y: gradeRowTop - 8 - boxH - 4, w: boxW - 100, h: boxH,
+    x: boxX + 80, y: dateBoxY, w: boxW - 80, h: boxH,
     borderColor: C.black, borderWidth: 0.6,
     text: data.issueDate, textFont: fonts.bodyBold, textSize: 10, textColor: C.navy,
   })
 
-  // 12. QR (left-bottom) + Signature (right-bottom) — raised so the bottom-
-  // corner pencil/clock icons don't clip them.
-  const qrSize = 58
-  const qrY = 165
+  // 14. QR (bottom-left) + signature (bottom-right) + badges (center).
+  const qrSize = 55
+  const qrY = 135
   const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
   if (qr) {
     drawRect(page, LEFT - 1, qrY - 1, qrSize + 2, qrSize + 2, C.white, C.black, 0.5)
     page.drawImage(qr, { x: LEFT, y: qrY, width: qrSize, height: qrSize })
   }
-  // Signature block, right side
+
+  // Signature block — right side
   const sigRight = RIGHT
-  const sigLeft = sigRight - 160
+  const sigLeft = sigRight - 150
   if (settings.signature_image_url) {
     const sig = await embedAny(pdfDoc, settings.signature_image_url)
-    if (sig) page.drawImage(sig, { x: sigRight - 115, y: 210, width: 115, height: 30 })
-  }
-  drawLine(page, sigLeft, 205, sigRight, 205, 0.8, C.black)
-  if (settings.signatory_designation) {
-    drawText(page, settings.signatory_designation, {
-      x: sigRight, y: 190, size: 9.5, font: fonts.bodyBold, align: 'right',
+    if (sig) page.drawImage(sig, { x: sigRight - 110, y: 178, width: 110, height: 30 })
+  } else if (settings.signatory_name) {
+    drawText(page, settings.signatory_name, {
+      x: sigRight, y: 185, size: 16, font: fonts.script, color: C.textDark, align: 'right',
     })
   }
-  if (settings.signatory_company_line) {
-    drawText(page, settings.signatory_company_line, {
-      x: sigRight, y: 177, size: 8.5, font: fonts.body, align: 'right',
-    })
-  }
-  if (settings.signatory_reg_line) {
-    drawText(page, settings.signatory_reg_line, {
-      x: sigRight, y: 165, size: 7, font: fonts.body, color: C.textSecondary, align: 'right',
-    })
-  }
+  drawLine(page, sigLeft, 172, sigRight, 172, 0.8, C.black)
+  drawText(page, settings.signatory_name || 'Er. Ankitvish', {
+    x: sigRight, y: 160, size: 10, font: fonts.bodyBold, color: C.navy, align: 'right',
+  })
+  drawText(page, settings.signatory_designation || 'Chief Executive Officer', {
+    x: sigRight, y: 148, size: 9, font: fonts.bodyBold, align: 'right',
+  })
+  drawText(page, settings.signatory_company_line || 'UnSkills FuturePath Tech Pvt. Ltd.', {
+    x: sigRight, y: 137, size: 8, font: fonts.body, color: C.textSecondary, align: 'right',
+  })
 
-  // 13. Badge strip — 7 logos in a horizontal band above the verify URL,
-  // pulled inward so the pencil / clock corner icons don't clip them.
+  // 15. Badge row — centered between QR and signature block.
   const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
-  const stripY = 125
-  const stripH = 18
-  const stripX0 = LEFT + 50
-  const stripX1 = RIGHT - 50
-  const stripSp = (stripX1 - stripX0) / Math.max(badges.length, 1)
-  const maxBadgeW = stripSp - 4
-  for (let i = 0; i < badges.length; i++) {
-    const img = badges[i]
-    if (!img) continue
-    const ar = img.width / img.height
-    const w = Math.min(stripH * ar, maxBadgeW)
-    const h = w / ar
-    const bx = stripX0 + i * stripSp + stripSp / 2 - w / 2
-    const by = stripY + (stripH - h) / 2
-    page.drawImage(img, { x: bx, y: by, width: w, height: h })
+  const visibleBadges = badges.slice(0, Math.min(5, badges.length))
+  if (visibleBadges.length > 0) {
+    const badgeH = 22
+    const badgeY = 152
+    const badgeX0 = LEFT + qrSize + 15
+    const badgeX1 = sigLeft - 15
+    const badgeSp = (badgeX1 - badgeX0) / visibleBadges.length
+    for (let i = 0; i < visibleBadges.length; i++) {
+      const img = visibleBadges[i]
+      if (!img) continue
+      const ar = img.width / img.height
+      const w = Math.min(badgeH * ar, badgeSp - 4)
+      const h = w / ar
+      const bx = badgeX0 + i * badgeSp + badgeSp / 2 - w / 2
+      const by = badgeY + (badgeH - h) / 2
+      page.drawImage(img, { x: bx, y: by, width: w, height: h })
+    }
   }
 
-  // 14. Footer verify URL — above the bottom decorative border
+  // 16. Footer — verify URL + mail us. Sits above the bottom inner frame line
+  //     and the pencil/clock corner icons.
   if (settings.verification_url_base) {
     drawText(page, `To verify this certificate visit: ${settings.verification_url_base}`, {
-      x: cx, y: 105, size: 7.5, font: fonts.body, align: 'center',
+      x: cx, y: 108, size: 8, font: fonts.bodyBold, color: C.textDark, align: 'center',
+    })
+  }
+  if (settings.contact_email) {
+    drawText(page, `Mail us: ${settings.contact_email}`, {
+      x: cx, y: 95, size: 7.5, font: fonts.body, color: C.textSecondary, align: 'center',
     })
   }
 }
