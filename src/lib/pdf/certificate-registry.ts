@@ -26,7 +26,6 @@ export interface ProgramCertificateConfig {
 }
 
 export const PROGRAM_CERTIFICATE_REGISTRY: ProgramCertificateConfig[] = [
-  // ✅ IMPLEMENTED
   {
     programSlug: 'computer-software',
     programName: 'Computer Software Courses',
@@ -34,15 +33,45 @@ export const PROGRAM_CERTIFICATE_REGISTRY: ProgramCertificateConfig[] = [
     orientation: 'landscape',
     generatorKey: 'computer-software-landscape',
   },
+  {
+    programSlug: 'hardware-networking',
+    programName: 'Hardware & Networking',
+    templatePath: '/certificates/hardware-networking-landscape.pdf',
+    orientation: 'landscape',
+    generatorKey: 'hardware-networking-landscape',
+  },
+  {
+    programSlug: 'skills-development',
+    programName: 'Skills Development Course',
+    templatePath: '/certificates/skills-development-landscape.pdf',
+    orientation: 'landscape',
+    generatorKey: 'skills-development-landscape',
+  },
+  {
+    programSlug: 'beautician',
+    programName: 'Beautician Courses',
+    templatePath: '/certificates/beautician-landscape.pdf',
+    orientation: 'landscape',
+    generatorKey: 'beautician-landscape',
+  },
+  {
+    programSlug: 'summer-training',
+    programName: 'Summer Training',
+    templatePath: '/certificates/summer-training-landscape.pdf',
+    orientation: 'landscape',
+    generatorKey: 'summer-training-landscape',
+  },
+  {
+    programSlug: 'typing',
+    programName: 'Typing Course',
+    templatePath: '/certificates/typing-portrait.pdf',
+    orientation: 'portrait',
+    generatorKey: 'typing-portrait',
+  },
 
-  // ⏳ PENDING (templates will be added as client provides designs):
-  // - hardware-networking
-  // - skills-development
+  // ⏳ PENDING (client has not provided designs yet):
   // - nielit-govt
   // - university
-  // - beautician
-  // - summer-training
-  // - typing
   // - diploma
 ]
 
