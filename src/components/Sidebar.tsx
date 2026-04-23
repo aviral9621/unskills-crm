@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, Building2, Users, MessageSquare,
+  LayoutDashboard, Building2, Users, MessageSquare, MessageCircle,
   GraduationCap, BookOpen,
   FileText, Video, ClipboardList, ScrollText, Award,
   Briefcase,
@@ -28,6 +28,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
       { label: 'Branches', icon: Building2, path: '/admin/branches', permission: 'branch' },
       { label: 'Users', icon: Users, path: '/admin/users', permission: 'user' },
       { label: 'Inquiries', icon: MessageSquare, path: '/admin/inquiries', permission: 'inquiry' },
+      { label: 'Leads', icon: MessageCircle, path: '/admin/leads', permission: 'inquiry' },
     ],
   },
   {

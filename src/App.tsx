@@ -21,6 +21,7 @@ import UserListPage from './pages/users/UserListPage'
 import UserFormPage from './pages/users/UserFormPage'
 import PermissionsPage from './pages/users/PermissionsPage'
 import InquiryPage from './pages/inquiries/InquiryPage'
+import LeadsPage from './pages/leads/LeadsPage'
 import StudentListPage from './pages/students/StudentListPage'
 import StudentRegisterPage from './pages/students/StudentRegisterPage'
 import StudentIdCardPage from './pages/students/StudentIdCardPage'
@@ -132,6 +133,7 @@ function AppRoutes() {
         <Route path="users/:id/permissions" element={<PermissionsPage />} />
 
         <Route path="inquiries" element={<InquiryPage />} />
+        <Route path="leads" element={<LeadsPage />} />
 
         <Route path="students" element={<StudentListPage />} />
         <Route path="students/register" element={<StudentRegisterPage />} />
