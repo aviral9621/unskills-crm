@@ -49,7 +49,7 @@ interface StudentData {
   dob: string | null; photo_url: string | null
   course_id: string; session: string | null; enrollment_date: string | null
   course?: { name: string; code: string; duration_label: string | null; duration_months: number | null; total_semesters: number | null; is_marksheet_eligible: boolean } | null
-  branch?: { name: string; b_code: string | null; code: string | null; address_line1: string | null; district: string | null; state: string | null; pincode: string | null } | null
+  branch?: { name: string; b_code: string | null; code: string | null; address_line1: string | null; district: string | null; state: string | null; pincode: string | null; category: string | null } | null
 }
 
 interface SubjectDef {
@@ -149,7 +149,7 @@ export default function MarksheetPage() {
     try {
       const { data: sd, error } = await supabase
         .from('uce_students')
-        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode)')
+        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode, category)')
         .eq('id', rec.student_id).single()
 
       if (error || !sd) { toast.error('Could not load student for edit'); return }
@@ -186,7 +186,7 @@ export default function MarksheetPage() {
     if (!query.trim()) return
     setLoading(true); resetStudentState()
     try {
-      const sel = 'id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode)'
+      const sel = 'id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode, category)'
       const trimmed = query.trim()
       let data: Record<string, unknown> | null = null
 
@@ -431,6 +431,7 @@ export default function MarksheetPage() {
         gradingScheme: bands,
         settings,
         logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
+        branch_category: br?.category ?? undefined,
       })
 
       const marksData: MarksheetMarksData = {
@@ -488,7 +489,7 @@ export default function MarksheetPage() {
     try {
       const { data: sd } = await supabase
         .from('uce_students')
-        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode)')
+        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode, category)')
         .eq('id', rec.student_id).single()
       if (!sd) { toast.error('Student not found'); return }
 
@@ -525,6 +526,7 @@ export default function MarksheetPage() {
         gradingScheme: bands,
         settings,
         logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
+        branch_category: br?.category ?? undefined,
       })
 
       const url = URL.createObjectURL(blob)

@@ -1056,11 +1056,11 @@ async function drawBeauticianContent(
     x: W - 135, y: H - 88, size: 9, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title — UNSKILLS in maroon, rest black.
+  // 2. Brand title — UN black, SKILLS red, BEAUTY ACADEMY black.
   drawBrandTitle(page, {
     cx, y: H - 128, size: 26, font: fonts.display,
-    leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
-    baseColor: C.black, accentColor: C.maroon,
+    leading: 'UN', accent: 'SKILLS', trailing: ' BEAUTY ACADEMY',
+    baseColor: C.black, accentColor: C.red,
   })
 
   // 3. Maroon ISO ribbon

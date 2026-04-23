@@ -48,6 +48,7 @@ export interface BuildMarksheetInput {
   certLogos: string[]
   photoDataUrl: string
   qrDataUrl: string
+  branch_category?: string
 }
 
 export async function toDataUrl(url: string): Promise<string> {
@@ -128,8 +129,9 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
   const {
     student, center, rows, roll_no, issue_date, serial_no,
     totals, finalGrade, gradingScheme, settings,
-    logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
+    logoDataUrl, certLogos, photoDataUrl, qrDataUrl, branch_category,
   } = input
+  const isBeautician = branch_category === 'beautician'
 
   const s = StyleSheet.create({
     page: {
@@ -469,7 +471,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                 <Text style={s.brandTitle}>
                   <Text style={{ color: colors.textPrimary }}>UN</Text>
                   <Text style={{ color: colors.borderAccent }}>SKILLS</Text>
-                  <Text style={{ color: colors.textPrimary }}> COMPUTER EDUCATION</Text>
+                  <Text style={{ color: colors.textPrimary }}>{isBeautician ? ' BEAUTY ACADEMY' : ' COMPUTER EDUCATION'}</Text>
                 </Text>
                 <Text style={s.subHeader}>
                   An ISO 9001:2015 Certified Organization
