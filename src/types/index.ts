@@ -40,6 +40,7 @@ export interface Branch {
   center_logo_url: string | null
   wallet_balance: number
   is_active: boolean
+  is_main: boolean
   joined_at: string
   created_at: string
   updated_at: string

@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
-import { Wallet, Plus, Search, X, Download, Pencil, Trash2, Calendar, Tag } from 'lucide-react'
+import { Wallet, Plus, Search, X, Download, Pencil, Trash2, Calendar, Tag, Crown, Store, Info, TrendingDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { formatINR, formatDate } from '../../lib/utils'
+import { formatINR, formatDate, cn } from '../../lib/utils'
 import DataTable from '../../components/DataTable'
 import Modal from '../../components/Modal'
 import ConfirmDialog from '../../components/ConfirmDialog'
@@ -15,12 +15,15 @@ interface ExpenseRow {
   id: string; amount: number; expense_date: string; description: string | null
   receipt_url: string | null; is_salary: boolean; category_name: string
   category_id: string | null; branch_name: string; branch_id: string | null
+  branch_is_main: boolean
 }
 interface Category { id: string; name: string; is_active: boolean }
-interface FilterOption { id: string; name: string }
+interface BranchOpt { id: string; name: string; is_main: boolean }
 
 const col = createColumnHelper<ExpenseRow>()
 const PIE_COLORS = ['#DC2626', '#2563EB', '#16A34A', '#D97706', '#7C3AED', '#EC4899', '#0891B2', '#65A30D', '#EA580C', '#94A3B8']
+
+type Tab = 'ho' | 'all'
 
 export default function ExpensesPage() {
   const { profile, user } = useAuth()
@@ -28,39 +31,41 @@ export default function ExpensesPage() {
 
   const [expenses, setExpenses] = useState<ExpenseRow[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [branches, setBranches] = useState<FilterOption[]>([])
+  const [branches, setBranches] = useState<BranchOpt[]>([])
+  const [mainBranch, setMainBranch] = useState<BranchOpt | null>(null)
   const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<Tab>('ho')
 
-  // Filters
   const [search, setSearch] = useState('')
   const [branchF, setBranchF] = useState('')
   const [categoryF, setCategoryF] = useState('')
-  const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01` })
+  const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 2); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01` })
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
 
-  // Modal
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState({ category_id: '', amount: '', expense_date: new Date().toISOString().split('T')[0], description: '', receipt_url: '' })
   const [saving, setSaving] = useState(false)
 
-  // Delete
   const [deleteTarget, setDeleteTarget] = useState<ExpenseRow | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [])
+  useEffect(() => { if (!loading) load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [dateFrom, dateTo])
 
   async function load() {
     setLoading(true)
     try {
       const [catRes, brRes] = await Promise.all([
         supabase.from('uce_expense_categories').select('id, name, is_active').order('name'),
-        supabase.from('uce_branches').select('id, name').eq('is_active', true).order('name'),
+        supabase.from('uce_branches').select('id, name, is_main').eq('is_active', true).order('name'),
       ])
       setCategories(catRes.data ?? [])
-      setBranches(brRes.data ?? [])
+      const brs = (brRes.data ?? []) as BranchOpt[]
+      setBranches(brs)
+      setMainBranch(brs.find(b => b.is_main) ?? null)
 
-      let eq = supabase.from('uce_expenses').select(`id, amount, expense_date, description, receipt_url, is_salary, category_id, branch_id, category:uce_expense_categories(name), branch:uce_branches(name)`)
+      let eq = supabase.from('uce_expenses').select(`id, amount, expense_date, description, receipt_url, is_salary, category_id, branch_id, category:uce_expense_categories(name), branch:uce_branches(name, is_main)`)
       if (!isSuperAdmin && profile?.branch_id) eq = eq.eq('branch_id', profile.branch_id)
       if (dateFrom) eq = eq.gte('expense_date', dateFrom)
       if (dateTo) eq = eq.lte('expense_date', dateTo)
@@ -68,36 +73,47 @@ export default function ExpensesPage() {
       if (error) throw error
 
       setExpenses((data ?? []).map((e: Record<string, unknown>) => ({
-        id: e.id as string, amount: e.amount as number,
-        expense_date: e.expense_date as string, description: e.description as string | null,
-        receipt_url: e.receipt_url as string | null, is_salary: e.is_salary as boolean,
+        id: e.id as string,
+        amount: Number(e.amount || 0),
+        expense_date: e.expense_date as string,
+        description: e.description as string | null,
+        receipt_url: e.receipt_url as string | null,
+        is_salary: e.is_salary as boolean,
         category_name: (e.category as { name: string } | null)?.name || 'Uncategorized',
         category_id: e.category_id as string | null,
         branch_name: (e.branch as { name: string } | null)?.name || '—',
         branch_id: e.branch_id as string | null,
+        branch_is_main: !!(e.branch as { is_main?: boolean } | null)?.is_main,
       })))
     } catch { toast.error('Failed to load expenses') }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { if (!loading) load() }, [dateFrom, dateTo])
+  const scoped = useMemo(() => {
+    if (!isSuperAdmin) return expenses
+    return tab === 'ho' ? expenses.filter(e => e.branch_is_main) : expenses
+  }, [expenses, tab, isSuperAdmin])
 
   const filtered = useMemo(() => {
-    let r = expenses
+    let r = scoped
     if (branchF) r = r.filter(e => e.branch_id === branchF)
     if (categoryF) r = r.filter(e => e.category_id === categoryF)
-    if (search.trim()) { const q = search.toLowerCase(); r = r.filter(e => (e.description || '').toLowerCase().includes(q) || e.category_name.toLowerCase().includes(q)) }
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      r = r.filter(e => (e.description || '').toLowerCase().includes(q) || e.category_name.toLowerCase().includes(q))
+    }
     return r
-  }, [expenses, branchF, categoryF, search])
+  }, [scoped, branchF, categoryF, search])
 
   const totalExpense = useMemo(() => filtered.reduce((a, e) => a + e.amount, 0), [filtered])
+  const hoOnlyTotal = useMemo(() => expenses.filter(e => e.branch_is_main).reduce((a, e) => a + e.amount, 0), [expenses])
+  const allTotal = useMemo(() => expenses.reduce((a, e) => a + e.amount, 0), [expenses])
 
-  // Charts
   const categoryChartData = useMemo(() => {
     const map: Record<string, number> = {}
     filtered.forEach(e => { map[e.category_name] = (map[e.category_name] || 0) + e.amount })
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([name, value], i) => ({
-      name: name.length > 18 ? name.slice(0, 18) + '...' : name, value, color: PIE_COLORS[i % PIE_COLORS.length],
+      name: name.length > 18 ? name.slice(0, 18) + '…' : name, value, color: PIE_COLORS[i % PIE_COLORS.length],
     }))
   }, [filtered])
 
@@ -110,26 +126,29 @@ export default function ExpensesPage() {
     })
   }, [filtered])
 
+  const top5Categories = useMemo(() => categoryChartData.slice(0, 5), [categoryChartData])
+
   async function handleSave() {
     if (!form.category_id || !form.amount || !form.expense_date) { toast.error('Fill required fields'); return }
     setSaving(true)
     try {
+      const targetBranchId = isSuperAdmin && tab === 'ho'
+        ? (mainBranch?.id || profile?.branch_id || null)
+        : (profile?.branch_id || null)
       const payload = {
         category_id: form.category_id,
         amount: parseFloat(form.amount),
         expense_date: form.expense_date,
         description: form.description || null,
         receipt_url: form.receipt_url || null,
-        branch_id: profile?.branch_id || null,
+        branch_id: targetBranchId,
         recorded_by: user?.id || null,
       }
       if (editId) {
-        const { error } = await supabase.from('uce_expenses').update(payload).eq('id', editId)
-        if (error) throw error
+        const { error } = await supabase.from('uce_expenses').update(payload).eq('id', editId); if (error) throw error
         toast.success('Expense updated')
       } else {
-        const { error } = await supabase.from('uce_expenses').insert(payload)
-        if (error) throw error
+        const { error } = await supabase.from('uce_expenses').insert(payload); if (error) throw error
         toast.success('Expense added')
       }
       setShowModal(false); setEditId(null)
@@ -142,8 +161,7 @@ export default function ExpensesPage() {
   async function handleDelete() {
     if (!deleteTarget) return; setDeleting(true)
     try {
-      const { error } = await supabase.from('uce_expenses').delete().eq('id', deleteTarget.id)
-      if (error) throw error
+      const { error } = await supabase.from('uce_expenses').delete().eq('id', deleteTarget.id); if (error) throw error
       toast.success('Expense deleted')
       setExpenses(p => p.filter(e => e.id !== deleteTarget.id))
     } catch { toast.error('Failed to delete') }
@@ -162,7 +180,7 @@ export default function ExpensesPage() {
     const r = filtered.map(e => [e.expense_date, e.category_name, e.amount, e.description || '', e.branch_name, e.is_salary ? 'Salary' : 'Manual'])
     const csv = [h.join(','), ...r.map(v => v.map(c => `"${c}"`).join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `expenses-${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(url)
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `expenses-${tab}-${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(url)
     toast.success('CSV exported')
   }
 
@@ -171,7 +189,15 @@ export default function ExpensesPage() {
     col.accessor('category_name', { header: 'Category', cell: i => <span className="text-sm font-medium text-gray-900">{i.getValue()}</span> }),
     col.accessor('amount', { header: 'Amount', cell: i => <span className="text-sm font-semibold text-red-600">{formatINR(i.getValue())}</span> }),
     col.accessor('description', { header: 'Description', cell: i => <span className="text-sm text-gray-600 max-w-[200px] truncate block">{i.getValue() || '—'}</span> }),
-    ...(isSuperAdmin ? [col.accessor('branch_name', { header: 'Branch', cell: (i: { getValue: () => string }) => <span className="text-sm text-gray-600">{i.getValue()}</span> })] : []),
+    ...(isSuperAdmin ? [col.accessor('branch_name', {
+      header: 'Branch',
+      cell: (i: { getValue: () => string; row: { original: ExpenseRow } }) => (
+        <span className="inline-flex items-center gap-1 text-sm text-gray-600">
+          {i.row.original.branch_is_main && <Crown size={11} className="text-amber-500" />}
+          {i.getValue()}
+        </span>
+      ),
+    })] : []),
     col.display({ id: 'type', header: 'Type', cell: i => <span className={`text-xs px-2 py-1 rounded-full ${i.row.original.is_salary ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{i.row.original.is_salary ? 'Salary' : 'Manual'}</span> }),
     col.display({ id: 'actions', header: '', cell: i => i.row.original.is_salary ? null : (
       <div className="flex items-center gap-1">
@@ -185,8 +211,12 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div><h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Expenses</h1><p className="text-xs sm:text-sm text-gray-500 mt-0.5">Track and manage all expenses</p></div>
+        <div>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Expenses</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Operating costs · head office expenses hit SA P&L</p>
+        </div>
         <div className="flex items-center gap-2">
           <button onClick={exportCSV} className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 shrink-0"><Download size={16} /> Export</button>
           <button onClick={() => { setEditId(null); setForm({ category_id: '', amount: '', expense_date: new Date().toISOString().split('T')[0], description: '', receipt_url: '' }); setShowModal(true) }}
@@ -194,21 +224,75 @@ export default function ExpensesPage() {
         </div>
       </div>
 
+      {/* Tabs (super admin only) */}
+      {isSuperAdmin && (
+        <div className="bg-white rounded-xl border border-gray-200 p-1.5 inline-flex gap-1 w-full sm:w-auto shadow-sm">
+          <button onClick={() => setTab('ho')} className={cn('flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors inline-flex items-center justify-center gap-1.5',
+            tab === 'ho' ? 'bg-amber-100 text-amber-700' : 'text-gray-600 hover:bg-gray-50')}>
+            <Crown size={14} /> Head Office
+          </button>
+          <button onClick={() => setTab('all')} className={cn('flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors inline-flex items-center justify-center gap-1.5',
+            tab === 'all' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-50')}>
+            <Store size={14} /> All Branches
+          </button>
+        </div>
+      )}
+
+      {isSuperAdmin && tab === 'ho' && !mainBranch && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5">
+          <Info size={16} className="text-amber-600 mt-0.5 shrink-0" />
+          <div className="text-xs text-amber-800">No head office branch set. Mark one from <b>Branches → Mark as Head Office</b> to view SA-level expenses.</div>
+        </div>
+      )}
+
+      {isSuperAdmin && tab === 'all' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2.5">
+          <Info size={16} className="text-blue-600 mt-0.5 shrink-0" />
+          <div className="text-xs text-blue-800">All-branches view is <b>informational</b>. Only Head Office expenses count toward SA profit/loss.</div>
+        </div>
+      )}
+
       {/* Summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-400 uppercase font-medium">Total Expenses</p>
-          <p className="text-xl sm:text-2xl font-bold text-red-600 mt-1">{formatINR(totalExpense)}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className={cn('rounded-xl p-4 text-white shadow-sm',
+          tab === 'ho' ? 'bg-gradient-to-br from-amber-500 to-amber-600' : 'bg-gradient-to-br from-red-600 to-red-700')}>
+          <div className="flex items-center gap-1.5 mb-1"><TrendingDown size={14} /><p className="text-[11px] uppercase font-semibold tracking-wider opacity-90">{tab === 'ho' ? 'HO Expenses' : 'All Expenses'}</p></div>
+          <p className="text-xl sm:text-2xl font-bold mt-1">{formatINR(totalExpense)}</p>
+          <p className="text-[11px] opacity-80 mt-1">{filtered.length} entries</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-400 uppercase font-medium">Entries</p>
-          <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{filtered.length}</p>
+          <p className="text-[11px] text-gray-400 uppercase font-semibold tracking-wider">HO Total</p>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{formatINR(hoOnlyTotal)}</p>
+          <p className="text-[11px] text-gray-400 mt-1">Affects SA P&L</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 col-span-2 lg:col-span-1">
-          <p className="text-xs text-gray-400 uppercase font-medium">Categories</p>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-[11px] text-gray-400 uppercase font-semibold tracking-wider">All-Branch Total</p>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{formatINR(allTotal)}</p>
+          <p className="text-[11px] text-gray-400 mt-1">Informational</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-[11px] text-gray-400 uppercase font-semibold tracking-wider">Categories</p>
           <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">{categoryChartData.length}</p>
+          <p className="text-[11px] text-gray-400 mt-1">in selection</p>
         </div>
       </div>
+
+      {/* Top-5 categories */}
+      {!loading && top5Categories.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 lg:p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Top Spending Categories</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            {top5Categories.map((c, i) => (
+              <div key={c.name} className="rounded-lg bg-gray-50 p-3 relative overflow-hidden">
+                <div className="absolute top-0 left-0 h-full w-1" style={{ background: c.color }} />
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">#{i + 1}</p>
+                <p className="text-sm font-semibold text-gray-900 truncate">{c.name}</p>
+                <p className="text-sm font-bold text-red-600 mt-0.5">{formatINR(c.value)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-4">
@@ -218,7 +302,7 @@ export default function ExpensesPage() {
             <input type="text" placeholder="Search description..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-9 pr-8 py-2 rounded-lg border border-gray-300 text-sm placeholder:text-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
             {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"><X size={14} /></button>}
           </div>
-          {isSuperAdmin && <select value={branchF} onChange={e => setBranchF(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none"><option value="">All Branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select>}
+          {isSuperAdmin && tab === 'all' && <select value={branchF} onChange={e => setBranchF(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none"><option value="">All Branches</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}{b.is_main ? ' (HO)' : ''}</option>)}</select>}
           <select value={categoryF} onChange={e => setCategoryF(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none"><option value="">All Categories</option>{categories.filter(c => c.is_active).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
@@ -230,7 +314,7 @@ export default function ExpensesPage() {
       {!loading && filtered.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 lg:p-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Monthly Expenses</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Monthly Trend</h3>
             <BarChart data={monthlyChartData} height={280} />
           </div>
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 lg:p-5">
@@ -248,7 +332,10 @@ export default function ExpensesPage() {
               <div key={e.id} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{e.category_name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{e.category_name}</p>
+                      {e.branch_is_main && <Crown size={12} className="text-amber-500 shrink-0" />}
+                    </div>
                     {e.description && <p className="text-xs text-gray-500 mt-0.5 truncate">{e.description}</p>}
                   </div>
                   <p className="text-sm font-bold text-red-600 shrink-0">{formatINR(e.amount)}</p>
@@ -256,7 +343,7 @@ export default function ExpensesPage() {
                 <div className="mt-2.5 flex items-center justify-between">
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
                     <span className="flex items-center gap-1"><Calendar size={11} />{formatDate(e.expense_date)}</span>
-                    <span className="flex items-center gap-1"><Tag size={11} />{e.is_salary ? 'Salary' : 'Manual'}</span>
+                    <span className="flex items-center gap-1"><Tag size={11} />{e.branch_name}</span>
                   </div>
                   {!e.is_salary && (
                     <div className="flex items-center gap-1">
@@ -274,7 +361,6 @@ export default function ExpensesPage() {
         <DataTable data={filtered} columns={columns} loading={loading} searchValue="" emptyIcon={<Wallet size={36} className="text-gray-300" />} emptyMessage="No expenses found" />
       </div>
 
-      {/* Add/Edit Modal */}
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editId ? 'Edit Expense' : 'Add Expense'}>
         <div className="space-y-4">
           <div>
@@ -296,6 +382,11 @@ export default function ExpensesPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2} placeholder="Optional description..." className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm placeholder:text-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none resize-none" />
           </div>
+          {isSuperAdmin && tab === 'ho' && mainBranch && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-[11px] text-amber-800 flex items-center gap-1.5">
+              <Crown size={12} /> Will be recorded against <b>{mainBranch.name}</b> (HO)
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cancel</button>
             <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50">{saving ? 'Saving...' : editId ? 'Update' : 'Add Expense'}</button>

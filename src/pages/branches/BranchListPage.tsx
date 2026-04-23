@@ -4,7 +4,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import {
   Building2, Plus, Search, MoreVertical,
   Pencil, Wallet, PlusCircle, Power, X, Trash2, Loader2, AlertTriangle,
-  MapPin, Phone, ChevronRight, FileText, Download,
+  MapPin, Phone, ChevronRight, FileText, Download, Crown, Star,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -39,6 +39,10 @@ export default function BranchListPage() {
   // Toggle confirm
   const [toggleTarget, setToggleTarget] = useState<Branch | null>(null)
   const [toggling, setToggling] = useState(false)
+
+  // Mark as head office confirm
+  const [mainTarget, setMainTarget] = useState<Branch | null>(null)
+  const [markingMain, setMarkingMain] = useState(false)
 
   // ATC certificate action state (shared loading flag so the spinner shows
   // on the clicked row while the PDF is being generated in the background).
@@ -169,6 +173,21 @@ export default function BranchListPage() {
     }
   }
 
+  async function handleMarkMain() {
+    if (!mainTarget) return
+    setMarkingMain(true)
+    try {
+      // Clear any existing main, then set this one as main (single transaction-like pair)
+      const { error: e1 } = await supabase.from('uce_branches').update({ is_main: false }).eq('is_main', true)
+      if (e1) throw e1
+      const { error: e2 } = await supabase.from('uce_branches').update({ is_main: true, updated_at: new Date().toISOString() }).eq('id', mainTarget.id)
+      if (e2) throw e2
+      toast.success(`${mainTarget.name} is now the Head Office`)
+      setBranches(p => p.map(b => ({ ...b, is_main: b.id === mainTarget.id })))
+    } catch (err) { toast.error((err as Error).message || 'Failed to mark head office') }
+    finally { setMarkingMain(false); setMainTarget(null) }
+  }
+
   async function handleToggle() {
     if (!toggleTarget) return
     setToggling(true)
@@ -210,7 +229,14 @@ export default function BranchListPage() {
           ) : (
             <div className="h-8 w-8 rounded-lg bg-red-50 flex items-center justify-center shrink-0"><Building2 size={16} className="text-red-500" /></div>
           )}
-          <span className="text-sm font-medium text-gray-900">{info.getValue()}</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm font-medium text-gray-900 truncate">{info.getValue()}</span>
+            {info.row.original.is_main && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[10px] font-bold uppercase whitespace-nowrap">
+                <Crown size={10} /> HO
+              </span>
+            )}
+          </div>
         </div>
       ),
     }),
@@ -267,7 +293,14 @@ export default function BranchListPage() {
               <div className="h-10 w-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0"><Building2 size={18} className="text-red-500" /></div>
             )}
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">{branch.name}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-semibold text-gray-900 truncate">{branch.name}</p>
+                {branch.is_main && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[10px] font-bold uppercase shrink-0">
+                    <Crown size={10} /> HO
+                  </span>
+                )}
+              </div>
               <p className="text-xs font-mono text-gray-400">{branch.code}</p>
             </div>
           </div>
@@ -417,6 +450,12 @@ export default function BranchListPage() {
                 {atcBusyId === menuBranch.id ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Download Certificate
               </button>
               <div className="border-t border-gray-100 my-1" />
+              {isSuperAdmin && !menuBranch.is_main && (
+                <button onClick={() => { setMenuOpen(null); setMainTarget(menuBranch) }}
+                  className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-amber-600 hover:bg-amber-50 active:bg-amber-100">
+                  <Star size={16} /> Mark as Head Office
+                </button>
+              )}
               <button onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
                 className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium ${menuBranch.is_active ? 'text-amber-600 hover:bg-amber-50 active:bg-amber-100' : 'text-green-600 hover:bg-green-50 active:bg-green-100'}`}>
                 <Power size={16} /> {menuBranch.is_active ? 'Deactivate' : 'Activate'}
@@ -448,6 +487,12 @@ export default function BranchListPage() {
               {atcBusyId === menuBranch.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Download Certificate
             </button>
             <div className="border-t border-gray-100 my-1" />
+            {isSuperAdmin && !menuBranch.is_main && (
+              <button onClick={() => { setMenuOpen(null); setMainTarget(menuBranch) }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-amber-600 hover:bg-amber-50">
+                <Star size={14} /> Mark as Head Office
+              </button>
+            )}
             <button onClick={() => { setMenuOpen(null); setToggleTarget(menuBranch) }}
               className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm ${menuBranch.is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-green-600 hover:bg-green-50'}`}>
               <Power size={14} /> {menuBranch.is_active ? 'Deactivate' : 'Activate'}
@@ -529,6 +574,11 @@ export default function BranchListPage() {
         title={toggleTarget?.is_active ? 'Deactivate Branch?' : 'Activate Branch?'}
         message={toggleTarget?.is_active ? `This will deactivate "${toggleTarget?.name}". Branch users will lose access.` : `This will activate "${toggleTarget?.name}". Branch users will regain access.`}
         confirmText={toggleTarget?.is_active ? 'Deactivate' : 'Activate'} variant={toggleTarget?.is_active ? 'danger' : 'info'} loading={toggling} />
+
+      <ConfirmDialog open={!!mainTarget} onClose={() => setMainTarget(null)} onConfirm={handleMarkMain}
+        title="Mark as Head Office?"
+        message={`"${mainTarget?.name}" will be set as the Head Office branch. All fee payments from this branch will count as super admin revenue, and its expenses will count in P&L. Any previously-marked Head Office will be unmarked.`}
+        confirmText="Mark as Head Office" variant="info" loading={markingMain} />
     </div>
   )
 }

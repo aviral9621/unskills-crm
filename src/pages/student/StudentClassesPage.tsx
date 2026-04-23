@@ -1,8 +1,24 @@
 import { useEffect, useState } from 'react'
-import { Video, PlayCircle, Film } from 'lucide-react'
+import { Video, PlayCircle, Film, Radio } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useStudentRecord } from './useStudent'
 import { formatDateDDMMYYYY } from '../../lib/utils'
+
+function isLiveNow(date: string | null, start: string | null, end: string | null): boolean {
+  if (!date || !start) return false
+  const today = new Date().toISOString().slice(0, 10)
+  if (date !== today) return false
+  const now = new Date()
+  const hhmm = now.toTimeString().slice(0, 5)
+  const s = start.slice(0, 5)
+  if (hhmm < s) return false
+  if (end) return hhmm <= end.slice(0, 5)
+  // No end time: assume 2-hour window
+  const [sh, sm] = s.split(':').map(Number)
+  const endMin = sh * 60 + sm + 120
+  const [nh, nm] = hhmm.split(':').map(Number)
+  return nh * 60 + nm <= endMin
+}
 
 interface ClassRow {
   id: string; class_name: string; platform: string; link: string
@@ -58,29 +74,39 @@ export default function StudentClassesPage() {
             <div className="sm:col-span-2 rounded-xl border bg-white p-8 text-center text-sm text-gray-400">
               No upcoming classes scheduled.
             </div>
-          ) : upcoming.map(c => (
-            <div key={c.id} className="rounded-xl border bg-white p-4">
+          ) : upcoming.map(c => {
+            const live = isLiveNow(c.schedule_date, c.schedule_time, c.end_time)
+            return (
+            <div key={c.id} className={`rounded-xl border bg-white p-4 ${live ? 'border-red-500 ring-2 ring-red-500/20' : ''}`}>
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
                   {platformIcon(c.platform)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold break-words">{c.class_name}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold break-words">{c.class_name}</p>
+                    {live && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold uppercase tracking-wide animate-pulse">
+                        <Radio size={10} /> Live Now
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500 capitalize">
                     {c.platform.replace('_', ' ')}{c.subject?.name && ` · ${c.subject.name}`}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
                     {c.schedule_date && formatDateDDMMYYYY(c.schedule_date)} {c.schedule_time && c.schedule_time.slice(0, 5)}
+                    {c.end_time && ` – ${c.end_time.slice(0, 5)}`}
                   </p>
                 </div>
               </div>
               {c.description && <p className="text-sm text-gray-600 mt-2 line-clamp-2">{c.description}</p>}
               <a href={c.link} target="_blank" rel="noreferrer"
-                 className="mt-3 inline-flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700">
-                <PlayCircle size={14} /> Join Class
+                 className={`mt-3 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold ${live ? 'bg-red-600 text-white hover:bg-red-700 shadow-md' : 'bg-red-50 text-red-700 hover:bg-red-100'}`}>
+                <PlayCircle size={14} /> {live ? 'Join Live' : 'Open Link'}
               </a>
             </div>
-          ))}
+          )})}
         </div>
       </section>
 
