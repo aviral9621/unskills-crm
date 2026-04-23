@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowLeft, Bot, User, Send, Phone, Mail, MessageCircle, Trash2, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn, formatDateDDMMYYYY } from '../../lib/utils'
@@ -27,9 +28,24 @@ export default function ChatPane({ lead, onBack, onDeleted }: { lead: Lead; onBa
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
+  const [statusAnchor, setStatusAnchor] = useState<{ top: number; right: number } | null>(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const statusBtnRef = useRef<HTMLButtonElement>(null)
+
+  function openStatusMenu() {
+    const r = statusBtnRef.current?.getBoundingClientRect()
+    if (r) setStatusAnchor({ top: r.bottom + 6, right: window.innerWidth - r.right })
+    setStatusOpen(true)
+  }
+  useEffect(() => {
+    if (!statusOpen) return
+    const close = () => { setStatusOpen(false) }
+    window.addEventListener('resize', close)
+    window.addEventListener('scroll', close, true)
+    return () => { window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true) }
+  }, [statusOpen])
 
   // Mark read when opened
   useEffect(() => {
@@ -89,8 +105,8 @@ export default function ChatPane({ lead, onBack, onDeleted }: { lead: Lead; onBa
       <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
         style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpath d='M0 0h60v60H0z' fill='none'/%3E%3Cpath d='M30 30m-12 0a12 12 0 1 0 24 0a12 12 0 1 0 -24 0' fill='%23000'/%3E%3C/svg%3E\")" }} />
 
-      {/* Header */}
-      <div className="relative z-10 bg-[#008069] text-white px-3 py-2.5 flex items-center gap-2 shadow-sm">
+      {/* Header — z-30 so its internal dropdown can always overlay messages (z-10) */}
+      <div className="relative z-30 bg-[#008069] text-white px-3 py-2.5 flex items-center gap-2 shadow-sm">
         {onBack && (
           <button onClick={onBack} className="p-1.5 rounded-full hover:bg-white/10 lg:hidden" aria-label="Back">
             <ArrowLeft size={18} />
@@ -103,26 +119,12 @@ export default function ChatPane({ lead, onBack, onDeleted }: { lead: Lead; onBa
           <p className="font-semibold text-sm truncate">{lead.name}</p>
           <p className="text-[11px] opacity-80 truncate">{lead.phone}{lead.email ? ` · ${lead.email}` : ''}</p>
         </div>
-        <div className="relative shrink-0">
-          <button onClick={() => setStatusOpen(v => !v)} className="flex items-center gap-1 bg-white/15 hover:bg-white/25 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors">
+        <div className="shrink-0">
+          <button ref={statusBtnRef} onClick={() => statusOpen ? setStatusOpen(false) : openStatusMenu()}
+            className="flex items-center gap-1 bg-white/15 hover:bg-white/25 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors">
             {LEAD_STATUS_CONFIG[lead.status]?.label}
             <ChevronDown size={12} />
           </button>
-          {statusOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-gray-200 py-1 z-50 max-h-80 overflow-y-auto">
-                {ALL_LEAD_STATUSES.map(s => (
-                  <button key={s} onClick={() => changeStatus(s)}
-                    className={cn('w-full flex items-center gap-2 px-3 py-2 text-xs text-left text-gray-700 hover:bg-gray-50',
-                      lead.status === s && 'bg-gray-50 font-semibold')}>
-                    <span className={cn('w-2 h-2 rounded-full', LEAD_STATUS_CONFIG[s].dot)} />
-                    {LEAD_STATUS_CONFIG[s].label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
         </div>
         <a href={waHref} target="_blank" rel="noreferrer" title="Open in WhatsApp"
           className="p-1.5 rounded-full hover:bg-white/10 hidden sm:inline-flex"><MessageCircle size={16} /></a>
@@ -200,6 +202,35 @@ export default function ChatPane({ lead, onBack, onDeleted }: { lead: Lead; onBa
         title="Delete Lead?"
         message={`Permanently remove "${lead.name}" and all their messages? This cannot be undone.`}
         confirmText="Delete" variant="danger" loading={deleting} />
+
+      {/* Status dropdown rendered in a portal so it's never trapped by a parent stacking context */}
+      {statusOpen && statusAnchor && createPortal(
+        <>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setStatusOpen(false)} />
+          <div
+            role="menu"
+            className="fixed w-52 bg-white rounded-xl shadow-2xl border border-gray-200 py-1 z-[9999] max-h-[60vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-100"
+            style={{ top: statusAnchor.top, right: statusAnchor.right }}
+          >
+            <p className="px-3 pt-1.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">Change status</p>
+            {ALL_LEAD_STATUSES.map(s => (
+              <button
+                key={s}
+                onClick={() => changeStatus(s)}
+                className={cn(
+                  'w-full flex items-center gap-2 px-3 py-2 text-xs text-left text-gray-700 hover:bg-gray-50 transition-colors',
+                  lead.status === s && 'bg-red-50 font-semibold text-red-700'
+                )}
+              >
+                <span className={cn('w-2 h-2 rounded-full shrink-0', LEAD_STATUS_CONFIG[s].dot)} />
+                {LEAD_STATUS_CONFIG[s].label}
+                {lead.status === s && <span className="ml-auto text-[10px] text-red-600">●</span>}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body
+      )}
     </div>
   )
 }
