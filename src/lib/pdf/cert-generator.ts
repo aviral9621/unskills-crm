@@ -358,11 +358,11 @@ async function drawLandscapeContent(
     x: W - 270, y: H - 88, size: 8, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title — fixed company name across every program (client directive).
+  // 2. Brand title — UN black, SKILLS red, always, regardless of theme.
   drawBrandTitle(page, {
     cx, y: H - 110, size: 21, font: fonts.display,
-    leading: 'UN ', accent: 'SKILLS', trailing: ' COMPUTER EDUCATION',
-    baseColor: C.black, accentColor: theme.accent,
+    leading: 'UN', accent: 'SKILLS', trailing: ' COMPUTER EDUCATION',
+    baseColor: C.black, accentColor: C.red,
   })
 
   // 3. ISO ribbon
@@ -596,10 +596,10 @@ async function drawHardwareNetworkingContent(
     x: W - 95, y: H - 105, size: 10, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title "UNSKILLS COMPUTER EDUCATION" — UNSKILLS red, rest black.
+  // 2. Brand title — UN black, SKILLS red.
   drawBrandTitle(page, {
     cx, y: H - 138, size: 26, font: fonts.display,
-    leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
+    leading: 'UN', accent: 'SKILLS', trailing: ' COMPUTER EDUCATION',
     baseColor: C.black, accentColor: C.red,
   })
 
@@ -821,10 +821,10 @@ async function drawSkillsDevelopmentContent(
     x: W - 135, y: H - 88, size: 9, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title "UNSKILLS COMPUTER EDUCATION" — UNSKILLS red, rest black.
+  // 2. Brand title — UN black, SKILLS red.
   drawBrandTitle(page, {
     cx, y: H - 128, size: 26, font: fonts.display,
-    leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
+    leading: 'UN', accent: 'SKILLS', trailing: ' COMPUTER EDUCATION',
     baseColor: C.black, accentColor: C.red,
   })
 
@@ -1280,12 +1280,12 @@ async function drawSummerTrainingContent(
     x: W - 140, y: H - 110, size: 9, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title — UNSKILLS orange, rest black. Lowered to H-138 to clear
+  // 2. Brand title — UN black, SKILLS red. Lowered to H-138 to clear
   //    the reg meta above while keeping the rest of the layout unchanged.
   drawBrandTitle(page, {
     cx, y: H - 138, size: 26, font: fonts.display,
-    leading: '', accent: 'UNSKILLS', trailing: ' COMPUTER EDUCATION',
-    baseColor: C.black, accentColor: C.orange,
+    leading: 'UN', accent: 'SKILLS', trailing: ' COMPUTER EDUCATION',
+    baseColor: C.black, accentColor: C.red,
   })
 
   // 3. Navy ISO ribbon
@@ -1561,10 +1561,10 @@ async function drawTypingPortraitContent(
     x: RIGHT, y: H - 100, size: 8, font: fonts.bodyBold, align: 'right',
   })
 
-  // 2. Brand title "UN SKILLS COMPUTER EDUCATION™"
+  // 2. Brand title — UN black, SKILLS red.
   drawBrandTitle(page, {
     cx, y: H - 128, size: 20, font: fonts.display,
-    leading: 'UN ', accent: 'SKILLS', trailing: ' COMPUTER EDUCATION',
+    leading: 'UN', accent: 'SKILLS', trailing: ' COMPUTER EDUCATION',
     baseColor: C.black, accentColor: C.red,
   })
 
