@@ -28,7 +28,7 @@ export default function FWalletPage() {
     if (!branch || t.type !== 'credit') return
     try {
       const hq = await getHqDetailsForReceipt()
-      const b = branch as Record<string, unknown>
+      const b = branch as unknown as Record<string, unknown>
       await downloadWalletReceipt({
         receiptNo: `WR-${t.id.slice(0, 8).toUpperCase()}`,
         date: t.created_at,
