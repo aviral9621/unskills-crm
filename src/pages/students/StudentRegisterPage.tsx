@@ -510,7 +510,7 @@ export default function StudentRegisterPage() {
 
           {step === 3 && (<>
             <h2 className="text-sm font-semibold text-gray-900 font-heading flex items-center gap-2"><MapPin size={16} className="text-red-500" /> Address</h2>
-            <FormField label="Full Address"><textarea {...register('address')} className={`${inputClass} resize-none`} rows={2} placeholder="Complete address" /></FormField>
+            <FormField label="Address"><textarea {...register('address')} className={`${inputClass} resize-none`} rows={2} placeholder="House no, street, locality" /></FormField>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <FormField label="Village"><input {...register('village')} className={inputClass} /></FormField>
               <FormField label="Block"><input {...register('block')} className={inputClass} /></FormField>

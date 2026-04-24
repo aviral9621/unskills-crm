@@ -8,6 +8,19 @@ import { formatDate, cn } from '../../lib/utils'
 import { useAuth } from '../../contexts/AuthContext'
 import { getCardSettings, idCardVerifyUrl, type CardSettings } from '../../lib/cardSettings'
 
+interface BranchInfo {
+  name: string | null
+  center_logo_url: string | null
+  address_line1: string | null
+  village: string | null
+  block: string | null
+  district: string | null
+  state: string | null
+  pincode: string | null
+  director_phone: string | null
+  director_email: string | null
+}
+
 interface StudentRow {
   id: string
   registration_no: string
@@ -17,7 +30,14 @@ interface StudentRow {
   photo_url: string | null
   is_active: boolean
   course?: { name: string } | null
-  branch?: { name: string | null; center_logo_url: string | null } | null
+  branch?: BranchInfo | null
+}
+
+function formatBranchAddress(b: BranchInfo | null | undefined): string {
+  if (!b) return ''
+  return [b.address_line1, b.village, b.block, b.district, b.state, b.pincode]
+    .filter(Boolean)
+    .join(', ')
 }
 
 export default function StudentIdCardPage() {
@@ -32,6 +52,7 @@ export default function StudentIdCardPage() {
   const [search, setSearch] = useState('')
 
   const [settings, setSettings] = useState<CardSettings | null>(null)
+  const [mainBranch, setMainBranch] = useState<BranchInfo | null>(null)
   const [selected, setSelected] = useState<StudentRow | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
   const [photoDataUrl, setPhotoDataUrl] = useState<string>('')
@@ -88,19 +109,22 @@ export default function StudentIdCardPage() {
   async function fetchAll() {
     setLoading(true)
     try {
-      const [studentsRes, settingsRes] = await Promise.all([
+      const branchCols = 'name, center_logo_url, address_line1, village, block, district, state, pincode, director_phone, director_email'
+      const [studentsRes, settingsRes, mainBranchRes] = await Promise.all([
         (async () => {
           let q = supabase.from('uce_students')
-            .select('id, registration_no, name, father_name, dob, photo_url, is_active, course:uce_courses(name), branch:uce_branches(name, center_logo_url)')
+            .select(`id, registration_no, name, father_name, dob, photo_url, is_active, course:uce_courses(name), branch:uce_branches(${branchCols})`)
             .eq('is_active', true)
           if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
           return q.order('name')
         })(),
         getCardSettings(),
+        supabase.from('uce_branches').select(branchCols).eq('is_main', true).eq('is_active', true).maybeSingle(),
       ])
       if (studentsRes.error) throw studentsRes.error
       setStudents((studentsRes.data ?? []) as unknown as StudentRow[])
       setSettings(settingsRes)
+      setMainBranch((mainBranchRes.data as unknown as BranchInfo) || null)
     } catch { toast.error('Failed to load students') }
     finally { setLoading(false) }
   }
@@ -235,10 +259,20 @@ export default function StudentIdCardPage() {
 
               <View style={s.footerRed} />
               <View style={s.footer}>
-                <Text style={s.ftLine}><Text style={s.ftBold}>Director</Text> – {settings.director_name}</Text>
-                <Text style={s.ftLine}><Text style={s.ftBold}>Address</Text> – {settings.address}</Text>
-                <Text style={s.ftLine}><Text style={s.ftBold}>Phone:</Text> {settings.phone}</Text>
-                <Text style={s.ftLine}><Text style={s.ftBold}>Website:</Text> {settings.website}</Text>
+                {(() => {
+                  const branchAddr = formatBranchAddress(student.branch) || settings.address
+                  const headAddr = formatBranchAddress(mainBranch) || settings.address
+                  const phone = student.branch?.director_phone || settings.phone
+                  const email = student.branch?.director_email || ''
+                  return (
+                    <>
+                      <Text style={s.ftLine}><Text style={s.ftBold}>Branch Address :</Text> {branchAddr}</Text>
+                      <Text style={s.ftLine}><Text style={s.ftBold}>Head Office :</Text> {headAddr}</Text>
+                      <Text style={s.ftLine}><Text style={s.ftBold}>Mobile Number :</Text> {phone}</Text>
+                      {email ? <Text style={s.ftLine}><Text style={s.ftBold}>Email :</Text> {email}</Text> : null}
+                    </>
+                  )
+                })()}
               </View>
             </Page>
           )
@@ -430,6 +464,7 @@ export default function StudentIdCardPage() {
                 <IdCardPreview
                   student={selected}
                   settings={settings}
+                  mainBranch={mainBranch}
                   qrDataUrl={qrDataUrl}
                   photoUrl={photoDataUrl || selected.photo_url}
                   logoUrl={selectedLogoDataUrl || masterLogoDataUrl || '/MAIN LOGO FOR ALL CARDS.png'}
@@ -451,10 +486,11 @@ export default function StudentIdCardPage() {
 
 /* ─── On-screen card preview (visual match of the PDF) ─── */
 function IdCardPreview({
-  student, settings, qrDataUrl, photoUrl, logoUrl, title,
+  student, settings, mainBranch, qrDataUrl, photoUrl, logoUrl, title,
 }: {
   student: StudentRow
   settings: CardSettings
+  mainBranch: BranchInfo | null
   qrDataUrl: string
   photoUrl: string | null
   logoUrl: string
@@ -504,10 +540,20 @@ function IdCardPreview({
       {/* Footer */}
       <div className="h-1 bg-[#B91C1C]" />
       <div className="bg-black text-white text-center px-3 py-2.5" style={{ fontSize: 9, lineHeight: 1.45 }}>
-        <p><span className="font-bold">Director</span> – {settings.director_name}</p>
-        <p><span className="font-bold">Address</span> – {settings.address}</p>
-        <p><span className="font-bold">Phone:</span> {settings.phone}</p>
-        <p><span className="font-bold">Website:</span> {settings.website}</p>
+        {(() => {
+          const branchAddr = formatBranchAddress(student.branch) || settings.address
+          const headAddr = formatBranchAddress(mainBranch) || settings.address
+          const phone = student.branch?.director_phone || settings.phone
+          const email = student.branch?.director_email || ''
+          return (
+            <>
+              <p><span className="font-bold">Branch Address :</span> {branchAddr}</p>
+              <p><span className="font-bold">Head Office :</span> {headAddr}</p>
+              <p><span className="font-bold">Mobile Number :</span> {phone}</p>
+              {email ? <p><span className="font-bold">Email :</span> {email}</p> : null}
+            </>
+          )
+        })()}
       </div>
     </div>
   )
