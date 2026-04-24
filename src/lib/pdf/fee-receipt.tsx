@@ -4,8 +4,23 @@ interface FeeReceiptInput {
   amount: number
   mode: string
   note?: string
-  student: { name: string; registration_no: string; father_name: string; course: string }
-  branch: { name: string; code: string; phone: string }
+  monthsPaid?: string[] // e.g. ['May 2026', 'Jun 2026']
+  txnRef?: string
+  student: {
+    name: string
+    registration_no: string
+    father_name: string
+    course: string
+  }
+  branch: {
+    name: string
+    code: string
+    phone: string
+    address?: string
+    society_name?: string | null
+    registration_number?: string | null
+    logo_url?: string | null
+  }
 }
 
 function inr(n: number): string {
@@ -38,62 +53,150 @@ function inWords(n: number): string {
 }
 
 export async function downloadFeeReceipt(data: FeeReceiptInput): Promise<void> {
-  const { pdf, Document, Page, View, Text, StyleSheet } = await import('@react-pdf/renderer')
+  const { pdf, Document, Page, View, Text, Image, StyleSheet } = await import('@react-pdf/renderer')
+
+  const PRIMARY = '#B91C1C'
+  const INK = '#111827'
+  const MUTED = '#6B7280'
+  const BORDER = '#E5E7EB'
 
   const styles = StyleSheet.create({
-    page: { padding: 36, fontFamily: 'Helvetica', fontSize: 10, color: '#111' },
-    header: { textAlign: 'center', paddingBottom: 10, borderBottomWidth: 2, borderBottomColor: '#DC2626' },
-    title: { fontSize: 20, fontWeight: 700, color: '#DC2626' },
-    sub: { fontSize: 10, marginTop: 2, color: '#444' },
-    receiptTitle: { textAlign: 'center', fontSize: 14, fontWeight: 700, letterSpacing: 2, marginTop: 16 },
-    row: { flexDirection: 'row', marginTop: 6 },
-    label: { width: 100, color: '#555' },
-    val: { flex: 1, fontWeight: 700 },
-    box: { marginTop: 18, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 6, padding: 12 },
-    amountBox: { marginTop: 16, padding: 14, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FCA5A5', borderRadius: 6 },
-    amount: { fontSize: 22, fontWeight: 700, color: '#B91C1C' },
-    words: { marginTop: 4, fontSize: 9, color: '#555', fontStyle: 'italic' },
-    footer: { position: 'absolute', bottom: 30, left: 36, right: 36, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 8 },
-    sigBlock: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 36 },
-    sigLabel: { fontSize: 9, color: '#666', textAlign: 'center' },
-    sigLine: { borderTopWidth: 1, borderTopColor: '#111', width: 140, marginBottom: 4 },
+    page: { padding: 32, fontFamily: 'Helvetica', fontSize: 10, color: INK },
+    outer: { borderWidth: 1.2, borderColor: PRIMARY, borderRadius: 6, padding: 16, height: '100%' },
+
+    header: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1.5, borderBottomColor: PRIMARY, paddingBottom: 10 },
+    logoBox: { width: 54, height: 54, marginRight: 12, alignItems: 'center', justifyContent: 'center' },
+    logoImg: { width: 54, height: 54, objectFit: 'contain' },
+    headerMid: { flex: 1 },
+    orgName: { fontSize: 18, fontWeight: 700, color: PRIMARY, letterSpacing: 0.3 },
+    orgSub: { fontSize: 9, color: MUTED, marginTop: 2 },
+    orgAddr: { fontSize: 8.5, color: MUTED, marginTop: 1 },
+
+    titleWrap: { alignItems: 'center', marginTop: 14 },
+    titleBg: { backgroundColor: PRIMARY, color: '#fff', paddingHorizontal: 22, paddingVertical: 5, borderRadius: 3 },
+    titleText: { color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: 3 },
+    subTitleText: { fontSize: 8.5, color: MUTED, marginTop: 4 },
+
+    metaRow: { flexDirection: 'row', marginTop: 14 },
+    metaCol: { flex: 1 },
+    metaLabel: { fontSize: 8, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6 },
+    metaValue: { fontSize: 11, fontWeight: 700, marginTop: 2 },
+
+    twoCol: { flexDirection: 'row', marginTop: 14, gap: 12 },
+    card: { flex: 1, borderWidth: 1, borderColor: BORDER, borderRadius: 4, padding: 10 },
+    cardTitle: { fontSize: 8, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+    kv: { flexDirection: 'row', marginTop: 3 },
+    kvK: { width: 70, color: MUTED, fontSize: 9 },
+    kvV: { flex: 1, fontSize: 10, fontWeight: 700 },
+
+    amountBox: { marginTop: 14, padding: 12, backgroundColor: '#FEF2F2', borderLeftWidth: 4, borderLeftColor: PRIMARY, borderRadius: 3 },
+    amountRow: { flexDirection: 'row', alignItems: 'center' },
+    amountLabel: { flex: 1, fontSize: 10, color: MUTED },
+    amountValue: { fontSize: 22, fontWeight: 700, color: PRIMARY },
+    amountWords: { marginTop: 6, fontSize: 9.5, color: INK },
+    amountWordsEm: { fontStyle: 'italic', fontWeight: 700 },
+
+    terms: { marginTop: 14, padding: 9, borderWidth: 1, borderColor: BORDER, borderRadius: 3, borderStyle: 'dashed' },
+    termsTitle: { fontSize: 8, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 },
+    termsText: { fontSize: 8.5, color: '#444', lineHeight: 1.4 },
+
+    sigBlock: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 28 },
+    sigGroup: { alignItems: 'center' },
+    sigLine: { borderTopWidth: 1, borderTopColor: INK, width: 150, marginBottom: 3 },
+    sigLabel: { fontSize: 8.5, color: MUTED, textAlign: 'center' },
+
+    footer: { position: 'absolute', bottom: 18, left: 32, right: 32, borderTopWidth: 0.8, borderTopColor: BORDER, paddingTop: 6 },
+    footerText: { fontSize: 7.5, textAlign: 'center', color: MUTED },
   })
+
+  const prettyMode = (data.mode || '').replace(/_/g, ' ').toUpperCase()
+  const logoUrl = data.branch.logo_url
 
   const Doc = (
     <Document>
-      <Page size="A5" orientation="landscape" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.title}>{data.branch.name || 'UnSkills Computer Education'}</Text>
-          <Text style={styles.sub}>Branch Code: {data.branch.code} {data.branch.phone ? `\u00B7 ${data.branch.phone}` : ''}</Text>
-        </View>
+      <Page size="A4" style={styles.page}>
+        <View style={styles.outer}>
+          <View style={styles.header}>
+            <View style={styles.logoBox}>
+              {logoUrl
+                ? <Image src={logoUrl} style={styles.logoImg} />
+                : <Text style={{ fontSize: 20, fontWeight: 700, color: PRIMARY }}>U</Text>}
+            </View>
+            <View style={styles.headerMid}>
+              <Text style={styles.orgName}>{data.branch.name || 'UnSkills Computer Education'}</Text>
+              {data.branch.society_name ? <Text style={styles.orgSub}>{data.branch.society_name}</Text> : null}
+              <Text style={styles.orgAddr}>
+                Branch Code: {data.branch.code}
+                {data.branch.phone ? ` \u00B7 Ph: ${data.branch.phone}` : ''}
+                {data.branch.registration_number ? ` \u00B7 Reg: ${data.branch.registration_number}` : ''}
+              </Text>
+              {data.branch.address ? <Text style={styles.orgAddr}>{data.branch.address}</Text> : null}
+            </View>
+          </View>
 
-        <Text style={styles.receiptTitle}>FEE RECEIPT</Text>
+          <View style={styles.titleWrap}>
+            <View style={styles.titleBg}><Text style={styles.titleText}>FEE RECEIPT</Text></View>
+            <Text style={styles.subTitleText}>Official receipt of fee payment</Text>
+          </View>
 
-        <View style={styles.box}>
-          <View style={styles.row}><Text style={styles.label}>Receipt No.</Text><Text style={styles.val}>{data.receiptNo}</Text></View>
-          <View style={styles.row}><Text style={styles.label}>Date</Text><Text style={styles.val}>{new Date(data.date).toLocaleDateString('en-IN')}</Text></View>
-          <View style={styles.row}><Text style={styles.label}>Student</Text><Text style={styles.val}>{data.student.name}</Text></View>
-          <View style={styles.row}><Text style={styles.label}>Reg No.</Text><Text style={styles.val}>{data.student.registration_no}</Text></View>
-          <View style={styles.row}><Text style={styles.label}>Father</Text><Text style={styles.val}>{data.student.father_name}</Text></View>
-          <View style={styles.row}><Text style={styles.label}>Course</Text><Text style={styles.val}>{data.student.course}</Text></View>
-          <View style={styles.row}><Text style={styles.label}>Mode</Text><Text style={styles.val}>{data.mode.replace(/_/g, ' ').toUpperCase()}</Text></View>
-          {data.note ? <View style={styles.row}><Text style={styles.label}>Note</Text><Text style={styles.val}>{data.note}</Text></View> : null}
-        </View>
+          <View style={styles.metaRow}>
+            <View style={styles.metaCol}>
+              <Text style={styles.metaLabel}>Receipt No.</Text>
+              <Text style={styles.metaValue}>{data.receiptNo}</Text>
+            </View>
+            <View style={[styles.metaCol, { alignItems: 'flex-end' }]}>
+              <Text style={styles.metaLabel}>Date</Text>
+              <Text style={styles.metaValue}>{new Date(data.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Text>
+            </View>
+          </View>
 
-        <View style={styles.amountBox}>
-          <Text style={{ fontSize: 10, color: '#555' }}>Amount Paid</Text>
-          <Text style={styles.amount}>{inr(data.amount)}</Text>
-          <Text style={styles.words}>{inWords(data.amount)} Rupees Only</Text>
-        </View>
+          <View style={styles.twoCol}>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Student</Text>
+              <View style={styles.kv}><Text style={styles.kvK}>Name</Text><Text style={styles.kvV}>{data.student.name}</Text></View>
+              <View style={styles.kv}><Text style={styles.kvK}>Reg No.</Text><Text style={styles.kvV}>{data.student.registration_no}</Text></View>
+              <View style={styles.kv}><Text style={styles.kvK}>Father</Text><Text style={styles.kvV}>{data.student.father_name}</Text></View>
+              <View style={styles.kv}><Text style={styles.kvK}>Course</Text><Text style={styles.kvV}>{data.student.course}</Text></View>
+            </View>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Payment</Text>
+              <View style={styles.kv}><Text style={styles.kvK}>Mode</Text><Text style={styles.kvV}>{prettyMode}</Text></View>
+              {data.txnRef ? <View style={styles.kv}><Text style={styles.kvK}>Txn Ref</Text><Text style={styles.kvV}>{data.txnRef}</Text></View> : null}
+              {data.monthsPaid && data.monthsPaid.length > 0 ? (
+                <View style={styles.kv}><Text style={styles.kvK}>For</Text><Text style={styles.kvV}>{data.monthsPaid.join(', ')}</Text></View>
+              ) : null}
+              {data.note ? <View style={styles.kv}><Text style={styles.kvK}>Note</Text><Text style={styles.kvV}>{data.note}</Text></View> : null}
+            </View>
+          </View>
 
-        <View style={styles.sigBlock}>
-          <View style={{ alignItems: 'center' }}><View style={styles.sigLine} /><Text style={styles.sigLabel}>Student Signature</Text></View>
-          <View style={{ alignItems: 'center' }}><View style={styles.sigLine} /><Text style={styles.sigLabel}>Authorised Signatory</Text></View>
+          <View style={styles.amountBox}>
+            <View style={styles.amountRow}>
+              <Text style={styles.amountLabel}>AMOUNT PAID</Text>
+              <Text style={styles.amountValue}>{inr(data.amount)}</Text>
+            </View>
+            <Text style={styles.amountWords}>
+              In words: <Text style={styles.amountWordsEm}>{inWords(data.amount)} Rupees Only</Text>
+            </Text>
+          </View>
+
+          <View style={styles.terms}>
+            <Text style={styles.termsTitle}>Terms</Text>
+            <Text style={styles.termsText}>
+              1. Fees once paid are non-refundable and non-transferable.
+              {'  '}2. This receipt is valid subject to realisation of payment.
+              {'  '}3. Keep this receipt for your records; it may be required for future verification.
+            </Text>
+          </View>
+
+          <View style={styles.sigBlock}>
+            <View style={styles.sigGroup}><View style={styles.sigLine} /><Text style={styles.sigLabel}>Student Signature</Text></View>
+            <View style={styles.sigGroup}><View style={styles.sigLine} /><Text style={styles.sigLabel}>Authorised Signatory</Text></View>
+          </View>
         </View>
 
         <View style={styles.footer}>
-          <Text style={{ fontSize: 8, textAlign: 'center', color: '#888' }}>
-            Computer-generated receipt. Verify authenticity with your branch using the Receipt No.
+          <Text style={styles.footerText}>
+            {`Computer-generated receipt \u00B7 Verify authenticity with your branch using the Receipt No. \u00B7 ${data.branch.name || 'UnSkills'}`}
           </Text>
         </View>
       </Page>

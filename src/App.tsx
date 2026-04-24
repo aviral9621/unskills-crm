@@ -70,6 +70,8 @@ import ProfilePage from './pages/ProfilePage'
 import AdminPromotionsPage from './pages/admin/AdminPromotionsPage'
 import AdminTicketsPage from './pages/admin/AdminTicketsPage'
 import AdminExamFormsPage from './pages/admin/AdminExamFormsPage'
+import AdminFeesOverviewPage from './pages/admin/fees/AdminFeesOverviewPage'
+import AdminStudentFeePlanPage from './pages/admin/fees/AdminStudentFeePlanPage'
 
 // Franchise pages
 import FDashboardPage from './pages/franchise/FDashboardPage'
@@ -176,6 +178,9 @@ function AppRoutes() {
         <Route path="staff/attendance" element={<AttendancePage />} />
         <Route path="staff/advances" element={<AdvanceReportPage />} />
         <Route path="staff/salary-slips" element={<SalarySlipPage />} />
+
+        <Route path="fees" element={<AdminFeesOverviewPage />} />
+        <Route path="fees/:studentId" element={<AdminStudentFeePlanPage />} />
 
         <Route path="reports/students" element={<StudentReportPage />} />
         <Route path="reports/fees" element={<FeesReportPage />} />

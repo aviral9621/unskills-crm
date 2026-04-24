@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { Download, IndianRupee, Loader2, Send, CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { Download, IndianRupee, Loader2, Send, CheckCircle2, Clock, XCircle, AlertTriangle, CalendarDays } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useStudentRecord } from './useStudent'
 import { formatINR, formatDateDDMMYYYY } from '../../lib/utils'
@@ -13,6 +13,15 @@ interface Payment {
   receipt_no: string | null; note: string | null; status: string
   student_reference: string | null
   is_adjustment: boolean
+  schedule_id: string | null
+}
+
+interface ScheduleRow {
+  id: string; month_for: string; expected_amount: number; paid: number
+}
+
+function monthLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
 }
 interface Account {
   id: string; type: string; upi_id: string | null; bank_name: string | null
@@ -23,6 +32,7 @@ interface Account {
 export default function StudentFeesPage() {
   const { rec } = useStudentRecord()
   const [pays, setPays] = useState<Payment[]>([])
+  const [schedule, setSchedule] = useState<ScheduleRow[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [amount, setAmount] = useState('')
@@ -34,10 +44,23 @@ export default function StudentFeesPage() {
   const load = useCallback(async () => {
     if (!rec) return
     const { data: p } = await supabase.from('uce_student_fee_payments')
-      .select('id,amount,payment_date,payment_mode,receipt_no,note,status,student_reference,is_adjustment')
+      .select('id,amount,payment_date,payment_mode,receipt_no,note,status,student_reference,is_adjustment,schedule_id')
       .eq('student_id', rec.id)
       .order('payment_date', { ascending: false })
-    setPays((p ?? []) as Payment[])
+    const payList = (p ?? []) as Payment[]
+    setPays(payList)
+    const { data: s } = await supabase.from('uce_student_fee_schedule')
+      .select('id,month_for,expected_amount')
+      .eq('student_id', rec.id)
+      .order('month_for')
+    const paidBySched: Record<string, number> = {}
+    payList.forEach(pp => {
+      if (pp.is_adjustment || pp.status === 'rejected') return
+      if (pp.schedule_id) paidBySched[pp.schedule_id] = (paidBySched[pp.schedule_id] || 0) + Number(pp.amount)
+    })
+    setSchedule(((s ?? []) as { id: string; month_for: string; expected_amount: number }[]).map(r => ({
+      id: r.id, month_for: r.month_for, expected_amount: Number(r.expected_amount), paid: paidBySched[r.id] || 0,
+    })))
     const { data: a } = await supabase.from('uce_branch_payment_accounts')
       .select('id,type,upi_id,bank_name,account_holder,account_number,ifsc,is_default')
       .eq('branch_id', rec.branch_id)
@@ -75,6 +98,10 @@ export default function StudentFeesPage() {
     if (!rec) return
     const { data: r } = await supabase.from('uce_fee_receipts').select('receipt_no').eq('payment_id', p.id).maybeSingle()
     const receiptNo = r?.receipt_no || p.receipt_no || p.id.slice(0, 8).toUpperCase()
+    const { data: br } = await supabase.from('uce_branches')
+      .select('name,code,director_phone,society_name,registration_number,center_logo_url,address_line1,village,district,state,pincode')
+      .eq('id', rec.branch_id).maybeSingle()
+    const monthIso = p.schedule_id ? schedule.find(s => s.id === p.schedule_id)?.month_for : null
     try {
       await downloadFeeReceipt({
         receiptNo,
@@ -82,8 +109,18 @@ export default function StudentFeesPage() {
         amount: Number(p.amount),
         mode: p.payment_mode || 'N/A',
         note: p.note || '',
+        txnRef: p.student_reference || undefined,
+        monthsPaid: monthIso ? [monthLabel(monthIso)] : undefined,
         student: { name: rec.name, registration_no: rec.registration_no, father_name: rec.father_name, course: rec.course?.name ?? '' },
-        branch: { name: rec.branch?.name ?? '', code: rec.branch?.code ?? '', phone: rec.branch?.director_phone ?? '' },
+        branch: {
+          name: br?.name || rec.branch?.name || '',
+          code: br?.code || rec.branch?.code || '',
+          phone: br?.director_phone || rec.branch?.director_phone || '',
+          address: [br?.address_line1, br?.village, br?.district, br?.state, br?.pincode].filter(Boolean).join(', '),
+          society_name: br?.society_name || null,
+          registration_number: br?.registration_number || null,
+          logo_url: br?.center_logo_url || null,
+        },
       })
     } catch (e) { toast.error((e as Error).message) }
   }
@@ -98,6 +135,37 @@ export default function StudentFeesPage() {
       {pending > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           {formatINR(pending)} is awaiting confirmation by your institute.
+        </div>
+      )}
+
+      {schedule.length > 0 && (
+        <div className="rounded-xl border bg-white p-4">
+          <div className="flex items-center gap-1.5 mb-3">
+            <CalendarDays size={14} className="text-red-600" />
+            <p className="text-sm font-semibold">Monthly Plan</p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {schedule.map(r => {
+              const dueAmt = Math.max(0, r.expected_amount - r.paid)
+              const fullyPaid = dueAmt <= 0
+              const partial = !fullyPaid && r.paid > 0
+              const overdue = !fullyPaid && r.month_for <= new Date().toISOString().slice(0, 10)
+              const classes = fullyPaid
+                ? 'bg-green-50 border-green-300 text-green-700'
+                : overdue
+                  ? 'bg-red-50 border-red-300 text-red-700'
+                  : partial
+                    ? 'bg-amber-50 border-amber-300 text-amber-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-700'
+              return (
+                <div key={r.id} className={`text-[11px] rounded-md border px-2.5 py-1 font-medium ${classes}`}>
+                  {monthLabel(r.month_for)} · {formatINR(fullyPaid ? r.expected_amount : dueAmt)}
+                  {fullyPaid && <CheckCircle2 size={10} className="inline ml-1" />}
+                  {overdue && !fullyPaid && <AlertTriangle size={10} className="inline ml-1" />}
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

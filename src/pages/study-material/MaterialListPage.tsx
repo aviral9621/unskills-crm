@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
   FileText, Plus, Search, MoreVertical, Download, Trash2, Power,
-  Upload, Loader2, X,
+  Upload, Loader2, X, Play,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -16,6 +16,7 @@ import Modal from '../../components/Modal'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import FormField, { inputClass, selectClass } from '../../components/FormField'
 import type { StudyMaterial, Program, Course, Subject } from '../../types'
+import { parseVideoUrl, isProbablyUrl } from '../../lib/video-url'
 
 const colHelper = createColumnHelper<StudyMaterial>()
 
@@ -42,7 +43,9 @@ export default function MaterialListPage() {
   // Upload modal
   const [showUpload, setShowUpload] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploadMode, setUploadMode] = useState<'file' | 'video'>('file')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [videoUrl, setVideoUrl] = useState('')
   const [formProgram, setFormProgram] = useState('')
   const [formCourse, setFormCourse] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -97,36 +100,43 @@ export default function MaterialListPage() {
 
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!uploadFile) { toast.error('Please select a file'); return }
-    setSaving(true)
     const fd = new FormData(e.currentTarget)
     const get = (k: string) => (fd.get(k) as string)?.trim() || null
 
-    try {
-      const ext = uploadFile.name.split('.').pop() || 'pdf'
-      const path = `study-materials/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const publicUrl = await uploadPublicFile('documents', path, uploadFile)
+    if (uploadMode === 'file' && !uploadFile) { toast.error('Please select a file'); return }
+    if (uploadMode === 'video' && !isProbablyUrl(videoUrl)) { toast.error('Enter a valid http(s) URL'); return }
 
-      const { error } = await supabase.from('uce_study_materials').insert({
+    setSaving(true)
+    try {
+      let row: Record<string, unknown> = {
         program_id: get('program_id') || null,
         course_id: get('course_id'),
         subject_id: get('subject_id') || null,
         title: get('title'),
         description: get('description'),
-        file_url: publicUrl,
-        file_name: uploadFile.name,
-        file_size: uploadFile.size,
         uploaded_by: profile?.id,
-      })
+      }
+
+      if (uploadMode === 'file' && uploadFile) {
+        const ext = uploadFile.name.split('.').pop() || 'pdf'
+        const path = `study-materials/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+        const publicUrl = await uploadPublicFile('documents', path, uploadFile)
+        row = { ...row, material_type: 'file', file_url: publicUrl, file_name: uploadFile.name, file_size: uploadFile.size }
+      } else {
+        const parsed = parseVideoUrl(videoUrl)
+        row = { ...row, material_type: 'video', video_url: parsed.originalUrl, video_provider: parsed.provider }
+      }
+
+      const { error } = await supabase.from('uce_study_materials').insert(row)
       if (error) throw error
       setShowUpload(false)
-      setUploadFile(null)
+      setUploadFile(null); setVideoUrl(''); setUploadMode('file')
       setFormProgram('')
       setFormCourse('')
       fetchAll()
-      toast.success('Material uploaded')
-    } catch {
-      toast.error('Failed to upload material')
+      toast.success('Material added')
+    } catch (err) {
+      toast.error((err as Error).message || 'Failed to upload material')
     } finally {
       setSaving(false)
     }
@@ -146,7 +156,7 @@ export default function MaterialListPage() {
     try {
       const { error } = await supabase.from('uce_study_materials').delete().eq('id', deleteTarget.id)
       if (error) throw error
-      void deletePublicFile(deleteTarget.file_url)
+      if (deleteTarget.file_url) void deletePublicFile(deleteTarget.file_url)
       setMaterials(prev => prev.filter(m => m.id !== deleteTarget.id))
       setDeleteTarget(null)
       toast.success('Material deleted')
@@ -161,9 +171,14 @@ export default function MaterialListPage() {
     colHelper.accessor('title', {
       header: 'Title',
       cell: i => (
-        <div>
-          <p className="font-medium text-gray-900">{i.getValue()}</p>
-          {i.row.original.description && <p className="text-xs text-gray-400 truncate max-w-[200px]">{i.row.original.description}</p>}
+        <div className="flex items-center gap-2">
+          {i.row.original.material_type === 'video'
+            ? <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-semibold"><Play size={10} /> VIDEO</span>
+            : <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[10px] font-semibold"><FileText size={10} /> FILE</span>}
+          <div>
+            <p className="font-medium text-gray-900">{i.getValue()}</p>
+            {i.row.original.description && <p className="text-xs text-gray-400 truncate max-w-[200px]">{i.row.original.description}</p>}
+          </div>
         </div>
       ),
     }),
@@ -225,10 +240,15 @@ export default function MaterialListPage() {
             {(() => {
               const mat = materials.find(m => m.id === menuOpen)
               if (!mat) return null
+              const targetUrl = mat.material_type === 'video' ? (mat.video_url || '') : (mat.file_url || '')
+              const actionLabel = mat.material_type === 'video' ? 'Open Video' : 'Download'
               return (
                 <>
-                  <a href={mat.file_url} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(null)} className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                    <Download size={15} className="text-gray-400" /> Download
+                  <a href={targetUrl} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(null)} className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+                    {mat.material_type === 'video'
+                      ? <Play size={15} className="text-gray-400" />
+                      : <Download size={15} className="text-gray-400" />}
+                    {actionLabel}
                   </a>
                   <button onClick={() => { handleToggle(mat) }} className="flex items-center gap-2.5 w-full px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
                     <Power size={15} className="text-gray-400" /> {mat.is_active ? 'Deactivate' : 'Activate'}
@@ -244,8 +264,20 @@ export default function MaterialListPage() {
       )}
 
       {/* Upload modal */}
-      <Modal open={showUpload} onClose={() => { setShowUpload(false); setUploadFile(null); setFormProgram(''); setFormCourse('') }} title="Upload Study Material" size="lg">
+      <Modal open={showUpload} onClose={() => { setShowUpload(false); setUploadFile(null); setVideoUrl(''); setUploadMode('file'); setFormProgram(''); setFormCourse('') }} title="Add Study Material" size="lg">
         <form onSubmit={handleUpload} className="space-y-4">
+          {/* Type toggle */}
+          <div className="inline-flex rounded-lg border bg-gray-50 p-1">
+            <button type="button" onClick={() => setUploadMode('file')}
+              className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-colors', uploadMode === 'file' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-600')}>
+              <FileText size={14} className="inline mr-1.5" /> File
+            </button>
+            <button type="button" onClick={() => setUploadMode('video')}
+              className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-colors', uploadMode === 'video' ? 'bg-white text-red-600 shadow-sm' : 'text-gray-600')}>
+              <Play size={14} className="inline mr-1.5" /> Video Link
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Program">
               <select name="program_id" className={selectClass} value={formProgram} onChange={e => { setFormProgram(e.target.value); setFormCourse('') }}>
@@ -273,38 +305,46 @@ export default function MaterialListPage() {
             </FormField>
           </div>
 
-          {/* File upload */}
-          <FormField label="File" required>
-            <div
-              onClick={() => fileRef.current?.click()}
-              className={cn(
-                'flex flex-col items-center gap-2 rounded-xl border-2 border-dashed p-6 cursor-pointer transition-all',
-                uploadFile ? 'border-green-300 bg-green-50/50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-              )}
-            >
-              {uploadFile ? (
-                <div className="flex items-center gap-3">
-                  <FileText size={20} className="text-green-600" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{uploadFile.name}</p>
-                    <p className="text-xs text-gray-400">{formatSize(uploadFile.size)}</p>
+          {uploadMode === 'file' ? (
+            <FormField label="File" required>
+              <div
+                onClick={() => fileRef.current?.click()}
+                className={cn(
+                  'flex flex-col items-center gap-2 rounded-xl border-2 border-dashed p-6 cursor-pointer transition-all',
+                  uploadFile ? 'border-green-300 bg-green-50/50' : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                )}
+              >
+                {uploadFile ? (
+                  <div className="flex items-center gap-3">
+                    <FileText size={20} className="text-green-600" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{uploadFile.name}</p>
+                      <p className="text-xs text-gray-400">{formatSize(uploadFile.size)}</p>
+                    </div>
+                    <button type="button" onClick={e => { e.stopPropagation(); setUploadFile(null) }} className="p-1 rounded-full hover:bg-gray-200">
+                      <X size={14} className="text-gray-500" />
+                    </button>
                   </div>
-                  <button type="button" onClick={e => { e.stopPropagation(); setUploadFile(null) }} className="p-1 rounded-full hover:bg-gray-200">
-                    <X size={14} className="text-gray-500" />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <Upload size={20} className="text-gray-400" />
-                  <p className="text-xs text-gray-500">Click to upload PDF (max 10 MB)</p>
-                </>
+                ) : (
+                  <>
+                    <Upload size={20} className="text-gray-400" />
+                    <p className="text-xs text-gray-500">Click to upload PDF / DOC / PPT (max 10 MB)</p>
+                  </>
+                )}
+              </div>
+              <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" className="hidden" onChange={e => { if (e.target.files?.[0]) setUploadFile(e.target.files[0]); e.target.value = '' }} />
+            </FormField>
+          ) : (
+            <FormField label="Video URL" required hint="YouTube / Vimeo get embedded players; other URLs open in a new tab.">
+              <input type="url" value={videoUrl} onChange={e => setVideoUrl(e.target.value)} className={inputClass} placeholder="https://www.youtube.com/watch?v=..." />
+              {videoUrl && isProbablyUrl(videoUrl) && (
+                <p className="text-[11px] text-gray-500 mt-1">Detected: <b className="uppercase">{parseVideoUrl(videoUrl).provider}</b></p>
               )}
-            </div>
-            <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" className="hidden" onChange={e => { if (e.target.files?.[0]) setUploadFile(e.target.files[0]); e.target.value = '' }} />
-          </FormField>
+            </FormField>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => { setShowUpload(false); setUploadFile(null) }} className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
+            <button type="button" onClick={() => { setShowUpload(false); setUploadFile(null); setVideoUrl(''); setUploadMode('file') }} className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
             <button type="submit" disabled={saving} className="px-5 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2">
               {saving && <Loader2 size={16} className="animate-spin" />} Upload
             </button>
