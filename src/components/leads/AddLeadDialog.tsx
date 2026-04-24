@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import Modal from '../Modal'
+import Select, { type SelectOption } from '../Select'
 import { supabase } from '../../lib/supabase'
 import { ALL_LEAD_STATUSES, LEAD_STATUS_CONFIG, type LeadStatus } from '../../types/leads'
 import { createManualLead } from '../../hooks/useLeads'
@@ -30,6 +31,15 @@ export default function AddLeadDialog({ open, onClose, onCreated }: { open: bool
   const [notes, setNotes] = useState('')
   const [users, setUsers] = useState<UserOpt[]>([])
   const [saving, setSaving] = useState(false)
+
+  const userOptions: SelectOption[] = useMemo(() => {
+    const opts: SelectOption[] = [{ value: '', label: 'Unassigned' }]
+    users.forEach(u => {
+      const hint = [ROLE_LABEL[u.role], u.branch_name].filter(Boolean).join(' · ')
+      opts.push({ value: u.id, label: `${u.full_name}${hint ? ` — ${hint}` : ''}` })
+    })
+    return opts
+  }, [users])
 
   useEffect(() => {
     if (!open) return
@@ -108,13 +118,13 @@ export default function AddLeadDialog({ open, onClose, onCreated }: { open: bool
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Assign to User</label>
-            <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none">
-              <option value="">Unassigned</option>
-              {users.map(u => {
-                const hint = [ROLE_LABEL[u.role], u.branch_name].filter(Boolean).join(' · ')
-                return <option key={u.id} value={u.id}>{u.full_name}{hint ? ` — ${hint}` : ''}</option>
-              })}
-            </select>
+            <Select
+              value={assignedTo}
+              onChange={setAssignedTo}
+              options={userOptions}
+              placeholder="Unassigned"
+              searchable
+            />
             {assignedTo && (() => {
               const u = users.find(x => x.id === assignedTo)
               return u?.branch_name ? (
