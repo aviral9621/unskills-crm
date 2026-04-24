@@ -91,6 +91,10 @@ export interface Course {
   is_marksheet_eligible: boolean
   display_order: number
   is_active: boolean
+  video_url: string | null
+  thumbnail_url: string | null
+  website_category: string | null
+  website_body: string | null
   created_at: string
   updated_at: string
 }

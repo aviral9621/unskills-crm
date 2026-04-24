@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Wallet, Plus, ArrowDownRight, ArrowUpRight } from 'lucide-react'
+import { Wallet, Plus, ArrowDownRight, ArrowUpRight, Download } from 'lucide-react'
+import { toast } from 'sonner'
 import { supabase } from '../../../lib/supabase'
 import { useBranch, useBranchId } from '../../../lib/franchise'
 import { formatINR, formatDateDDMMYYYY } from '../../../lib/utils'
+import { downloadWalletReceipt, getHqDetailsForReceipt } from '../../../lib/pdf/wallet-receipt'
 
 interface Txn {
   id: string; type: 'credit' | 'debit'; amount: number; balance_after: number
   description: string; created_at: string; reference_type: string | null
+  reference_id?: string | null
 }
 
 interface Request {
@@ -20,6 +23,34 @@ export default function FWalletPage() {
   const branchId = useBranchId()
   const [txns, setTxns] = useState<Txn[]>([])
   const [reqs, setReqs] = useState<Request[]>([])
+
+  async function downloadReceipt(t: Txn) {
+    if (!branch || t.type !== 'credit') return
+    try {
+      const hq = await getHqDetailsForReceipt()
+      const b = branch as Record<string, unknown>
+      await downloadWalletReceipt({
+        receiptNo: `WR-${t.id.slice(0, 8).toUpperCase()}`,
+        date: t.created_at,
+        amount: t.amount,
+        mode: t.reference_type || 'recharge',
+        note: t.description,
+        requestId: t.reference_id || null,
+        approvedAt: t.created_at,
+        branch: {
+          name: branch.name,
+          code: branch.code,
+          b_code: (b.b_code as string | null) ?? null,
+          phone: (b.director_phone as string | null) ?? null,
+          address: [b.address_line1, b.village, b.block, b.district, b.state, b.pincode].filter(Boolean).join(', '),
+          society_name: (b.society_name as string | null) ?? null,
+          registration_number: (b.registration_number as string | null) ?? null,
+          logo_url: (b.center_logo_url as string | null) ?? null,
+        },
+        hq,
+      })
+    } catch (e) { console.error(e); toast.error('Failed to generate receipt') }
+  }
 
   useEffect(() => {
     if (!branchId) return
@@ -82,6 +113,11 @@ export default function FWalletPage() {
               </p>
               <p className="text-xs text-gray-500 break-words mt-0.5">{t.description}</p>
               <p className="text-[10px] text-gray-400 mt-1">Balance: {formatINR(t.balance_after)}</p>
+              {t.type === 'credit' && (
+                <button onClick={() => downloadReceipt(t)} className="mt-2 inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50">
+                  <Download size={11} /> Receipt
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -95,6 +131,7 @@ export default function FWalletPage() {
                 <th className="px-4 py-3">Amount</th>
                 <th className="px-4 py-3">Balance After</th>
                 <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -111,9 +148,16 @@ export default function FWalletPage() {
                   </td>
                   <td className="px-4 py-3">{formatINR(t.balance_after)}</td>
                   <td className="px-4 py-3 text-gray-500">{t.description}</td>
+                  <td className="px-4 py-3">
+                    {t.type === 'credit' && (
+                      <button onClick={() => downloadReceipt(t)} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50">
+                        <Download size={11} /> Receipt
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
-              {txns.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No transactions</td></tr>}
+              {txns.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No transactions</td></tr>}
             </tbody>
           </table>
         </div>

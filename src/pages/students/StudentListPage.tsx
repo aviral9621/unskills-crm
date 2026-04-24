@@ -21,6 +21,9 @@ interface StudentRow {
   course?: { name: string; program?: { slug: string; name: string } | null } | null
   branch?: { name: string } | null
   paid?: number; locked?: boolean
+  completed?: boolean
+  certificate_number?: string | null
+  issue_date?: string | null
 }
 
 interface ProgramRow { slug: string; name: string }
@@ -38,7 +41,11 @@ export default function StudentListPage() {
   const [students, setStudents] = useState<StudentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const initialStatus = (() => {
+    const p = new URLSearchParams(location.search).get('filter')
+    return p === 'completed' ? 'completed' : 'all'
+  })() as 'all' | 'active' | 'inactive' | 'completed'
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'completed'>(initialStatus)
   const [programFilter, setProgramFilter] = useState<string>('all')
   const [programs, setPrograms] = useState<ProgramRow[]>([])
 
@@ -72,7 +79,32 @@ export default function StudentListPage() {
       }
 
       const lockedSet = await lockedStudentIds(ids)
-      setStudents((data ?? []).map((s: Record<string, unknown>) => ({ ...s, paid: paidMap[(s as { id: string }).id] || 0, locked: lockedSet.has((s as { id: string }).id) })) as StudentRow[])
+
+      // Certificate lookup — a student is "completed" if they have an active certificate.
+      let certMap: Record<string, { certificate_number: string; issue_date: string | null }> = {}
+      if (ids.length > 0) {
+        const { data: certs } = await supabase
+          .from('uce_certificates')
+          .select('student_id, certificate_number, issue_date, status')
+          .in('student_id', ids)
+          .eq('status', 'active')
+        certs?.forEach((c: { student_id: string; certificate_number: string; issue_date: string | null }) => {
+          if (!certMap[c.student_id]) certMap[c.student_id] = { certificate_number: c.certificate_number, issue_date: c.issue_date }
+        })
+      }
+
+      setStudents((data ?? []).map((s: Record<string, unknown>) => {
+        const id = (s as { id: string }).id
+        const cert = certMap[id]
+        return {
+          ...s,
+          paid: paidMap[id] || 0,
+          locked: lockedSet.has(id),
+          completed: !!cert,
+          certificate_number: cert?.certificate_number ?? null,
+          issue_date: cert?.issue_date ?? null,
+        }
+      }) as StudentRow[])
     } catch { toast.error('Failed to load students') }
     finally { setLoading(false) }
   }
@@ -102,6 +134,7 @@ export default function StudentListPage() {
     let r = students
     if (statusFilter === 'active') r = r.filter(s => s.is_active)
     else if (statusFilter === 'inactive') r = r.filter(s => !s.is_active)
+    else if (statusFilter === 'completed') r = r.filter(s => s.completed)
     if (programFilter !== 'all') r = r.filter(s => s.course?.program?.slug === programFilter)
     if (search.trim()) { const q = search.toLowerCase(); r = r.filter(s => s.name.toLowerCase().includes(q) || s.registration_no.toLowerCase().includes(q) || s.phone.includes(q)) }
     return r
@@ -115,8 +148,9 @@ export default function StudentListPage() {
     colHelper.display({ id: 'paid', header: 'Paid', cell: i => <span className="text-sm text-green-600 font-medium">{formatINR(i.row.original.paid || 0)}</span> }),
     colHelper.display({ id: 'due', header: 'Due', cell: i => { const due = (i.row.original.net_fee || 0) - (i.row.original.paid || 0); return <span className={`text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatINR(Math.max(0, due))}</span> } }),
     colHelper.accessor('is_active', { header: 'Status', cell: i => (
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <StatusBadge label={i.getValue() ? 'Active' : 'Inactive'} variant={i.getValue() ? 'success' : 'error'} />
+        {i.row.original.completed && <span title="Course completed — certificate issued" className="inline-flex items-center gap-1 rounded bg-indigo-50 text-indigo-700 px-1.5 py-0.5 text-[10px] font-semibold"><GraduationCap size={10} /> COMPLETED</span>}
         {i.row.original.locked && <span title="Locked — certificate/result issued" className="inline-flex items-center gap-1 rounded bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px] font-semibold"><Lock size={10} /> LOCKED</span>}
       </div>
     ) }),
@@ -194,10 +228,16 @@ export default function StudentListPage() {
             <option value="all">All Programs</option>
             {programs.map(p => <option key={p.slug} value={p.slug}>{p.name}</option>)}
           </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive' | 'completed')}
             className="px-3 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none">
-            <option value="all">All Status</option><option value="active">Active</option><option value="inactive">Inactive</option>
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="completed">Completed (Cert Issued)</option>
           </select>
+          {statusFilter === 'completed' && (
+            <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded flex items-center gap-1"><GraduationCap size={12} /> Showing {filtered.length} completed</span>
+          )}
           {(programFilter !== 'all' || statusFilter !== 'all' || search) && (
             <button onClick={() => { setProgramFilter('all'); setStatusFilter('all'); setSearch('') }}
               className="text-xs text-gray-500 hover:text-red-600 underline underline-offset-2 sm:ml-auto">

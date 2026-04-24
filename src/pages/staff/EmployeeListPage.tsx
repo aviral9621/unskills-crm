@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
-  Briefcase, Plus, Search, MoreVertical, Pencil, Power, X, Phone, Building,
+  Briefcase, Plus, Search, MoreVertical, Pencil, Power, X, Phone, Building, CreditCard,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -144,13 +144,17 @@ export default function EmployeeListPage() {
 
   const menuActions = menuEmp ? [
     { label: 'Edit', icon: Pencil, onClick: () => navigate(`/admin/staff/employees/${menuEmp.id}/edit`) },
+    { label: 'ID Card', icon: CreditCard, onClick: () => navigate(`/admin/staff/id-card?employee=${menuEmp.id}`) },
   ] : []
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div><h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Employees</h1><p className="text-xs sm:text-sm text-gray-500 mt-0.5">{employees.length} total</p></div>
-        <button onClick={() => navigate('/admin/staff/employees/new')} className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm shrink-0"><Plus size={16} /> Add Employee</button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={() => navigate('/admin/staff/id-card')} className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50"><CreditCard size={16} /> <span className="hidden sm:inline">ID Card</span></button>
+          <button onClick={() => navigate('/admin/staff/employees/new')} className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm"><Plus size={16} /> Add Employee</button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-4">

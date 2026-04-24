@@ -87,6 +87,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
         children: [
           { label: 'Departments', path: '/admin/staff/departments' },
           { label: 'Employees', path: '/admin/staff/employees' },
+          { label: 'ID Card', path: '/admin/staff/id-card' },
           { label: 'Attendance', path: '/admin/staff/attendance', permission: 'staff.attendance' },
           { label: 'Advances', path: '/admin/staff/advances' },
           { label: 'Salary Slips', path: '/admin/staff/salary-slips', permission: 'staff.salary' },

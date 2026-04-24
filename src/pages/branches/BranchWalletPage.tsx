@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
   ArrowLeft, Wallet, Plus, ArrowDownCircle,
-  ArrowUpCircle, Loader2, Clock,
+  ArrowUpCircle, Loader2, Clock, Download,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -14,6 +14,7 @@ import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
 import Modal from '../../components/Modal'
 import FormField, { inputClass } from '../../components/FormField'
+import { downloadWalletReceipt, getHqDetailsForReceipt } from '../../lib/pdf/wallet-receipt'
 
 const colHelper = createColumnHelper<WalletTransaction>()
 
@@ -73,6 +74,36 @@ export default function BranchWalletPage() {
     finally { setSubmitting(false) }
   }
 
+  async function handleDownloadReceipt(txn: WalletTransaction) {
+    if (!branch) return
+    if (txn.type !== 'credit') { toast.error('Only credit transactions have receipts'); return }
+    try {
+      const hq = await getHqDetailsForReceipt()
+      await downloadWalletReceipt({
+        receiptNo: `WR-${(txn.id || '').slice(0, 8).toUpperCase()}`,
+        date: txn.created_at,
+        amount: txn.amount,
+        mode: (txn as { reference_type?: string }).reference_type || 'recharge',
+        note: txn.description,
+        requestId: (txn as { reference_id?: string }).reference_id || null,
+        approvedAt: txn.created_at,
+        branch: {
+          name: branch.name,
+          code: branch.code,
+          b_code: branch.b_code ?? null,
+          phone: branch.director_phone ?? null,
+          address: [branch.address_line1, branch.village, branch.block, branch.district, branch.state, branch.pincode].filter(Boolean).join(', '),
+          society_name: branch.society_name ?? null,
+          registration_number: branch.registration_number ?? null,
+          logo_url: branch.center_logo_url ?? null,
+        },
+        hq,
+      })
+    } catch (e) {
+      console.error(e); toast.error('Failed to generate receipt')
+    }
+  }
+
   const lastRecharge = useMemo(() => {
     const c = transactions.find(t => t.type === 'credit')
     if (!c) return null
@@ -87,7 +118,16 @@ export default function BranchWalletPage() {
     colHelper.accessor('description', { header: 'Description', cell: info => <span className="text-sm text-gray-700 max-w-[300px] truncate block">{info.getValue()}</span> }),
     colHelper.accessor('amount', { header: 'Amount', cell: info => { const t = info.row.original.type; return <span className={`text-sm font-semibold ${t === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{t === 'credit' ? '+ ' : '- '}{formatINR(info.getValue())}</span> } }),
     colHelper.accessor('balance_after', { header: 'Balance', cell: info => <span className="text-sm font-medium text-gray-700">{formatINR(info.getValue())}</span> }),
-  ], [])
+    colHelper.display({ id: 'receipt', header: '', enableSorting: false, cell: info => (
+      info.row.original.type === 'credit' ? (
+        <button
+          onClick={e => { e.stopPropagation(); handleDownloadReceipt(info.row.original) }}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-red-600 border border-red-200 hover:bg-red-50"
+          title="Download wallet reload receipt"
+        ><Download size={12} /> Receipt</button>
+      ) : null
+    ) }),
+  ], [branch])
 
   const balColor = (branch?.wallet_balance ?? 0) > 1000 ? 'from-green-500 to-emerald-600' : (branch?.wallet_balance ?? 0) > 0 ? 'from-amber-500 to-orange-600' : 'from-red-500 to-red-600'
   const balTextColor = (branch?.wallet_balance ?? 0) > 1000 ? 'text-green-700' : (branch?.wallet_balance ?? 0) > 0 ? 'text-amber-700' : 'text-red-700'
@@ -178,6 +218,12 @@ export default function BranchWalletPage() {
                       {txn.type === 'credit' ? '+' : '-'} {formatINR(txn.amount)}
                     </p>
                     <p className="text-[10px] text-gray-400">Bal: {formatINR(txn.balance_after)}</p>
+                    {txn.type === 'credit' && (
+                      <button
+                        onClick={() => handleDownloadReceipt(txn)}
+                        className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50"
+                      ><Download size={10} /> Receipt</button>
+                    )}
                   </div>
                 </div>
               ))}

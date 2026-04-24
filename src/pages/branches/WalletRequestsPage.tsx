@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Check, X, ExternalLink } from 'lucide-react'
+import { Loader2, Check, X, ExternalLink, Download } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatINR, formatDateDDMMYYYY } from '../../lib/utils'
+import { downloadWalletReceipt, getHqDetailsForReceipt } from '../../lib/pdf/wallet-receipt'
 
 interface Row {
   id: string; amount: number; transaction_id: string | null; payment_mode: string
   screenshot_url: string | null; note: string | null; status: 'pending' | 'approved' | 'rejected'
-  review_note: string | null; created_at: string
-  branch: { name: string; code: string; wallet_balance: number } | null
+  review_note: string | null; created_at: string; reviewed_at: string | null
+  branch: {
+    name: string; code: string; wallet_balance: number
+    b_code?: string | null; society_name?: string | null; registration_number?: string | null
+    center_logo_url?: string | null; director_phone?: string | null
+    address_line1?: string | null; village?: string | null; block?: string | null
+    district?: string | null; state?: string | null; pincode?: string | null
+  } | null
 }
 
 export default function WalletRequestsPage() {
@@ -18,9 +25,40 @@ export default function WalletRequestsPage() {
 
   async function load() {
     const { data } = await supabase.from('uce_branch_wallet_requests')
-      .select('id,amount,transaction_id,payment_mode,screenshot_url,note,status,review_note,created_at,branch:uce_branches(name,code,wallet_balance)')
+      .select('id,amount,transaction_id,payment_mode,screenshot_url,note,status,review_note,created_at,reviewed_at,branch:uce_branches(name,code,wallet_balance,b_code,society_name,registration_number,center_logo_url,director_phone,address_line1,village,block,district,state,pincode)')
       .eq('status', tab).order('created_at', { ascending: false })
     setRows((data ?? []) as unknown as Row[])
+  }
+
+  async function downloadReceipt(r: Row) {
+    if (!r.branch) return
+    try {
+      const hq = await getHqDetailsForReceipt()
+      const b = r.branch
+      await downloadWalletReceipt({
+        receiptNo: `WR-${(r.id || '').slice(0, 8).toUpperCase()}`,
+        date: r.reviewed_at || r.created_at,
+        amount: r.amount,
+        mode: r.payment_mode,
+        txnRef: r.transaction_id,
+        note: r.note,
+        requestId: r.id,
+        approvedAt: r.reviewed_at,
+        branch: {
+          name: b.name,
+          code: b.code,
+          b_code: b.b_code ?? null,
+          phone: b.director_phone ?? null,
+          address: [b.address_line1, b.village, b.block, b.district, b.state, b.pincode].filter(Boolean).join(', '),
+          society_name: b.society_name ?? null,
+          registration_number: b.registration_number ?? null,
+          logo_url: b.center_logo_url ?? null,
+        },
+        hq,
+      })
+    } catch (e) {
+      console.error(e); toast.error('Failed to generate receipt')
+    }
   }
   useEffect(() => { load() }, [tab])
 
@@ -87,6 +125,13 @@ export default function WalletRequestsPage() {
                 </button>
                 <button onClick={() => reject(r)} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-50 disabled:opacity-50">
                   <X size={14} /> Reject
+                </button>
+              </div>
+            )}
+            {tab === 'approved' && (
+              <div className="flex sm:flex-col gap-2">
+                <button onClick={() => downloadReceipt(r)} className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700">
+                  <Download size={14} /> Receipt
                 </button>
               </div>
             )}

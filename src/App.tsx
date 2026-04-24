@@ -51,6 +51,8 @@ import CertificatePreviewPage from './pages/certificate/CertificatePreviewPage'
 import DepartmentPage from './pages/staff/DepartmentPage'
 import EmployeeListPage from './pages/staff/EmployeeListPage'
 import EmployeeFormPage from './pages/staff/EmployeeFormPage'
+import StaffIdCardPage from './pages/staff/StaffIdCardPage'
+import StaffIdCardSettingsPage from './pages/staff/StaffIdCardSettingsPage'
 import AttendancePage from './pages/staff/AttendancePage'
 import AdvanceReportPage from './pages/staff/AdvanceReportPage'
 import SalarySlipPage from './pages/staff/SalarySlipPage'
@@ -175,6 +177,8 @@ function AppRoutes() {
         <Route path="staff/employees" element={<EmployeeListPage />} />
         <Route path="staff/employees/new" element={<EmployeeFormPage />} />
         <Route path="staff/employees/:id/edit" element={<EmployeeFormPage />} />
+        <Route path="staff/id-card" element={<StaffIdCardPage />} />
+        <Route path="staff/id-card-settings" element={<StaffIdCardSettingsPage />} />
         <Route path="staff/attendance" element={<AttendancePage />} />
         <Route path="staff/advances" element={<AdvanceReportPage />} />
         <Route path="staff/salary-slips" element={<SalarySlipPage />} />

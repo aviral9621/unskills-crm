@@ -8,6 +8,24 @@ import { supabase } from '../../lib/supabase'
 import FormField, { inputClass, selectClass } from '../../components/FormField'
 import type { Course, Program } from '../../types'
 
+const WEBSITE_CATEGORIES = [
+  { value: '', label: '— Not published on website —' },
+  { value: 'computer-software',   label: 'Computer Software' },
+  { value: 'hardware-networking', label: 'Hardware & Networking' },
+  { value: 'skills-development',  label: 'Skills Development' },
+  { value: 'nielit-govt',         label: 'NIELIT Govt.' },
+  { value: 'university',          label: 'University' },
+  { value: 'beautician',          label: 'Beautician' },
+  { value: 'summer-training',     label: 'Summer Training' },
+  { value: 'typing',              label: 'Typing' },
+  { value: 'diploma',             label: 'Diploma' },
+] as const
+
+const urlOrEmpty = z.string().trim().refine(
+  v => v === '' || /^https?:\/\//i.test(v),
+  { message: 'Must start with http:// or https://' },
+)
+
 const courseSchema = z.object({
   code: z.string().min(3, 'Code is required'),
   name: z.string().min(3, 'Course name is required'),
@@ -25,6 +43,10 @@ const courseSchema = z.object({
   is_govt_course: z.boolean().optional(),
   is_certificate_eligible: z.boolean().optional(),
   is_marksheet_eligible: z.boolean().optional(),
+  video_url: urlOrEmpty.optional().default(''),
+  thumbnail_url: urlOrEmpty.optional().default(''),
+  website_category: z.string().optional().default(''),
+  website_body: z.string().optional().default(''),
 })
 
 type CourseFormData = z.infer<typeof courseSchema>
@@ -76,6 +98,10 @@ export default function CourseFormPage() {
         total_fee: data.total_fee, certification_fee: data.certification_fee,
         is_featured: data.is_featured, is_govt_course: data.is_govt_course,
         is_certificate_eligible: data.is_certificate_eligible, is_marksheet_eligible: data.is_marksheet_eligible,
+        video_url: data.video_url || '',
+        thumbnail_url: data.thumbnail_url || '',
+        website_category: data.website_category || '',
+        website_body: data.website_body || '',
       })
     } catch { toast.error('Failed to load course') }
     finally { setLoading(false) }
@@ -94,6 +120,10 @@ export default function CourseFormPage() {
         total_fee: form.total_fee, certification_fee: form.certification_fee,
         is_featured: form.is_featured ?? false, is_govt_course: form.is_govt_course ?? false,
         is_certificate_eligible: form.is_certificate_eligible ?? false, is_marksheet_eligible: form.is_marksheet_eligible ?? true,
+        video_url: (form.video_url || '').trim() || null,
+        thumbnail_url: (form.thumbnail_url || '').trim() || null,
+        website_category: (form.website_category || '').trim() || null,
+        website_body: (form.website_body || '').trim() || null,
         updated_at: new Date().toISOString(),
       }
       if (isEdit) {
@@ -168,6 +198,27 @@ export default function CourseFormPage() {
               </label>
             ))}
           </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 space-y-4">
+          <h2 className="text-sm font-semibold text-gray-900 font-heading border-b border-gray-100 pb-3">Website</h2>
+          <p className="text-xs text-gray-500 -mt-2">These fields are what the public website (unskillseducation.org) displays. Pick a website category to publish this course; leave video URL blank to hide the embed.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField label="Website Category" hint="Controls which /courses/* page this appears on">
+              <select {...register('website_category')} className={selectClass}>
+                {WEBSITE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Thumbnail URL" error={errors.thumbnail_url?.message} hint="Optional poster image for the video">
+              <input {...register('thumbnail_url')} className={inputClass} placeholder="https://…/thumb.jpg" />
+            </FormField>
+          </div>
+          <FormField label="Video URL" error={errors.video_url?.message} hint="YouTube, Vimeo, or direct MP4. Shows above the course header on the website.">
+            <input {...register('video_url')} className={inputClass} placeholder="https://www.youtube.com/watch?v=…" />
+          </FormField>
+          <FormField label="Website Description / Body" hint="Long-form content shown on the website course page. Plain text; blank lines become paragraphs.">
+            <textarea {...register('website_body')} className={`${inputClass} resize-y`} rows={6} placeholder="What students will learn, job roles, tools covered…" />
+          </FormField>
         </div>
 
         <div className="flex items-center justify-between pb-4 sm:pb-6 gap-3">

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod/v4'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -18,14 +18,29 @@ export function studentAuthEmail(regNo: string): string {
   return `${regNo.trim().toLowerCase().replace(/[^a-z0-9]/g, '-')}@student.unskills.local`
 }
 
+function safeReturnTo(raw: string | null): string {
+  if (!raw) return '/student/dashboard'
+  // Only allow relative in-app paths beginning with /student/ to avoid open-redirect.
+  if (raw.startsWith('/student/')) return raw
+  return '/student/dashboard'
+}
+
 export default function StudentLoginPage() {
-  const { signIn } = useAuth()
+  const { signIn, user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   })
+
+  const returnTo = safeReturnTo(new URLSearchParams(location.search).get('returnTo'))
+
+  // If already logged in and returnTo is present, jump straight there.
+  useEffect(() => {
+    if (user) navigate(returnTo, { replace: true })
+  }, [user, returnTo, navigate])
 
   async function onSubmit(data: LoginForm) {
     setError(null)
@@ -38,7 +53,7 @@ export default function StudentLoginPage() {
           : e,
       )
     } else {
-      navigate('/student/dashboard', { replace: true })
+      navigate(returnTo, { replace: true })
     }
   }
 

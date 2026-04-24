@@ -51,6 +51,7 @@ interface OverviewStats {
   newAdmissions: number
   droppedStudents: number
   activeStudents: number
+  completedStudents: number
   totalRevenue: number
   pendingFees: number
   expenses: number
@@ -203,7 +204,7 @@ export default function DashboardPage() {
   const [filterOpen, setFilterOpen] = useState(false)
 
   const [overview, setOverview] = useState<OverviewStats>({
-    totalStudents: 0, newAdmissions: 0, droppedStudents: 0, activeStudents: 0,
+    totalStudents: 0, newAdmissions: 0, droppedStudents: 0, activeStudents: 0, completedStudents: 0,
     totalRevenue: 0, pendingFees: 0, expenses: 0, profit: 0,
   })
   const [feeStats, setFeeStats] = useState<FeeStats>({
@@ -298,6 +299,13 @@ export default function DashboardPage() {
       : supabase.from('uce_students').select('id', { count: 'exact', head: true }).gte('created_at', startOfMonth)
     const { count: newAdmissions } = await newQ
 
+    // Completed students — distinct students with an active certificate issued.
+    const certQ = bf
+      ? supabase.from('uce_certificates').select('student_id').eq('status', 'active').eq('branch_id', bf)
+      : supabase.from('uce_certificates').select('student_id').eq('status', 'active')
+    const { data: certRows } = await certQ
+    const completedStudents = new Set((certRows ?? []).map(r => r.student_id).filter(Boolean)).size
+
     // Revenue in filter period
     const { data: payments } = await supabase
       .from('uce_student_fee_payments')
@@ -328,6 +336,7 @@ export default function DashboardPage() {
       newAdmissions: newAdmissions ?? 0,
       droppedStudents: droppedStudents ?? 0,
       activeStudents: activeStudents ?? 0,
+      completedStudents,
       totalRevenue,
       pendingFees,
       expenses,
@@ -524,6 +533,15 @@ export default function DashboardPage() {
           <StatCard label="New Admissions" value={overview.newAdmissions} icon={UserPlus} iconColor="text-green-600" iconBg="bg-green-50" trend={admissionStats.growthPercent} trendLabel="vs last month" loading={loading} />
           <StatCard label="Dropped Students" value={overview.droppedStudents} icon={UserMinus} iconColor="text-red-600" iconBg="bg-red-50" loading={loading} />
           <StatCard label="Active Students" value={overview.activeStudents} icon={UserCheck} iconColor="text-emerald-600" iconBg="bg-emerald-50" loading={loading} />
+          <StatCard
+            label="Completed Students"
+            value={overview.completedStudents}
+            icon={GraduationCap}
+            iconColor="text-indigo-600"
+            iconBg="bg-indigo-50"
+            loading={loading}
+            onClick={() => navigate('/admin/students?filter=completed')}
+          />
           <StatCard label="Total Revenue" value={formatINR(overview.totalRevenue)} icon={IndianRupee} iconColor="text-green-600" iconBg="bg-green-50" loading={loading} />
           <StatCard label="Pending Fees" value={formatINR(overview.pendingFees)} icon={AlertTriangle} iconColor="text-amber-600" iconBg="bg-amber-50" loading={loading} />
           <StatCard label="Expenses" value={formatINR(overview.expenses)} icon={Receipt} iconColor="text-orange-600" iconBg="bg-orange-50" loading={loading} />
