@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, Users, MessageSquare, MessageCircle,
   GraduationCap, BookOpen,
   FileText, Video, ClipboardList, ScrollText, Award,
-  Briefcase,
+  Briefcase, IndianRupee,
   BarChart3, MonitorPlay,
   Settings, UserCircle, ChevronDown, LogOut, X,
 } from 'lucide-react'
@@ -81,6 +81,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
   {
     title: 'MANAGEMENT',
     items: [
+      { label: 'Fees', icon: IndianRupee, path: '/admin/fees', permission: 'fee' },
       {
         label: 'Staff', icon: Briefcase, permission: 'staff',
         children: [

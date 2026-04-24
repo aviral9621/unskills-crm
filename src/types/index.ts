@@ -159,6 +159,10 @@ export interface Student {
   registered_by: string | null
   created_at: string
   updated_at: string
+  // Monthly fee plan (optional)
+  fee_start_month: string | null
+  installment_count: number | null
+  monthly_fee: number | null
 }
 
 export interface FeePayment {
@@ -171,6 +175,15 @@ export interface FeePayment {
   month_for: string | null
   note: string | null
   recorded_by: string | null
+  created_at: string
+  schedule_id: string | null
+}
+
+export interface StudentFeeScheduleRow {
+  id: string
+  student_id: string
+  month_for: string // yyyy-mm-dd (1st of month)
+  expected_amount: number
   created_at: string
 }
 
@@ -279,6 +292,9 @@ export interface InquiryNote {
 // ── Study Material & Online Classes Types ──
 export type ClassPlatform = 'youtube' | 'zoom' | 'google_meet'
 
+export type MaterialType = 'file' | 'video'
+export type VideoProvider = 'youtube' | 'vimeo' | 'other'
+
 export interface StudyMaterial {
   id: string
   program_id: string | null
@@ -286,12 +302,16 @@ export interface StudyMaterial {
   subject_id: string | null
   title: string
   description: string | null
-  file_url: string
+  file_url: string | null
   file_name: string | null
   file_size: number | null
   uploaded_by: string | null
+  uploaded_by_branch_id: string | null
   is_active: boolean
   created_at: string
+  material_type: MaterialType
+  video_url: string | null
+  video_provider: VideoProvider | null
   // Joined
   course?: { name: string } | null
   subject?: { name: string } | null

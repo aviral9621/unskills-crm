@@ -59,6 +59,9 @@ const schema = z.object({
   total_fee: z.coerce.number().min(0),
   discount: z.coerce.number().min(0),
   registration_fee: z.coerce.number().min(0),
+  fee_start_month: z.string().optional().or(z.literal('')),
+  installment_count: z.coerce.number().int().min(0).optional(),
+  monthly_fee: z.coerce.number().min(0).optional(),
 })
 
 type FormData = z.infer<typeof schema>
@@ -187,6 +190,9 @@ export default function StudentRegisterPage() {
         course_id: data.course_id, batch_id: data.batch_id || '', session: data.session || '2025-26',
         admission_year: data.admission_year || '2025-2026',
         total_fee: data.total_fee, discount: data.discount, registration_fee: data.registration_fee,
+        fee_start_month: data.fee_start_month || '',
+        installment_count: data.installment_count ?? 0,
+        monthly_fee: data.monthly_fee ?? 0,
       })
     } catch { toast.error('Failed to load student') }
   }
@@ -310,6 +316,9 @@ export default function StudentRegisterPage() {
         total_fee: form.total_fee, discount: form.discount, net_fee: netFee,
         registration_fee: form.registration_fee, session: form.session,
         admission_year: form.admission_year, enrollment_date: new Date().toISOString().split('T')[0],
+        fee_start_month: form.fee_start_month ? `${form.fee_start_month}-01` : null,
+        installment_count: form.installment_count && form.installment_count > 0 ? form.installment_count : null,
+        monthly_fee: form.monthly_fee && form.monthly_fee > 0 ? form.monthly_fee : null,
         registered_by: user?.id || null, updated_at: new Date().toISOString(),
       }
 
@@ -320,6 +329,8 @@ export default function StudentRegisterPage() {
         const { error } = await supabase.from('uce_students').update(payload).eq('id', editId)
         if (error) throw error
         savedPhotoUrlRef.current = photoFinalUrl
+        // Regenerate monthly schedule whenever plan fields could have changed
+        if (editId) { void supabase.rpc('fn_generate_fee_schedule', { p_student_id: editId }) }
         toast.success('Student updated')
       } else {
         const { data: newStudent, error } = await supabase.from('uce_students').insert({ ...payload, is_active: true }).select().single()
@@ -343,6 +354,11 @@ export default function StudentRegisterPage() {
             payment_date: new Date().toISOString().split('T')[0], payment_mode: 'cash',
             note: 'Registration fee', recorded_by: user?.id || null, status: 'confirmed',
           })
+        }
+
+        // Generate monthly fee schedule if a plan was configured
+        if (newStudent && form.fee_start_month && form.installment_count && form.installment_count > 0) {
+          void supabase.rpc('fn_generate_fee_schedule', { p_student_id: newStudent.id })
         }
 
         // Create Supabase auth account for student (reg_no + phone).
@@ -578,6 +594,22 @@ export default function StudentRegisterPage() {
               <FormField label="Registration Fee (₹)" hint="First payment now">
                 <div className="relative"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span><input type="number" {...register('registration_fee')} className={`${inputClass} pl-8`} min={0} /></div>
               </FormField>
+
+              <div className="rounded-lg border border-dashed border-gray-300 bg-white p-3 mt-1">
+                <p className="text-xs font-semibold text-gray-700 mb-0.5">Monthly Fee Plan <span className="text-gray-400 font-normal">(optional)</span></p>
+                <p className="text-[11px] text-gray-500 mb-3">Set this to auto-generate a monthly payment schedule. Leave blank for flat / one-shot fees.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <FormField label="Fee Start Month">
+                    <input type="month" {...register('fee_start_month')} className={inputClass} />
+                  </FormField>
+                  <FormField label="Installments">
+                    <input type="number" min={0} {...register('installment_count')} className={inputClass} placeholder="e.g. 12" />
+                  </FormField>
+                  <FormField label="Monthly Fee (₹)" hint="Leave blank to auto-split net fee">
+                    <div className="relative"><span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span><input type="number" min={0} {...register('monthly_fee')} className={`${inputClass} pl-8`} placeholder="auto" /></div>
+                  </FormField>
+                </div>
+              </div>
               {!isEdit && certFee > 0 && !isSuperAdmin && (
                 <div className={`rounded-lg p-3 border ${(branch?.wallet_balance || 0) >= certFee ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                   <div className="flex items-center justify-between">
