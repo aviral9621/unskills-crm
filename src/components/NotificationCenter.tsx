@@ -84,6 +84,16 @@ export default function NotificationCenter({
 
   if (!open || !anchor) return null
 
+  // Clamp the panel within the viewport:
+  //   - Decide the target width based on breakpoint.
+  //   - Anchor the right edge to the bell (anchor.right = distance from viewport right).
+  //   - Compute the resulting left edge, then clamp to >= 12px so the panel can never
+  //     slide off the left side on narrow screens.
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1024
+  const targetWidth = vw >= 768 ? 420 : vw >= 640 ? 380 : Math.min(440, vw - 24)
+  const rightClamped = Math.max(12, Math.min(anchor.right, vw - targetWidth - 12))
+  const leftEdge = Math.max(12, vw - rightClamped - targetWidth)
+
   const tabDefs: { key: Tab; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'student_added', label: 'Students' },
@@ -100,12 +110,13 @@ export default function NotificationCenter({
       {/* backdrop */}
       <div className="fixed inset-0 z-[9998]" onClick={onClose} />
 
-      {/* Popover — responsive: anchored on desktop, bottom sheet on mobile */}
+      {/* Popover — responsive: anchored on desktop, clamped to viewport on mobile */}
       <div
-        className="fixed z-[9999] bg-white rounded-2xl shadow-2xl border border-gray-200 w-[calc(100vw-24px)] sm:w-[380px] md:w-[420px] max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="fixed z-[9999] bg-white rounded-2xl shadow-2xl border border-gray-200 max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         style={{
           top: anchor.top,
-          right: Math.max(12, anchor.right),
+          left: leftEdge,
+          width: targetWidth,
         }}
       >
         {/* Header */}

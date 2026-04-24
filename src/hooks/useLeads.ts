@@ -80,6 +80,7 @@ export async function createManualLead(input: Partial<Lead>): Promise<Lead | nul
       source: 'manual',
       course_interest: input.course_interest || null,
       branch_id: input.branch_id || null,
+      assigned_to: input.assigned_to || null,
       notes: input.notes || null,
     })
     .select()
