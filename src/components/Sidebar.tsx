@@ -28,7 +28,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
       { label: 'Branches', icon: Building2, path: '/admin/branches', permission: 'branch' },
       { label: 'Users', icon: Users, path: '/admin/users', permission: 'user' },
       { label: 'Inquiries', icon: MessageSquare, path: '/admin/inquiries', permission: 'inquiry' },
-      { label: 'Leads', icon: MessageCircle, path: '/admin/leads', permission: 'inquiry' },
+      { label: 'Leads', icon: MessageCircle, path: '/admin/leads', permission: 'lead' },
     ],
   },
   {

@@ -5,7 +5,20 @@ import { supabase } from '../../lib/supabase'
 import { ALL_LEAD_STATUSES, LEAD_STATUS_CONFIG, type LeadStatus } from '../../types/leads'
 import { createManualLead } from '../../hooks/useLeads'
 
-interface BranchOpt { id: string; name: string }
+interface UserOpt {
+  id: string
+  full_name: string
+  role: 'super_admin' | 'branch_admin' | 'branch_staff' | 'student'
+  branch_id: string | null
+  branch_name?: string | null
+}
+
+const ROLE_LABEL: Record<UserOpt['role'], string> = {
+  super_admin: 'Super Admin',
+  branch_admin: 'Branch Admin',
+  branch_staff: 'Staff',
+  student: 'Student',
+}
 
 export default function AddLeadDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated?: (id: string) => void }) {
   const [name, setName] = useState('')
@@ -13,20 +26,35 @@ export default function AddLeadDialog({ open, onClose, onCreated }: { open: bool
   const [email, setEmail] = useState('')
   const [status, setStatus] = useState<LeadStatus>('new')
   const [courseInterest, setCourseInterest] = useState('')
-  const [branchId, setBranchId] = useState('')
+  const [assignedTo, setAssignedTo] = useState('')
   const [notes, setNotes] = useState('')
-  const [branches, setBranches] = useState<BranchOpt[]>([])
+  const [users, setUsers] = useState<UserOpt[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!open) return
-    supabase.from('uce_branches').select('id, name').eq('is_active', true).order('name')
-      .then(({ data }) => setBranches((data ?? []) as BranchOpt[]))
+    supabase
+      .from('uce_profiles')
+      .select('id, full_name, role, branch_id, branch:uce_branches(name)')
+      .in('role', ['super_admin', 'branch_admin', 'branch_staff'])
+      .eq('is_active', true)
+      .order('role', { ascending: true })
+      .order('full_name', { ascending: true })
+      .then(({ data }) => {
+        const list = (data ?? []).map((u: Record<string, unknown>) => ({
+          id: String(u.id),
+          full_name: String(u.full_name),
+          role: u.role as UserOpt['role'],
+          branch_id: (u.branch_id as string | null) ?? null,
+          branch_name: (u.branch as { name: string } | null)?.name ?? null,
+        }))
+        setUsers(list)
+      })
   }, [open])
 
   useEffect(() => {
     if (!open) {
-      setName(''); setPhone(''); setEmail(''); setStatus('new'); setCourseInterest(''); setBranchId(''); setNotes('')
+      setName(''); setPhone(''); setEmail(''); setStatus('new'); setCourseInterest(''); setAssignedTo(''); setNotes('')
     }
   }, [open])
 
@@ -34,13 +62,15 @@ export default function AddLeadDialog({ open, onClose, onCreated }: { open: bool
     if (!name.trim() || !phone.trim()) { toast.error('Name and phone are required'); return }
     setSaving(true)
     try {
+      const assignedUser = users.find(u => u.id === assignedTo) || null
       const lead = await createManualLead({
         name: name.trim(),
         phone: phone.trim(),
         email: email.trim() || null,
         status,
         course_interest: courseInterest.trim() || null,
-        branch_id: branchId || null,
+        branch_id: assignedUser?.branch_id || null,
+        assigned_to: assignedUser?.id || null,
         notes: notes.trim() || null,
       })
       if (lead) {
@@ -77,11 +107,20 @@ export default function AddLeadDialog({ open, onClose, onCreated }: { open: bool
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Assign to Branch</label>
-            <select value={branchId} onChange={e => setBranchId(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none">
-              <option value="">None</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            <label className="block text-xs font-medium text-gray-700 mb-1">Assign to User</label>
+            <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none">
+              <option value="">Unassigned</option>
+              {users.map(u => {
+                const hint = [ROLE_LABEL[u.role], u.branch_name].filter(Boolean).join(' · ')
+                return <option key={u.id} value={u.id}>{u.full_name}{hint ? ` — ${hint}` : ''}</option>
+              })}
             </select>
+            {assignedTo && (() => {
+              const u = users.find(x => x.id === assignedTo)
+              return u?.branch_name ? (
+                <p className="text-[11px] text-gray-500 mt-1">Branch will be set to <b>{u.branch_name}</b>.</p>
+              ) : null
+            })()}
           </div>
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-gray-700 mb-1">Course Interest</label>

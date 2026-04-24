@@ -60,6 +60,13 @@ const PERMISSION_MODULES: PermModule[] = [
     { key: 'inquiry.respond', label: 'Respond' },
     { key: 'inquiry.delete', label: 'Delete' },
   ]},
+  { key: 'lead', label: 'Leads', permissions: [
+    { key: 'lead.view', label: 'View Leads' },
+    { key: 'lead.add', label: 'Add Lead' },
+    { key: 'lead.edit', label: 'Edit Lead' },
+    { key: 'lead.assign', label: 'Assign to User' },
+    { key: 'lead.delete', label: 'Delete Lead' },
+  ]},
   { key: 'material', label: 'Study Material', permissions: [
     { key: 'material.view', label: 'View Materials' },
     { key: 'material.add', label: 'Upload Material' },
