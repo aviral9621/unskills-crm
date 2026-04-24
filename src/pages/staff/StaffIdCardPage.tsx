@@ -151,147 +151,173 @@ export default function StaffIdCardPage() {
     }
     setGenerating(true)
     try {
-      const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet } = await import('@react-pdf/renderer')
+      const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet, Font } = await import('@react-pdf/renderer')
+      try {
+        Font.register({
+          family: 'Roboto',
+          fonts: [
+            { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.ttf', fontWeight: 400 },
+            { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4AMP6lQ.ttf', fontWeight: 700 },
+          ],
+        })
+      } catch { /* already registered */ }
 
-      const W = 240, H = 380
+      const PRIMARY = '#B91C1C'
+      const INK = '#111827'
+      const MUTED = '#6B7280'
+      const BORDER = '#E5E7EB'
+      const initialBg = pickInitialColor(selected.name)
 
       const s = StyleSheet.create({
-        page:        { width: W, height: H, fontFamily: 'Helvetica', backgroundColor: '#FFFFFF' },
+        page: { fontFamily: 'Roboto', padding: 36, backgroundColor: '#FFFFFF', color: INK, fontSize: 10 },
 
-        // FRONT
-        header:      { height: 62, backgroundColor: '#111111', flexDirection: 'row', alignItems: 'stretch' },
-        headerRed:   { flex: 1, backgroundColor: '#B91C1C', padding: 6, justifyContent: 'center' },
-        headerTitle: { color: '#FFFFFF', fontSize: 9.5, fontWeight: 'bold', letterSpacing: 0.2 },
-        headerSub:   { color: '#FFFFFF', fontSize: 5, marginTop: 2, lineHeight: 1.3 },
-        headerLogo:  { width: 52, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111111' },
-        logoImg:     { width: 38, height: 38, borderRadius: 19, backgroundColor: '#FFFFFF', padding: 2 },
+        // Brand header
+        brandWrap: { alignItems: 'center', paddingBottom: 8 },
+        brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+        brandLogo: { width: 40, height: 40, marginRight: 10, objectFit: 'contain' },
+        brandUn: { fontSize: 24, fontWeight: 700, color: INK, letterSpacing: 0.3 },
+        brandSk: { fontSize: 24, fontWeight: 700, color: PRIMARY, letterSpacing: 0.3 },
+        brandTail: { fontSize: 18, fontWeight: 700, color: INK, letterSpacing: 0.5, marginLeft: 6 },
+        hqLine: { fontSize: 8.5, color: MUTED, marginTop: 3, textAlign: 'center' },
 
-        body:        { flex: 1, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 6 },
-        photoWrap:   { alignItems: 'center', marginBottom: 5 },
-        photo:       { width: 78, height: 78, objectFit: 'cover', borderRadius: 4, border: '1.5px solid #E5E7EB' },
-        photoPh:     { width: 78, height: 78, borderRadius: 4, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
+        hr: { height: 1, backgroundColor: BORDER, marginTop: 10 },
 
-        name:        { color: '#B91C1C', fontSize: 12.5, fontWeight: 'bold', textAlign: 'center', marginBottom: 1, letterSpacing: 0.3 },
-        designation: { color: '#111827', fontSize: 8.5, textAlign: 'center', marginBottom: 5, fontStyle: 'italic' },
+        // Title pill
+        titleWrap: { alignItems: 'center', marginTop: 16 },
+        titlePill: { backgroundColor: PRIMARY, paddingHorizontal: 22, paddingVertical: 7, borderRadius: 999 },
+        titleText: { color: '#FFFFFF', fontSize: 12, fontWeight: 700, letterSpacing: 3 },
 
-        infoRow:     { flexDirection: 'row', marginBottom: 2.5 },
-        infoLabel:   { width: 68, fontSize: 7.5, color: '#111827' },
-        infoSep:     { width: 6, fontSize: 7.5, color: '#111827' },
-        infoValue:   { flex: 1, fontSize: 7.5, color: '#111827', fontWeight: 'bold' },
+        // Card body — two columns
+        cardWrap: { marginTop: 20, borderWidth: 1.2, borderColor: BORDER, borderRadius: 10, padding: 22 },
+        topRow: { flexDirection: 'row', alignItems: 'center' },
+        photo: { width: 130, height: 150, objectFit: 'cover', borderRadius: 6, borderWidth: 1.5, borderColor: BORDER },
+        photoPh: { width: 130, height: 150, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+        photoPhText: { fontSize: 64, color: '#FFFFFF', fontWeight: 700 },
 
-        footerRed:   { height: 3, backgroundColor: '#B91C1C' },
-        footer:      { backgroundColor: '#111111', paddingHorizontal: 8, paddingVertical: 5 },
-        ftLine:      { color: '#FFFFFF', fontSize: 6, textAlign: 'center', marginBottom: 1.2, lineHeight: 1.3 },
-        ftBold:      { fontWeight: 'bold' },
+        topRight: { flex: 1, paddingLeft: 20 },
+        nameText: { fontSize: 24, fontWeight: 700, color: INK, letterSpacing: 0.4 },
+        desigText: { fontSize: 14, fontWeight: 700, color: PRIMARY, marginTop: 4, letterSpacing: 0.5, textTransform: 'uppercase' },
+        codeRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center' },
+        codeLabel: { fontSize: 8, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6 },
+        codePill: { marginLeft: 6, backgroundColor: '#FEF2F2', borderWidth: 0.8, borderColor: '#F3C7C7', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3, color: PRIMARY, fontSize: 11, fontWeight: 700 },
 
-        // BACK
-        backHeader:  { height: 40, backgroundColor: '#B91C1C', alignItems: 'center', justifyContent: 'center' },
-        backTitle:   { color: '#FFFFFF', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
-        backBody:    { flex: 1, padding: 12, alignItems: 'center' },
-        qr:          { width: 120, height: 120, marginBottom: 8 },
-        validText:   { fontSize: 7, color: '#374151', textAlign: 'center', marginBottom: 10, paddingHorizontal: 8, lineHeight: 1.3 },
-        sigBlock:    { alignItems: 'center', marginBottom: 6, width: '100%' },
-        sigImg:      { width: 90, height: 32, objectFit: 'contain', marginBottom: 1 },
-        sigLine:     { borderTopWidth: 0.8, borderTopColor: '#111827', width: 120, marginBottom: 2 },
-        sigAuth:     { fontSize: 7.5, fontWeight: 'bold', color: '#111827' },
-        sigDesig:    { fontSize: 6.5, color: '#6B7280' },
+        infoGrid: { marginTop: 18, flexDirection: 'row', gap: 18 },
+        infoCol: { flex: 1 },
+        infoRow: { flexDirection: 'row', paddingVertical: 4, borderBottomWidth: 0.6, borderBottomColor: BORDER },
+        infoKey: { width: 90, fontSize: 9, color: MUTED },
+        infoVal: { flex: 1, fontSize: 10, fontWeight: 700, color: INK },
+
+        // QR + signature row
+        qrRow: { flexDirection: 'row', marginTop: 22, alignItems: 'flex-end' },
+        qrCol: { alignItems: 'center' },
+        qrImg: { width: 110, height: 110 },
+        qrCaption: { fontSize: 7.5, color: MUTED, marginTop: 4, textAlign: 'center', maxWidth: 130 },
+        sigCol: { flex: 1, alignItems: 'flex-end' },
+        sigImg: { width: 140, height: 45, objectFit: 'contain' },
+        sigLine: { borderTopWidth: 0.8, borderTopColor: INK, width: 170, marginTop: 2, marginBottom: 3 },
+        sigAuth: { fontSize: 10, fontWeight: 700, color: INK },
+        sigDesig: { fontSize: 8, color: MUTED },
+
+        // Branch footer
+        branchFooter: { marginTop: 22, paddingTop: 10, borderTopWidth: 0.6, borderTopColor: BORDER, flexDirection: 'row', alignItems: 'center' },
+        branchLogo: { width: 34, height: 34, borderRadius: 17, marginRight: 10, objectFit: 'cover' },
+        branchTitle: { fontSize: 11, fontWeight: 700, color: INK },
+        branchSub: { fontSize: 8, color: MUTED, marginTop: 1 },
+        validityBox: { marginTop: 10, padding: 6, borderWidth: 0.6, borderStyle: 'dashed', borderColor: '#F3C7C7', borderRadius: 4 },
+        validityText: { fontSize: 8, color: '#555', textAlign: 'center', fontStyle: 'italic' },
       })
 
-      const course = selected.designation || 'Staff'
+      const designation = selected.designation || 'Staff'
       const branchAddr = formatBranchAddress(selected.branch) || cardSettings.address
-      const headAddr = formatBranchAddress(mainBranch) || cardSettings.address
       const phone = selected.branch?.director_phone || cardSettings.phone
       const qr = qrDataUrl
       const photo = photoDataUrl
       const logo = selectedLogoDataUrl || masterLogoDataUrl
-      const title = selected.branch?.name || cardSettings.header_title
+      const branchTitle = selected.branch?.name || cardSettings.header_title
+      const initials = getInitials(selected.name)
 
       const Doc = (
         <Document>
-          {/* FRONT */}
-          <Page size={[W, H]} wrap={false} style={s.page}>
-            <View style={s.header}>
-              <View style={s.headerRed}>
-                <Text style={s.headerTitle}>{cardSettings.header_title}</Text>
-                <Text style={s.headerSub}>{cardSettings.header_subtitle}</Text>
+          <Page size="A4" style={s.page}>
+            {/* Brand header */}
+            <View style={s.brandWrap}>
+              <View style={s.brandRow}>
+                {logo ? <PdfImage src={logo} style={s.brandLogo} /> : null}
+                <Text style={s.brandUn}>UN</Text>
+                <Text style={s.brandSk}>SKILLS</Text>
+                <Text style={s.brandTail}>COMPUTER EDUCATION</Text>
               </View>
-              <View style={s.headerLogo}>
-                {logo ? <PdfImage src={logo} style={s.logoImg} /> : null}
-              </View>
+              <Text style={s.hqLine}>{cardSettings.header_subtitle}</Text>
+              <Text style={s.hqLine}>{cardSettings.address}</Text>
+              <Text style={s.hqLine}>Ph: {cardSettings.phone} {'\u00B7'} {cardSettings.website}</Text>
+            </View>
+            <View style={s.hr} />
+
+            <View style={s.titleWrap}>
+              <View style={s.titlePill}><Text style={s.titleText}>STAFF IDENTITY CARD</Text></View>
             </View>
 
-            <View style={s.body}>
-              <View style={s.photoWrap}>
+            <View style={s.cardWrap}>
+              <View style={s.topRow}>
                 {photo
                   ? <PdfImage src={photo} style={s.photo} />
-                  : <View style={s.photoPh}><Text style={{ fontSize: 28, color: '#9CA3AF' }}>{selected.name.charAt(0).toUpperCase()}</Text></View>}
-              </View>
+                  : <View style={[s.photoPh, { backgroundColor: initialBg }]}><Text style={s.photoPhText}>{initials}</Text></View>}
 
-              <Text style={s.name}>{selected.name.toUpperCase()}</Text>
-              <Text style={s.designation}>{course}</Text>
-
-              <View style={s.infoRow}>
-                <Text style={s.infoLabel}>Employee Code</Text>
-                <Text style={s.infoSep}>:</Text>
-                <Text style={s.infoValue}>{selected.employee_code || '—'}</Text>
-              </View>
-              <View style={s.infoRow}>
-                <Text style={s.infoLabel}>Father&apos;s Name</Text>
-                <Text style={s.infoSep}>:</Text>
-                <Text style={s.infoValue}>{(selected.father_name || '—').toUpperCase()}</Text>
-              </View>
-              <View style={s.infoRow}>
-                <Text style={s.infoLabel}>D.O.B.</Text>
-                <Text style={s.infoSep}>:</Text>
-                <Text style={s.infoValue}>{selected.dob ? formatDate(selected.dob) : '—'}</Text>
-              </View>
-              <View style={s.infoRow}>
-                <Text style={s.infoLabel}>Mobile No.</Text>
-                <Text style={s.infoSep}>:</Text>
-                <Text style={s.infoValue}>{selected.phone || '—'}</Text>
-              </View>
-              {selected.joining_date && (
-                <View style={s.infoRow}>
-                  <Text style={s.infoLabel}>Joined</Text>
-                  <Text style={s.infoSep}>:</Text>
-                  <Text style={s.infoValue}>{formatDate(selected.joining_date)}</Text>
+                <View style={s.topRight}>
+                  <Text style={s.nameText}>{selected.name.toUpperCase()}</Text>
+                  <Text style={s.desigText}>{designation}</Text>
+                  <View style={s.codeRow}>
+                    <Text style={s.codeLabel}>Employee Code</Text>
+                    <Text style={s.codePill}>{selected.employee_code}</Text>
+                  </View>
                 </View>
-              )}
-            </View>
+              </View>
 
-            <View style={s.footerRed} />
-            <View style={s.footer}>
-              <Text style={s.ftLine}><Text style={s.ftBold}>Branch :</Text> {title}</Text>
-              <Text style={s.ftLine}>{branchAddr}</Text>
-              <Text style={s.ftLine}><Text style={s.ftBold}>Mob :</Text> {phone}</Text>
-            </View>
-          </Page>
+              {/* Info grid */}
+              <View style={s.infoGrid}>
+                <View style={s.infoCol}>
+                  <View style={s.infoRow}><Text style={s.infoKey}>Father's Name</Text><Text style={s.infoVal}>{(selected.father_name || '—').toUpperCase()}</Text></View>
+                  <View style={s.infoRow}><Text style={s.infoKey}>Date of Birth</Text><Text style={s.infoVal}>{selected.dob ? formatDate(selected.dob) : '—'}</Text></View>
+                  <View style={s.infoRow}><Text style={s.infoKey}>Mobile No.</Text><Text style={s.infoVal}>{selected.phone || '—'}</Text></View>
+                </View>
+                <View style={s.infoCol}>
+                  <View style={s.infoRow}><Text style={s.infoKey}>Designation</Text><Text style={s.infoVal}>{designation}</Text></View>
+                  <View style={s.infoRow}><Text style={s.infoKey}>Branch</Text><Text style={s.infoVal}>{branchTitle}</Text></View>
+                  <View style={s.infoRow}><Text style={s.infoKey}>Email</Text><Text style={s.infoVal}>{selected.branch?.director_email || cardSettings.website}</Text></View>
+                </View>
+              </View>
 
-          {/* BACK */}
-          <Page size={[W, H]} wrap={false} style={s.page}>
-            <View style={s.backHeader}>
-              <Text style={s.backTitle}>STAFF IDENTITY</Text>
-            </View>
+              {/* QR + signature */}
+              <View style={s.qrRow}>
+                <View style={s.qrCol}>
+                  {qr ? <PdfImage src={qr} style={s.qrImg} /> : <View style={[s.qrImg, { backgroundColor: '#F3F4F6' }]} />}
+                  <Text style={s.qrCaption}>Scan to verify identity</Text>
+                </View>
+                <View style={s.sigCol}>
+                  {staffSettings.signature_url
+                    ? <PdfImage src={staffSettings.signature_url} style={s.sigImg} />
+                    : null}
+                  <View style={s.sigLine} />
+                  <Text style={s.sigAuth}>{staffSettings.authority_name}</Text>
+                  <Text style={s.sigDesig}>{staffSettings.authority_designation}</Text>
+                </View>
+              </View>
 
-            <View style={s.backBody}>
-              {qr ? <PdfImage src={qr} style={s.qr} /> : <View style={[s.qr, { backgroundColor: '#F3F4F6' }]} />}
-              <Text style={s.validText}>{staffSettings.validity_line}</Text>
-
-              <View style={s.sigBlock}>
-                {staffSettings.signature_url
-                  ? <PdfImage src={staffSettings.signature_url} style={s.sigImg} />
-                  : <View style={[s.sigImg, { backgroundColor: '#F9FAFB' }]} />}
-                <View style={s.sigLine} />
-                <Text style={s.sigAuth}>{staffSettings.authority_name}</Text>
-                <Text style={s.sigDesig}>{staffSettings.authority_designation}</Text>
+              {/* Validity */}
+              <View style={s.validityBox}>
+                <Text style={s.validityText}>{staffSettings.validity_line}</Text>
               </View>
             </View>
 
-            <View style={s.footerRed} />
-            <View style={s.footer}>
-              <Text style={s.ftLine}><Text style={s.ftBold}>Head Office :</Text> {headAddr}</Text>
-              <Text style={s.ftLine}><Text style={s.ftBold}>Phone :</Text> {cardSettings.phone} · {cardSettings.website}</Text>
-              <Text style={s.ftLine}>If found, please return to the Head Office above.</Text>
+            {/* Branch footer */}
+            <View style={s.branchFooter}>
+              {selectedLogoDataUrl
+                ? <PdfImage src={selectedLogoDataUrl} style={s.branchLogo} />
+                : <View style={[s.branchLogo, { backgroundColor: initialBg, alignItems: 'center', justifyContent: 'center' }]}><Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: 700 }}>{(selected.branch?.name || 'B').charAt(0).toUpperCase()}</Text></View>}
+              <View style={{ flex: 1 }}>
+                <Text style={s.branchTitle}>{branchTitle}</Text>
+                <Text style={s.branchSub}>{branchAddr}  {phone ? `\u00B7 Mob: ${phone}` : ''}</Text>
+              </View>
             </View>
           </Page>
         </Document>
@@ -375,7 +401,7 @@ export default function StaffIdCardPage() {
               />
               <button onClick={handleDownloadPdf} disabled={generating}
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
-                {generating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} {generating ? 'Generating…' : 'Download PDF (Front + Back)'}
+                {generating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} {generating ? 'Generating…' : 'Download A4 ID Card'}
               </button>
             </>
           )}
@@ -399,63 +425,87 @@ function StaffIdCardPreview({
 }) {
   const safePhoto = photoUrl && !photoUrl.startsWith('blob:') ? photoUrl : ''
   const branchAddr = formatBranchAddress(employee.branch) || cardSettings.address
-  const headAddr = formatBranchAddress(mainBranch) || cardSettings.address
   const phone = employee.branch?.director_phone || cardSettings.phone
+  const designation = employee.designation || 'Staff'
+  const initials = getInitials(employee.name)
+  const initialBg = pickInitialColor(employee.name)
+  void mainBranch; void title
   return (
-    <div className="space-y-3">
-      {/* FRONT */}
-      <div className="bg-white mx-auto rounded-xl overflow-hidden shadow-lg"
-        style={{ width: 320, fontFamily: '"DM Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
-        <div className="flex items-stretch bg-black" style={{ height: 86 }}>
-          <div className="flex-1 bg-[#B91C1C] px-3 flex flex-col justify-center">
-            <p className="text-white text-[13px] font-bold leading-tight">{cardSettings.header_title}</p>
-            <p className="text-white/90 text-[8px] leading-snug mt-1">{cardSettings.header_subtitle}</p>
-          </div>
-          <div className="w-[70px] flex items-center justify-center">
-            <img src={logoUrl} alt="" className="w-12 h-12 rounded-full bg-white object-contain p-0.5" />
+    <div className="bg-white mx-auto rounded-xl overflow-hidden shadow-lg border border-gray-200 max-w-sm"
+      style={{ fontFamily: '"DM Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
+      {/* Brand header */}
+      <div className="px-5 pt-5 pb-3 flex flex-col items-center">
+        <div className="flex items-center">
+          <img src={logoUrl} alt="" className="w-8 h-8 mr-2 object-contain" />
+          <span className="text-lg font-extrabold text-gray-900 tracking-wide">UN</span>
+          <span className="text-lg font-extrabold text-red-700 tracking-wide">SKILLS</span>
+          <span className="text-sm font-extrabold text-gray-900 ml-1.5">COMPUTER EDUCATION</span>
+        </div>
+        <p className="text-[10px] text-gray-500 mt-1 text-center">{cardSettings.header_subtitle}</p>
+      </div>
+      <div className="h-px bg-gray-200" />
+
+      {/* Title pill */}
+      <div className="flex justify-center py-3">
+        <span className="bg-red-700 text-white px-4 py-1.5 rounded-full text-[10px] font-bold tracking-widest">STAFF IDENTITY CARD</span>
+      </div>
+
+      {/* Body */}
+      <div className="px-5 pb-4">
+        <div className="flex items-start gap-4 mb-4">
+          {safePhoto
+            ? <img src={safePhoto} alt="" className="w-24 h-28 rounded-md object-cover border-2 border-gray-200" />
+            : (
+              <div className="w-24 h-28 rounded-md flex items-center justify-center text-white font-bold text-3xl" style={{ backgroundColor: initialBg }}>
+                {initials}
+              </div>
+            )
+          }
+          <div className="flex-1 min-w-0">
+            <p className="text-lg font-extrabold text-gray-900 uppercase leading-tight break-words">{employee.name}</p>
+            <p className="text-sm font-bold text-red-700 uppercase tracking-wide mt-1">{designation}</p>
+            <div className="mt-3 inline-flex items-baseline gap-1.5">
+              <span className="text-[9px] uppercase tracking-wider text-gray-500">Employee Code</span>
+              <span className="text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded px-2 py-0.5">{employee.employee_code || '—'}</span>
+            </div>
           </div>
         </div>
-        <div className="px-5 pt-3 pb-3">
-          <div className="flex justify-center mb-2">
-            {safePhoto
-              ? <img src={safePhoto} alt="" className="w-[110px] h-[110px] rounded-md object-cover border-2 border-gray-200" />
-              : <div className="w-[110px] h-[110px] rounded-md bg-gray-100 flex items-center justify-center"><User size={50} className="text-gray-400" /></div>
-            }
+
+        <div className="grid grid-cols-2 gap-x-3 text-[11px]">
+          <CardRow label="Father's Name" value={(employee.father_name || '—').toUpperCase()} />
+          <CardRow label="Designation" value={designation} />
+          <CardRow label="D.O.B." value={employee.dob ? formatDate(employee.dob) : '—'} />
+          <CardRow label="Branch" value={employee.branch?.name || '—'} />
+          <CardRow label="Mobile No." value={employee.phone || '—'} />
+        </div>
+
+        {/* QR + signature */}
+        <div className="flex items-end justify-between mt-4 gap-4">
+          <div className="flex flex-col items-center">
+            {qrDataUrl
+              ? <img src={qrDataUrl} alt="QR" className="w-20 h-20" />
+              : <div className="w-20 h-20 bg-gray-100 rounded" />}
+            <p className="text-[8px] text-gray-500 mt-1">Scan to verify</p>
           </div>
-          <p className="text-center text-[18px] font-extrabold text-[#B91C1C] tracking-wide">{employee.name.toUpperCase()}</p>
-          <p className="text-center text-[11px] text-gray-700 italic mb-3">{employee.designation || 'Staff'}</p>
-          <div className="space-y-1 text-[11px] text-gray-900 mb-1">
-            <CardRow label="Employee Code" value={employee.employee_code || '—'} />
-            <CardRow label="Father's Name" value={(employee.father_name || '—').toUpperCase()} />
-            <CardRow label="D.O.B." value={employee.dob ? formatDate(employee.dob) : '—'} />
-            <CardRow label="Mobile No." value={employee.phone || '—'} />
-            {employee.joining_date && <CardRow label="Joined" value={formatDate(employee.joining_date)} />}
+          <div className="flex-1 flex flex-col items-end">
+            {staffSettings.signature_url && <img src={staffSettings.signature_url} alt="sig" className="h-8 object-contain" />}
+            <div className="border-t border-gray-900 w-32 mt-1" />
+            <p className="text-[10px] font-bold text-gray-900 mt-0.5">{staffSettings.authority_name}</p>
+            <p className="text-[8px] text-gray-500">{staffSettings.authority_designation}</p>
           </div>
         </div>
-        <div className="h-1 bg-[#B91C1C]" />
-        <div className="bg-black text-white text-center px-3 py-2.5" style={{ fontSize: 9, lineHeight: 1.45 }}>
-          <p><span className="font-bold">Branch :</span> {title}</p>
-          <p>{branchAddr}</p>
-          <p><span className="font-bold">Mob :</span> {phone}</p>
+
+        <div className="mt-3 rounded border border-dashed border-red-200 bg-red-50/30 px-2 py-1">
+          <p className="text-[9px] text-gray-600 italic text-center">{staffSettings.validity_line}</p>
         </div>
       </div>
 
-      {/* BACK */}
-      <div className="bg-white mx-auto rounded-xl overflow-hidden shadow-lg flex flex-col items-center"
-        style={{ width: 320, fontFamily: '"DM Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
-        <div className="w-full bg-[#B91C1C] text-white text-center py-2 text-sm font-bold tracking-widest">STAFF IDENTITY</div>
-        <div className="p-4 flex flex-col items-center">
-          {qrDataUrl ? <img src={qrDataUrl} alt="QR" className="w-[150px] h-[150px] mb-3" /> : <div className="w-[150px] h-[150px] bg-gray-100 rounded mb-3" />}
-          <p className="text-[10px] text-gray-600 text-center px-4 mb-4">{staffSettings.validity_line}</p>
-          {staffSettings.signature_url && <img src={staffSettings.signature_url} alt="signature" className="h-10 object-contain mb-1" />}
-          <div className="border-t border-gray-900 w-40 mb-1" />
-          <p className="text-[11px] font-bold text-gray-900">{staffSettings.authority_name}</p>
-          <p className="text-[9px] text-gray-500">{staffSettings.authority_designation}</p>
-        </div>
-        <div className="h-1 bg-[#B91C1C] w-full" />
-        <div className="bg-black text-white text-center w-full px-3 py-2" style={{ fontSize: 9, lineHeight: 1.4 }}>
-          <p><span className="font-bold">Head Office :</span> {headAddr}</p>
-          <p><span className="font-bold">Phone :</span> {cardSettings.phone} · {cardSettings.website}</p>
+      {/* Branch footer */}
+      <div className="border-t border-gray-200 px-5 py-2.5 flex items-center gap-2">
+        {logoUrl ? <img src={logoUrl} alt="" className="w-7 h-7 rounded-full object-cover" /> : null}
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold text-gray-900 truncate">{employee.branch?.name || cardSettings.header_title}</p>
+          <p className="text-[8px] text-gray-500 truncate">{branchAddr}  {phone ? `· ${phone}` : ''}</p>
         </div>
       </div>
     </div>
@@ -464,12 +514,27 @@ function StaffIdCardPreview({
 
 function CardRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex">
-      <span className="w-[100px] shrink-0 text-gray-900">{label}</span>
-      <span className="w-2 shrink-0">:</span>
-      <span className="font-bold flex-1 break-words">{value}</span>
+    <div className="flex py-1 border-b border-gray-100 last:border-0">
+      <span className="text-gray-500 mr-2 shrink-0" style={{ minWidth: 80 }}>{label}</span>
+      <span className="font-semibold text-gray-900 break-words flex-1">{value}</span>
     </div>
   )
+}
+
+/** Render-time helpers — no React state. */
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return 'U'
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
+}
+
+function pickInitialColor(seed: string): string {
+  // Deterministic pleasant color — hash the name to one of several brand-friendly tones.
+  const palette = ['#B91C1C', '#C2410C', '#7C3AED', '#1D4ED8', '#0F766E', '#047857', '#BE185D', '#4F46E5']
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0
+  return palette[Math.abs(h) % palette.length]
 }
 
 async function toDataUrl(url: string): Promise<string> {

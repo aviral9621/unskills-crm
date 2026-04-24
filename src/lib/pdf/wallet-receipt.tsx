@@ -28,6 +28,7 @@ interface WalletReceiptInput {
 }
 
 function inr(n: number): string {
+  // U+20B9 (₹) — renders correctly with the Roboto font registered below.
   return '\u20B9 ' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 0 })
 }
 
@@ -56,98 +57,129 @@ function inWords(n: number): string {
   ].filter(Boolean).join(' ').trim()
 }
 
+// Register Roboto once — it has the Indian Rupee glyph (U+20B9) that Helvetica lacks.
+// Idempotent: repeat registrations are no-ops in @react-pdf.
+let FONT_REGISTERED = false
+async function registerRoboto() {
+  if (FONT_REGISTERED) return
+  const { Font } = await import('@react-pdf/renderer')
+  try {
+    Font.register({
+      family: 'Roboto',
+      fonts: [
+        { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.ttf', fontWeight: 400 },
+        { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4AMP6lQ.ttf', fontWeight: 700 },
+      ],
+    })
+    FONT_REGISTERED = true
+  } catch {
+    // Font already registered — ignore.
+  }
+}
+
 export async function downloadWalletReceipt(data: WalletReceiptInput): Promise<void> {
+  await registerRoboto()
   const { pdf, Document, Page, View, Text, Image, StyleSheet } = await import('@react-pdf/renderer')
 
+  // Square 1:1 canvas. 560×560 pt gives an A5-ish printable size with room for the branded layout.
+  const SIZE = 560
   const PRIMARY = '#B91C1C'
   const INK = '#111827'
   const MUTED = '#6B7280'
   const BORDER = '#E5E7EB'
+  const RED_BG = '#FEF2F2'
 
   const styles = StyleSheet.create({
-    page: { padding: 28, fontFamily: 'Helvetica', fontSize: 10, color: INK },
-    outer: { borderWidth: 1.2, borderColor: PRIMARY, borderRadius: 6, padding: 14, height: '100%' },
+    page: { padding: 18, fontFamily: 'Roboto', fontSize: 9, color: INK, backgroundColor: '#FFFFFF' },
+    outer: { borderWidth: 1, borderColor: '#F3D8D8', borderRadius: 10, padding: 16, height: '100%' },
 
-    hqHeader: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1.5, borderBottomColor: PRIMARY, paddingBottom: 10 },
-    logoBox: { width: 54, height: 54, marginRight: 12, alignItems: 'center', justifyContent: 'center' },
-    logoImg: { width: 54, height: 54, objectFit: 'contain' },
-    hqMid: { flex: 1 },
-    orgName: { fontSize: 18, fontWeight: 700, color: PRIMARY, letterSpacing: 0.3 },
-    orgSub: { fontSize: 9, color: MUTED, marginTop: 2 },
-    orgAddr: { fontSize: 8.5, color: MUTED, marginTop: 1 },
+    // Brand header
+    brandWrap: { alignItems: 'center', paddingBottom: 6 },
+    brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+    logo: { width: 38, height: 38, marginRight: 10, objectFit: 'contain' },
+    brandUn: { fontSize: 22, fontWeight: 700, color: INK, letterSpacing: 0.3 },
+    brandSk: { fontSize: 22, fontWeight: 700, color: PRIMARY, letterSpacing: 0.3 },
+    brandTail: { fontSize: 16, fontWeight: 700, color: INK, letterSpacing: 0.4, marginLeft: 6 },
+    hqLine: { fontSize: 8, color: MUTED, marginTop: 3, textAlign: 'center' },
+    hqAddr: { fontSize: 8, color: MUTED, textAlign: 'center' },
+    hr: { height: 1, backgroundColor: BORDER, marginTop: 10 },
 
-    titleWrap: { alignItems: 'center', marginTop: 12 },
-    titleBg: { backgroundColor: PRIMARY, color: '#fff', paddingHorizontal: 22, paddingVertical: 5, borderRadius: 3 },
-    titleText: { color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: 3 },
-    subTitleText: { fontSize: 8.5, color: MUTED, marginTop: 4 },
+    // Title pill
+    titleWrap: { alignItems: 'center', marginTop: 10 },
+    titlePill: { backgroundColor: PRIMARY, paddingHorizontal: 22, paddingVertical: 7, borderRadius: 999 },
+    titleText: { color: '#FFFFFF', fontSize: 11, fontWeight: 700, letterSpacing: 2 },
+    titleSub: { fontSize: 8, color: MUTED, marginTop: 4 },
 
-    metaRow: { flexDirection: 'row', marginTop: 14 },
+    // Meta row: receipt no & date
+    metaRow: { flexDirection: 'row', marginTop: 12, paddingBottom: 6, borderBottomWidth: 0.6, borderBottomColor: BORDER },
     metaCol: { flex: 1 },
-    metaLabel: { fontSize: 8, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6 },
-    metaValue: { fontSize: 11, fontWeight: 700, marginTop: 2 },
+    metaLabel: { fontSize: 7.5, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8 },
+    metaValue: { fontSize: 12, fontWeight: 700, marginTop: 2, color: PRIMARY },
 
-    twoCol: { flexDirection: 'row', marginTop: 14, gap: 12 },
-    card: { flex: 1, borderWidth: 1, borderColor: BORDER, borderRadius: 4, padding: 10 },
-    cardTitle: { fontSize: 8, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+    // Two cards
+    twoCol: { flexDirection: 'row', marginTop: 12, gap: 10 },
+    card: { flex: 1, borderWidth: 0.8, borderColor: BORDER, borderRadius: 6, padding: 9 },
+    cardTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+    cardDot: { width: 12, height: 12, backgroundColor: PRIMARY, borderRadius: 3, marginRight: 6 },
+    cardTitle: { fontSize: 7.5, color: PRIMARY, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700 },
     kv: { flexDirection: 'row', marginTop: 3 },
-    kvK: { width: 75, color: MUTED, fontSize: 9 },
-    kvV: { flex: 1, fontSize: 10, fontWeight: 700 },
+    kvK: { width: 60, color: MUTED, fontSize: 8 },
+    kvV: { flex: 1, fontSize: 9, fontWeight: 700 },
 
-    amountBox: { marginTop: 14, padding: 12, backgroundColor: '#FEF2F2', borderLeftWidth: 4, borderLeftColor: PRIMARY, borderRadius: 3 },
+    // Amount pill
+    amountBox: { marginTop: 12, padding: 12, backgroundColor: RED_BG, borderLeftWidth: 4, borderLeftColor: PRIMARY, borderRadius: 4 },
     amountRow: { flexDirection: 'row', alignItems: 'center' },
-    amountLabel: { flex: 1, fontSize: 10, color: MUTED },
-    amountValue: { fontSize: 22, fontWeight: 700, color: PRIMARY },
-    amountWords: { marginTop: 6, fontSize: 9.5, color: INK },
-    amountWordsEm: { fontStyle: 'italic', fontWeight: 700 },
+    amountLeft: { flex: 1 },
+    amountLabel: { fontSize: 9, color: PRIMARY, fontWeight: 700, letterSpacing: 0.5 },
+    amountWords: { fontSize: 8.5, color: INK, marginTop: 4, fontStyle: 'italic' },
+    amountValue: { fontSize: 26, fontWeight: 700, color: PRIMARY },
 
-    terms: { marginTop: 14, padding: 9, borderWidth: 1, borderColor: BORDER, borderRadius: 3, borderStyle: 'dashed' },
-    termsTitle: { fontSize: 8, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 },
-    termsText: { fontSize: 8.5, color: '#444', lineHeight: 1.4 },
+    // Notes
+    notes: { marginTop: 10, padding: 8, borderWidth: 0.8, borderStyle: 'dashed', borderColor: '#F3C7C7', borderRadius: 4 },
+    notesTitle: { fontSize: 7.5, color: PRIMARY, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, marginBottom: 3 },
+    notesText: { fontSize: 8, color: '#555', lineHeight: 1.45 },
 
-    sigBlock: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 22 },
-    sigGroup: { alignItems: 'center' },
-    sigLine: { borderTopWidth: 1, borderTopColor: INK, width: 150, marginBottom: 3 },
-    sigLabel: { fontSize: 8.5, color: MUTED, textAlign: 'center' },
-
-    branchFooter: { marginTop: 14, borderTopWidth: 0.8, borderTopColor: BORDER, paddingTop: 6 },
-    branchFooterRow: { flexDirection: 'row', alignItems: 'center' },
-    branchFooterLogo: { width: 24, height: 24, marginRight: 8, objectFit: 'contain' },
-    branchFooterTitle: { fontSize: 9, fontWeight: 700, color: PRIMARY },
-    branchFooterSub: { fontSize: 7.5, color: MUTED },
-
-    copyNote: { marginTop: 8, fontSize: 7.5, textAlign: 'center', color: MUTED, fontStyle: 'italic' },
+    // Footer branch bar
+    footer: { marginTop: 'auto', paddingTop: 10, borderTopWidth: 0.6, borderTopColor: BORDER, flexDirection: 'row', alignItems: 'center' },
+    initial: { width: 28, height: 28, borderRadius: 14, backgroundColor: PRIMARY, color: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+    initialLogo: { width: 28, height: 28, borderRadius: 14, marginRight: 8, objectFit: 'cover' },
+    initialText: { color: '#FFFFFF', fontSize: 10, fontWeight: 700 },
+    footerTitle: { fontSize: 9, fontWeight: 700, color: INK },
+    footerSub: { fontSize: 7.5, color: MUTED, marginTop: 1 },
+    footerRight: { alignItems: 'flex-end' },
+    footerRightText: { fontSize: 7, color: MUTED, fontStyle: 'italic' },
   })
 
   const prettyMode = (data.mode || '').replace(/_/g, ' ').toUpperCase()
   const hqLogoUrl = data.hq.logo_url
+  const branchLogoUrl = data.branch.logo_url
+  const branchInitial = (data.branch.code || data.branch.name || 'B').slice(0, 4).toUpperCase()
 
   const Doc = (
     <Document>
-      <Page size="A4" style={styles.page}>
+      <Page size={[SIZE, SIZE]} style={styles.page}>
         <View style={styles.outer}>
-          {/* HQ Header */}
-          <View style={styles.hqHeader}>
-            <View style={styles.logoBox}>
-              {hqLogoUrl
-                ? <Image src={hqLogoUrl} style={styles.logoImg} />
-                : <Text style={{ fontSize: 20, fontWeight: 700, color: PRIMARY }}>U</Text>}
+          {/* Brand header — UN (black) + SKILLS (red) + COMPUTER EDUCATION */}
+          <View style={styles.brandWrap}>
+            <View style={styles.brandRow}>
+              {hqLogoUrl ? <Image src={hqLogoUrl} style={styles.logo} /> : null}
+              <Text style={styles.brandUn}>UN</Text>
+              <Text style={styles.brandSk}>SKILLS</Text>
+              <Text style={styles.brandTail}>COMPUTER EDUCATION</Text>
             </View>
-            <View style={styles.hqMid}>
-              <Text style={styles.orgName}>{data.hq.name}</Text>
-              {data.hq.subtitle ? <Text style={styles.orgSub}>{data.hq.subtitle}</Text> : null}
-              <Text style={styles.orgAddr}>{data.hq.address}</Text>
-              <Text style={styles.orgAddr}>
-                {data.hq.phone ? `Ph: ${data.hq.phone}` : ''}
-                {data.hq.website ? `  \u00B7  ${data.hq.website}` : ''}
-              </Text>
-            </View>
+            {data.hq.subtitle ? <Text style={styles.hqLine}>{data.hq.subtitle}</Text> : null}
+            <Text style={styles.hqAddr}>{data.hq.address}</Text>
+            <Text style={styles.hqLine}>Ph: {data.hq.phone} \u00B7 {data.hq.website}</Text>
           </View>
+          <View style={styles.hr} />
 
+          {/* Title pill */}
           <View style={styles.titleWrap}>
-            <View style={styles.titleBg}><Text style={styles.titleText}>WALLET RELOAD RECEIPT</Text></View>
-            <Text style={styles.subTitleText}>Official acknowledgement of branch wallet payment</Text>
+            <View style={styles.titlePill}><Text style={styles.titleText}>WALLET RELOAD RECEIPT</Text></View>
+            <Text style={styles.titleSub}>Official acknowledgement of branch wallet payment</Text>
           </View>
 
+          {/* Meta */}
           <View style={styles.metaRow}>
             <View style={styles.metaCol}>
               <Text style={styles.metaLabel}>Receipt No.</Text>
@@ -155,13 +187,17 @@ export async function downloadWalletReceipt(data: WalletReceiptInput): Promise<v
             </View>
             <View style={[styles.metaCol, { alignItems: 'flex-end' }]}>
               <Text style={styles.metaLabel}>Date</Text>
-              <Text style={styles.metaValue}>{new Date(data.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Text>
+              <Text style={[styles.metaValue, { color: INK }]}>{new Date(data.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Text>
             </View>
           </View>
 
+          {/* Two cards */}
           <View style={styles.twoCol}>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Payer (Branch)</Text>
+              <View style={styles.cardTitleRow}>
+                <View style={styles.cardDot} />
+                <Text style={styles.cardTitle}>Payer (Branch)</Text>
+              </View>
               <View style={styles.kv}><Text style={styles.kvK}>Branch</Text><Text style={styles.kvV}>{data.branch.name}</Text></View>
               <View style={styles.kv}><Text style={styles.kvK}>Code</Text><Text style={styles.kvV}>{data.branch.code}{data.branch.b_code ? `  \u00B7  ${data.branch.b_code}` : ''}</Text></View>
               {data.branch.society_name ? <View style={styles.kv}><Text style={styles.kvK}>Society</Text><Text style={styles.kvV}>{data.branch.society_name}</Text></View> : null}
@@ -169,51 +205,49 @@ export async function downloadWalletReceipt(data: WalletReceiptInput): Promise<v
               {data.branch.address ? <View style={styles.kv}><Text style={styles.kvK}>Address</Text><Text style={styles.kvV}>{data.branch.address}</Text></View> : null}
             </View>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Payment</Text>
+              <View style={styles.cardTitleRow}>
+                <View style={styles.cardDot} />
+                <Text style={styles.cardTitle}>Payment Details</Text>
+              </View>
               <View style={styles.kv}><Text style={styles.kvK}>Mode</Text><Text style={styles.kvV}>{prettyMode}</Text></View>
               {data.txnRef ? <View style={styles.kv}><Text style={styles.kvK}>Txn Ref</Text><Text style={styles.kvV}>{data.txnRef}</Text></View> : null}
-              {data.requestId ? <View style={styles.kv}><Text style={styles.kvK}>Request ID</Text><Text style={styles.kvV}>{data.requestId}</Text></View> : null}
               {data.approvedAt ? <View style={styles.kv}><Text style={styles.kvK}>Approved</Text><Text style={styles.kvV}>{new Date(data.approvedAt).toLocaleString('en-IN')}</Text></View> : null}
               {data.note ? <View style={styles.kv}><Text style={styles.kvK}>Note</Text><Text style={styles.kvV}>{data.note}</Text></View> : null}
             </View>
           </View>
 
+          {/* Amount */}
           <View style={styles.amountBox}>
             <View style={styles.amountRow}>
-              <Text style={styles.amountLabel}>AMOUNT CREDITED</Text>
+              <View style={styles.amountLeft}>
+                <Text style={styles.amountLabel}>AMOUNT CREDITED</Text>
+                <Text style={styles.amountWords}>In words: {inWords(data.amount)} Rupees Only</Text>
+              </View>
               <Text style={styles.amountValue}>{inr(data.amount)}</Text>
             </View>
-            <Text style={styles.amountWords}>
-              In words: <Text style={styles.amountWordsEm}>{inWords(data.amount)} Rupees Only</Text>
-            </Text>
           </View>
 
-          <View style={styles.terms}>
-            <Text style={styles.termsTitle}>Notes</Text>
-            <Text style={styles.termsText}>
-              1. This receipt acknowledges credit of the above amount into the branch wallet.
-              {'  '}2. Amount once credited is non-refundable and may be used only towards platform-approved debits.
-              {'  '}3. Retain this receipt for your records; reference the Receipt No. in all future queries.
-            </Text>
+          {/* Notes */}
+          <View style={styles.notes}>
+            <Text style={styles.notesTitle}>Notes</Text>
+            <Text style={styles.notesText}>1. This receipt acknowledges credit of the above amount into the branch wallet.</Text>
+            <Text style={styles.notesText}>2. Amount once credited is non-refundable and may be used only towards platform-approved debits.</Text>
+            <Text style={styles.notesText}>3. Retain this receipt for your records; reference the Receipt No. in all future queries.</Text>
           </View>
 
-          <View style={styles.sigBlock}>
-            <View style={styles.sigGroup}><View style={styles.sigLine} /><Text style={styles.sigLabel}>Branch Signatory</Text></View>
-            <View style={styles.sigGroup}><View style={styles.sigLine} /><Text style={styles.sigLabel}>Authorised Signatory (HQ)</Text></View>
-          </View>
-
-          {/* Branch footer */}
-          <View style={styles.branchFooter}>
-            <View style={styles.branchFooterRow}>
-              {data.branch.logo_url ? <Image src={data.branch.logo_url} style={styles.branchFooterLogo} /> : null}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.branchFooterTitle}>{data.branch.name} ({data.branch.code})</Text>
-                <Text style={styles.branchFooterSub}>{[data.branch.address, data.branch.phone].filter(Boolean).join('  \u00B7  ')}</Text>
-              </View>
+          {/* Footer */}
+          <View style={styles.footer}>
+            {branchLogoUrl
+              ? <Image src={branchLogoUrl} style={styles.initialLogo} />
+              : <View style={styles.initial}><Text style={styles.initialText}>{branchInitial.slice(0, 3)}</Text></View>}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.footerTitle}>{data.branch.name} ({data.branch.code})</Text>
+              <Text style={styles.footerSub}>{data.branch.address || ''}</Text>
             </View>
-            <Text style={styles.copyNote}>
-              Computer-generated receipt. Branch copy / Head-office copy.
-            </Text>
+            <View style={styles.footerRight}>
+              <Text style={styles.footerRightText}>Computer-generated receipt.</Text>
+              <Text style={styles.footerRightText}>Branch copy.</Text>
+            </View>
           </View>
         </View>
       </Page>
