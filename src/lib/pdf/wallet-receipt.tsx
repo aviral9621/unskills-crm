@@ -57,18 +57,20 @@ function inWords(n: number): string {
   ].filter(Boolean).join(' ').trim()
 }
 
-// Register Roboto once — it has the Indian Rupee glyph (U+20B9) that Helvetica lacks.
-// Idempotent: repeat registrations are no-ops in @react-pdf.
+// Register Roboto from the app's own /public/fonts so the ₹ glyph (U+20B9) renders
+// correctly in the PDF. Served from our own origin to avoid CORS / stale CDN 404s.
+// Idempotent: subsequent calls are no-ops.
 let FONT_REGISTERED = false
 async function registerRoboto() {
   if (FONT_REGISTERED) return
   const { Font } = await import('@react-pdf/renderer')
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
   try {
     Font.register({
       family: 'Roboto',
       fonts: [
-        { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.ttf', fontWeight: 400 },
-        { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4AMP6lQ.ttf', fontWeight: 700 },
+        { src: `${origin}/fonts/Roboto-Regular.ttf`, fontWeight: 400 },
+        { src: `${origin}/fonts/Roboto-Bold.ttf`,    fontWeight: 700 },
       ],
     })
     FONT_REGISTERED = true
@@ -131,7 +133,7 @@ export async function downloadWalletReceipt(data: WalletReceiptInput): Promise<v
     amountRow: { flexDirection: 'row', alignItems: 'center' },
     amountLeft: { flex: 1 },
     amountLabel: { fontSize: 9, color: PRIMARY, fontWeight: 700, letterSpacing: 0.5 },
-    amountWords: { fontSize: 8.5, color: INK, marginTop: 4, fontStyle: 'italic' },
+    amountWords: { fontSize: 8.5, color: '#4B5563', marginTop: 4 },
     amountValue: { fontSize: 26, fontWeight: 700, color: PRIMARY },
 
     // Notes
@@ -147,7 +149,7 @@ export async function downloadWalletReceipt(data: WalletReceiptInput): Promise<v
     footerTitle: { fontSize: 9, fontWeight: 700, color: INK },
     footerSub: { fontSize: 7.5, color: MUTED, marginTop: 1 },
     footerRight: { alignItems: 'flex-end' },
-    footerRightText: { fontSize: 7, color: MUTED, fontStyle: 'italic' },
+    footerRightText: { fontSize: 7, color: MUTED },
   })
 
   const prettyMode = (data.mode || '').replace(/_/g, ' ').toUpperCase()

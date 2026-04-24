@@ -152,12 +152,13 @@ export default function StaffIdCardPage() {
     setGenerating(true)
     try {
       const { pdf, Document, Page, View, Text, Image: PdfImage, StyleSheet, Font } = await import('@react-pdf/renderer')
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
       try {
         Font.register({
           family: 'Roboto',
           fonts: [
-            { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.ttf', fontWeight: 400 },
-            { src: 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4AMP6lQ.ttf', fontWeight: 700 },
+            { src: `${origin}/fonts/Roboto-Regular.ttf`, fontWeight: 400 },
+            { src: `${origin}/fonts/Roboto-Bold.ttf`,    fontWeight: 700 },
           ],
         })
       } catch { /* already registered */ }
@@ -224,7 +225,7 @@ export default function StaffIdCardPage() {
         branchTitle: { fontSize: 11, fontWeight: 700, color: INK },
         branchSub: { fontSize: 8, color: MUTED, marginTop: 1 },
         validityBox: { marginTop: 10, padding: 6, borderWidth: 0.6, borderStyle: 'dashed', borderColor: '#F3C7C7', borderRadius: 4 },
-        validityText: { fontSize: 8, color: '#555', textAlign: 'center', fontStyle: 'italic' },
+        validityText: { fontSize: 8, color: '#555', textAlign: 'center' },
       })
 
       const designation = selected.designation || 'Staff'
