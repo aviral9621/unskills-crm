@@ -1,13 +1,18 @@
 /**
  * Authorised Training Center (ATC) Certificate generator.
  *
- * PORTRAIT A4 (595.28 × 841.89 pt). The decorative border + greek-key
- * ornamentation is supplied by the fixed template asset at
- *   /public/Branch Certificate.pdf
- * which we embed as the page background — all dynamic text/logos/QR are
- * overlaid inside that template's inner safe zone.
+ * PORTRAIT A4 (595.28 × 841.89 pt). Border + ornamentation comes from the
+ * template asset at `/public/Branch Certificate.pdf` (embedded as the page
+ * background). The round UnSkills logo is also baked into the template, so we
+ * don't draw side logos any more — content sits inside the inner safe zone.
  *
- * Inner safe zone for content: x ∈ [75, W-75], y ∈ [65, H-70].
+ * Fonts (per design guide):
+ *   - Montserrat 400 / 500 / 600 / 700  → almost everything
+ *   - Playfair Display Italic           → "Certificate" heading + "&"
+ *
+ * Static TTFs sit in /public/fonts/. If a font fetch fails (network, etc.)
+ * the loader falls back to the closest PDF standard font so generation never
+ * crashes mid-flight.
  */
 import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb, degrees } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
@@ -47,11 +52,14 @@ const C = {
   textSecondary: rgb(0.29, 0.29, 0.29),
 }
 
+// ─── Font loading ────────────────────────────────────────────────────────────
+
 interface FontSet {
-  body: PDFFont
-  bodyBold: PDFFont
-  serifItalic: PDFFont
-  display: PDFFont
+  m400: PDFFont       // Montserrat Regular
+  m500: PDFFont       // Montserrat Medium
+  m600: PDFFont       // Montserrat SemiBold
+  m700: PDFFont       // Montserrat Bold
+  pfdItalic: PDFFont  // Playfair Display Italic (variable, default ~400)
 }
 
 async function fetchBytes(path: string): Promise<ArrayBuffer | null> {
@@ -66,17 +74,26 @@ async function fetchBytes(path: string): Promise<ArrayBuffer | null> {
 
 async function loadFonts(doc: PDFDocument): Promise<FontSet> {
   doc.registerFontkit(fontkit)
-  const body = await doc.embedFont(StandardFonts.Helvetica)
-  const bodyBold = await doc.embedFont(StandardFonts.HelveticaBold)
-  const serifItalic = await doc.embedFont(StandardFonts.TimesRomanBoldItalic)
+  // Standard PDF fallbacks — used only if a fetch fails.
+  const fbBody    = await doc.embedFont(StandardFonts.Helvetica)
+  const fbBold    = await doc.embedFont(StandardFonts.HelveticaBold)
+  const fbItalic  = await doc.embedFont(StandardFonts.TimesRomanBoldItalic)
+  const opts = { features: { liga: false, dlig: false, clig: false } } as const
 
-  const displayBytes = await fetchBytes('/fonts/ArchivoBlack-Regular.ttf')
-  const displayOpts = { features: { liga: false, dlig: false, clig: false } } as const
-  const display = displayBytes
-    ? await doc.embedFont(displayBytes, displayOpts).catch(() => bodyBold)
-    : bodyBold
+  async function tryLoad(path: string, fb: PDFFont): Promise<PDFFont> {
+    const bytes = await fetchBytes(path)
+    if (!bytes) return fb
+    try { return await doc.embedFont(bytes, opts) } catch { return fb }
+  }
 
-  return { body, bodyBold, serifItalic, display }
+  const [m400, m500, m600, m700, pfdItalic] = await Promise.all([
+    tryLoad('/fonts/Montserrat-Regular.ttf',         fbBody),
+    tryLoad('/fonts/Montserrat-Medium.ttf',          fbBody),
+    tryLoad('/fonts/Montserrat-SemiBold.ttf',        fbBold),
+    tryLoad('/fonts/Montserrat-Bold.ttf',            fbBold),
+    tryLoad('/fonts/PlayfairDisplay-Italic-VF.ttf',  fbItalic),
+  ])
+  return { m400, m500, m600, m700, pfdItalic }
 }
 
 async function embedAny(doc: PDFDocument, src: string): Promise<PDFImage | null> {
@@ -134,25 +151,52 @@ function drawLine(page: PDFPage, x1: number, y1: number, x2: number, y2: number,
   page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: t, color })
 }
 
+/**
+ * Draw "Label : Value" in two different fonts/weights, centered as one line.
+ * Used for "Applicant Name : ..." and "ATC Code : ..." rows where the label
+ * is SemiBold and the value is Medium (per design guide).
+ */
+function drawLabelValue(
+  page: PDFPage,
+  label: string,
+  value: string,
+  opts: {
+    cx: number; y: number; size: number
+    labelFont: PDFFont; valueFont: PDFFont
+    labelColor?: ReturnType<typeof rgb>; valueColor?: ReturnType<typeof rgb>
+  },
+) {
+  const { cx, y, size, labelFont, valueFont } = opts
+  const labelColor = opts.labelColor ?? C.textDark
+  const valueColor = opts.valueColor ?? C.textDark
+  const wLabel = labelFont.widthOfTextAtSize(label, size)
+  const wValue = valueFont.widthOfTextAtSize(value, size)
+  const total  = wLabel + wValue
+  let x = cx - total / 2
+  page.drawText(label, { x, y, size, font: labelFont, color: labelColor })
+  x += wLabel
+  page.drawText(value, { x, y, size, font: valueFont, color: valueColor })
+}
+
 /** Two-colour masthead: UN (black) + SKILLS (red) + ' COMPUTER EDUCATION' (black) + TM. */
-function drawMasthead(page: PDFPage, fonts: FontSet, cx: number, y: number, size: number) {
-  const un = 'UN'
+function drawMasthead(page: PDFPage, font: PDFFont, cx: number, y: number, size: number) {
+  const un     = 'UN'
   const skills = 'SKILLS'
-  const rest = ' COMPUTER EDUCATION'
+  const rest   = ' COMPUTER EDUCATION'
   const tmSize = size * 0.35
-  const wUn    = fonts.display.widthOfTextAtSize(un, size)
-  const wSkills = fonts.display.widthOfTextAtSize(skills, size)
-  const wRest  = fonts.display.widthOfTextAtSize(rest, size)
-  const wTm    = fonts.display.widthOfTextAtSize('TM', tmSize)
+  const wUn    = font.widthOfTextAtSize(un, size)
+  const wSkills = font.widthOfTextAtSize(skills, size)
+  const wRest  = font.widthOfTextAtSize(rest, size)
+  const wTm    = font.widthOfTextAtSize('TM', tmSize)
   const total  = wUn + wSkills + wRest + wTm
   let x = cx - total / 2
-  page.drawText(un,    { x, y, size, font: fonts.display, color: C.black })
+  page.drawText(un,     { x, y, size, font, color: C.black })
   x += wUn
-  page.drawText(skills, { x, y, size, font: fonts.display, color: C.red })
+  page.drawText(skills, { x, y, size, font, color: C.red })
   x += wSkills
-  page.drawText(rest,  { x, y, size, font: fonts.display, color: C.black })
+  page.drawText(rest,   { x, y, size, font, color: C.black })
   x += wRest
-  page.drawText('TM',  { x, y: y + size * 0.55, size: tmSize, font: fonts.display, color: C.black })
+  page.drawText('TM',   { x, y: y + size * 0.55, size: tmSize, font, color: C.black })
 }
 
 /** Wrap centered text, returns baseline of last line. */
@@ -202,7 +246,7 @@ async function drawFooterBadges(doc: PDFDocument, page: PDFPage, y: number, tota
   const count = images.filter(Boolean).length
   if (count === 0) return
 
-  const rowH = 26   // taller rows so NSDC and others are clearly visible
+  const rowH = 26
   const slotW = totalWidth / count
   let slot = 0
   for (const img of images) {
@@ -250,148 +294,118 @@ async function makeDocWithTemplate(): Promise<PDFDocument> {
 // ─── Main generator ──────────────────────────────────────────────────────────
 
 export async function generateAtcCertificate(data: AtcCertificateData): Promise<Uint8Array> {
-  const doc = await makeDocWithTemplate()
-  const page = doc.getPages()[0]
+  const doc   = await makeDocWithTemplate()
+  const page  = doc.getPages()[0]
   const { width: W, height: H } = page.getSize()
-  const cx = W / 2
+  const cx    = W / 2
   const LEFT  = 75
-  const RIGHT  = W - 75
-  const fonts  = await loadFonts(doc)
+  const RIGHT = W - 75
+  const fonts = await loadFonts(doc)
 
-  // ── 1. TOP META ──────────────────────────────────────────────────────────
-  // Moved inward (LEFT+20 / RIGHT-20) so text never touches the border.
+  // ── 1. TOP META — Montserrat 500 (Medium) ─────────────────────────────────
   drawText(page, 'Reg. by Govt. of India', {
-    x: LEFT + 20, y: H - 80, size: 8.5, font: fonts.bodyBold, color: C.textDark,
+    x: LEFT + 20, y: H - 80, size: 8.5, font: fonts.m500, color: C.textDark,
   })
   drawText(page, `Reg. No.: ${data.regNumber || '220102'}`, {
-    x: RIGHT - 20, y: H - 80, size: 8.5, font: fonts.bodyBold,
+    x: RIGHT - 20, y: H - 80, size: 8.5, font: fonts.m500,
     align: 'right', color: C.textDark,
   })
 
-  // ── 2. BRAND MASTHEAD (no side logo — clean full-width heading) ───────────
-  // UN (black) + SKILLS (red) + ' COMPUTER EDUCATION' (black) + TM, size 24.
-  drawMasthead(page, fonts, cx, H - 112, 24)
+  // ── 2. BRAND MASTHEAD — Montserrat 700 (Bold), SKILLS in red ──────────────
+  drawMasthead(page, fonts.m700, cx, H - 112, 22)
+
+  // ── 3. SUB-HEADING LINES — Montserrat 400 (Regular) ───────────────────────
   drawText(page, 'A Unit of: UnSkills FuturePath Tech Pvt. Ltd.  |  Regd. by Govt. of India Reg. No. 220102', {
-    x: cx, y: H - 135, size: 7.5, font: fonts.body, color: C.textDark, align: 'center',
+    x: cx, y: H - 134, size: 7.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
   drawText(page, 'Alliance with Skills India, MSME, NITI Aayog, NSDC, Labour Department', {
-    x: cx, y: H - 147, size: 7.5, font: fonts.body, color: C.textDark, align: 'center',
+    x: cx, y: H - 146, size: 7.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
 
-  // ── 3. ISO STRIP ─────────────────────────────────────────────────────────
-  const isoText = 'AN ISO 9001:2015 CERTIFIED ORGANIZATION'
-  const isoSize = 9
-  const isoTextW = fonts.bodyBold.widthOfTextAtSize(isoText, isoSize)
+  // ── 4. ISO STRIP — Montserrat 600 (SemiBold), white on dark navy bar ──────
+  const isoText  = 'AN ISO 9001:2015 CERTIFIED ORGANIZATION'
+  const isoSize  = 9
+  const isoTextW = fonts.m600.widthOfTextAtSize(isoText, isoSize)
   const isoStripW = isoTextW + 28
-  drawRect(page, cx - isoStripW / 2, H - 170, isoStripW, 15, C.black)
+  drawRect(page, cx - isoStripW / 2, H - 170, isoStripW, 15, C.navy)
   drawText(page, isoText, {
-    x: cx, y: H - 166, size: isoSize, font: fonts.bodyBold,
+    x: cx, y: H - 166, size: isoSize, font: fonts.m600,
     color: C.white, align: 'center', letterSpacing: 0.3,
   })
 
-  // ── 4. CERTIFICATE TITLE ─────────────────────────────────────────────────
+  // (Round logo is baked into the template at this position — no overlay needed.)
+
+  // ── 5. CERTIFICATE TITLE — Playfair Display Italic ────────────────────────
+  // The user's font guide specifies "Playfair Display 500 Italic"; we use the
+  // Italic variable font (default instance ≈ 400, visually similar to 500).
   drawText(page, 'Certificate', {
-    x: cx, y: H - 210, size: 36, font: fonts.serifItalic, color: C.navy, align: 'center',
+    x: cx, y: H - 245, size: 38, font: fonts.pfdItalic, color: C.navy, align: 'center',
   })
   // Gold divider with red diamond accent
-  drawLine(page, cx - 90, H - 222, cx - 12, H - 222, 0.8, C.gold)
-  drawLine(page, cx + 12, H - 222, cx + 90, H - 222, 0.8, C.gold)
-  page.drawRectangle({ x: cx - 3, y: H - 225, width: 6, height: 6, color: C.red, rotate: degrees(45) })
+  drawLine(page, cx - 90, H - 257, cx - 12, H - 257, 0.8, C.gold)
+  drawLine(page, cx + 12, H - 257, cx + 90, H - 257, 0.8, C.gold)
+  page.drawRectangle({ x: cx - 3, y: H - 260, width: 6, height: 6, color: C.red, rotate: degrees(45) })
 
-  // ── 5. SIDE LOGOS (branch logo LEFT, UnSkills logo RIGHT) ────────────────
-  // These sit in the left/right margins alongside the body text.
-  const sideLogoSize = 62
-  const sideLogoY    = H - 385
-  if (data.branchLogoUrl) {
-    const blogo = await embedAny(doc, data.branchLogoUrl)
-    if (blogo) {
-      const ar = blogo.width / blogo.height
-      const w  = Math.min(sideLogoSize * ar, sideLogoSize + 8)
-      const h  = w / ar
-      page.drawImage(blogo, {
-        x: LEFT + (sideLogoSize - w) / 2 + 5,
-        y: sideLogoY + (sideLogoSize - h) / 2,
-        width: w, height: h,
-      })
-    }
-  }
-  if (data.unskillsLogoUrl) {
-    const uLogo = await embedAny(doc, data.unskillsLogoUrl)
-    if (uLogo) {
-      const ar = uLogo.width / uLogo.height
-      const w  = Math.min(sideLogoSize * ar, sideLogoSize + 8)
-      const h  = w / ar
-      page.drawImage(uLogo, {
-        x: RIGHT - sideLogoSize - 5 + (sideLogoSize - w) / 2,
-        y: sideLogoY + (sideLogoSize - h) / 2,
-        width: w, height: h,
-      })
-    }
-  }
-
-  // ── 6. MAIN BODY CONTENT ─────────────────────────────────────────────────
-  const bodyCx  = cx
-  const bodyMaxW = W - 260   // leaves room for side logos
-
-  // "AUTHORISED TRAINING CENTER (ATC)" — display font, bigger, professional
+  // ── 6. SECTION HEADING — Montserrat 700 (Bold), red ───────────────────────
   drawText(page, 'AUTHORISED TRAINING CENTER (ATC)', {
-    x: bodyCx, y: H - 258, size: 14, font: fonts.display,
-    color: C.red, align: 'center',
+    x: cx, y: H - 290, size: 13, font: fonts.m700, color: C.red, align: 'center', letterSpacing: 0.3,
   })
 
+  // ── 7. SUPPORTING SENTENCE — Montserrat 400 (Regular) ─────────────────────
   drawText(page, 'In acceptance to the terms and conditions, certified that', {
-    x: bodyCx, y: H - 280, size: 9.5, font: fonts.body, color: C.textDark, align: 'center',
+    x: cx, y: H - 312, size: 9.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
 
-  // Branch name (bold, red, wrapped)
+  // ── 8. ORGANISATION NAME — Montserrat 700 (Bold), red, wrapped ───────────
+  const bodyMaxW = W - 200
   const nameEndY = drawCenteredWrapped(page, data.branchName.toUpperCase(), {
-    cx: bodyCx, y: H - 308, maxWidth: bodyMaxW,
-    size: 16, font: fonts.bodyBold, color: C.red, lineStep: 20,
+    cx, y: H - 340, maxWidth: bodyMaxW,
+    size: 16, font: fonts.m700, color: C.red, lineStep: 20,
   })
 
-  // Branch address (smaller, wrapped)
+  // ── 9. ADDRESS — Montserrat 400 (Regular) ─────────────────────────────────
   const addrEndY = drawCenteredWrapped(page, data.branchAddress, {
-    cx: bodyCx, y: nameEndY - 14, maxWidth: bodyMaxW,
-    size: 9.5, font: fonts.body, color: C.textDark, lineStep: 12,
+    cx, y: nameEndY - 14, maxWidth: bodyMaxW,
+    size: 9.5, font: fonts.m400, color: C.textDark, lineStep: 12,
   })
 
-  // Applicant name + ATC code block
-  const infoY = Math.min(addrEndY - 24, H - 412)
-  drawText(page, `Applicant Name : ${data.ownerName || 'Branch Director'}`, {
-    x: bodyCx, y: infoY, size: 10.5, font: fonts.bodyBold, color: C.navy, align: 'center',
+  // ── 10/11. APPLICANT NAME + ATC CODE ──────────────────────────────────────
+  // Label: Montserrat 600 (SemiBold) · Value: Montserrat 500 (Medium)
+  const infoY = Math.min(addrEndY - 26, H - 432)
+  drawLabelValue(page, 'Applicant Name : ', data.ownerName || 'Branch Director', {
+    cx, y: infoY, size: 11,
+    labelFont: fonts.m600, valueFont: fonts.m500,
+    labelColor: C.textDark, valueColor: C.textDark,
   })
-  drawText(page, `ATC Code : ${data.atcCode}`, {
-    x: bodyCx, y: infoY - 17, size: 10.5, font: fonts.bodyBold, color: C.navy, align: 'center',
+  drawLabelValue(page, 'ATC Code : ', data.atcCode, {
+    cx, y: infoY - 17, size: 11,
+    labelFont: fonts.m600, valueFont: fonts.m500,
+    labelColor: C.textDark, valueColor: C.textDark,
   })
 
-  // Ampersand divider
+  // ── 12. AMPERSAND — Playfair Display Italic, gold ─────────────────────────
   drawText(page, '&', {
-    x: bodyCx, y: infoY - 44, size: 22, font: fonts.serifItalic, color: C.gold, align: 'center',
+    x: cx, y: infoY - 46, size: 24, font: fonts.pfdItalic, color: C.gold, align: 'center',
   })
 
-  // Course-type lines — clean two-line format with proper spacing
+  // ── 13. DESCRIPTION — Montserrat 400 (Regular) ────────────────────────────
   drawText(page, `to conduct ${data.courseType} courses,`, {
-    x: bodyCx, y: infoY - 70, size: 10.5, font: fonts.body, color: C.textDark, align: 'center',
+    x: cx, y: infoY - 72, size: 10.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
   drawText(page, 'designed and developed by', {
-    x: bodyCx, y: infoY - 86, size: 10, font: fonts.body, color: C.textDark, align: 'center',
+    x: cx, y: infoY - 88, size: 10, font: fonts.m400, color: C.textDark, align: 'center',
   })
+
+  // ── 14. COMPANY NAME — Montserrat 600 (SemiBold) ──────────────────────────
   drawText(page, 'UnSkills FuturePath Tech Pvt. Ltd.', {
-    x: bodyCx, y: infoY - 101, size: 11, font: fonts.bodyBold, color: C.textDark, align: 'center',
+    x: cx, y: infoY - 105, size: 11.5, font: fonts.m600, color: C.textDark, align: 'center',
   })
 
-  // ── 7. BOTTOM ROW: certified logo | QR + dates | signature ───────────────
-  //
-  // Layout (left → right):
-  //   Zone A  x ∈ [LEFT, cx-80]:  certified-logo.png
-  //   Zone B  x ≈ cx:             QR code + "Scan to verify" + two date lines
-  //   Zone C  x ∈ [cx+80, RIGHT]: signature block
-
+  // ── 15. QR + 16. DATES (centered bottom block) ────────────────────────────
   const qrSize = 72
-  const qrX    = cx - qrSize / 2
-  const qrY    = 213   // bottom of QR box (rises to 213+72=285)
+  const qrX    = LEFT + 20
+  const qrY    = 200
 
-  // QR code
   const qrDataUrl = await generateQRDataUrl(
     `${(data.verificationUrlBase || '').replace(/\/+$/, '')}/verify/atc/${encodeURIComponent(data.atcCode)}`,
   )
@@ -400,61 +414,51 @@ export async function generateAtcCertificate(data: AtcCertificateData): Promise<
     drawRect(page, qrX - 2, qrY - 2, qrSize + 4, qrSize + 4, C.white, C.navy, 0.8)
     page.drawImage(qr, { x: qrX, y: qrY, width: qrSize, height: qrSize })
   }
+  // QR caption — Montserrat 400 (Regular)
   drawText(page, 'Scan to verify', {
-    x: cx, y: qrY - 13, size: 7.5, font: fonts.body, color: C.textSecondary, align: 'center',
+    x: qrX + qrSize / 2, y: qrY - 13, size: 8, font: fonts.m400, color: C.textSecondary, align: 'center',
   })
 
-  // Date lines centered below QR
-  drawText(page, `Date of Issue      :  ${data.issueDate}`, {
-    x: cx, y: qrY - 27, size: 9, font: fonts.bodyBold, color: C.textDark, align: 'center',
+  // Date lines under QR — Montserrat 500 (Medium)
+  const dateY = qrY - 30
+  drawText(page, `Date of Issue     :  ${data.issueDate}`, {
+    x: qrX, y: dateY, size: 9, font: fonts.m500, color: C.textDark,
   })
   drawText(page, `Date of Renewal :  ${data.renewalDate}`, {
-    x: cx, y: qrY - 41, size: 9, font: fonts.bodyBold, color: C.textDark, align: 'center',
+    x: qrX, y: dateY - 14, size: 9, font: fonts.m500, color: C.textDark,
   })
 
-  // Certified logo (Zone A — left of QR)
-  const certLogo = await embedAny(doc, '/certified-logo.png')
-  if (certLogo) {
-    const clMaxH = 70
-    const clAr   = certLogo.width / certLogo.height
-    const clH    = clMaxH
-    const clW    = Math.min(clH * clAr, 80)
-    const clX    = LEFT + 20
-    const clY    = qrY + (qrSize - clH) / 2  // vertically centered with QR
-    page.drawImage(certLogo, { x: clX, y: clY, width: clW, height: clH })
-  }
-
-  // Signature (Zone C — right of QR)
+  // ── 17. SIGNATURE BLOCK (right side) ─────────────────────────────────────
   const sigRight = RIGHT - 15
-  const sigLeft  = sigRight - 140
-  const sigLineY = qrY + 24   // signature line at 1/3 height of QR box
+  const sigLeft  = sigRight - 150
+  const sigLineY = qrY + 22
   if (data.signatureImageUrl) {
     const sig = await embedAny(doc, data.signatureImageUrl)
     if (sig) page.drawImage(sig, { x: sigRight - 110, y: sigLineY + 6, width: 110, height: 32 })
   } else if (data.signatoryName) {
     drawText(page, data.signatoryName, {
-      x: sigRight, y: sigLineY + 12, size: 15, font: fonts.serifItalic, color: C.textDark, align: 'right',
+      x: sigRight, y: sigLineY + 12, size: 15, font: fonts.pfdItalic, color: C.textDark, align: 'right',
     })
   }
   drawLine(page, sigLeft, sigLineY, sigRight, sigLineY, 0.8, C.black)
   drawText(page, 'Signature Authorised', {
-    x: sigRight, y: sigLineY - 14, size: 9.5, font: fonts.bodyBold, color: C.navy, align: 'right',
+    x: (sigLeft + sigRight) / 2, y: sigLineY - 14, size: 10, font: fonts.m500,
+    color: C.textDark, align: 'center',
   })
 
-  // ── 8. FOOTER (contact + head office + badges) ───────────────────────────
+  // ── 18. FOOTER — Montserrat 400 (Regular) ────────────────────────────────
   const contactPhone = data.contactPhone || '8382898686 / 9838382898'
   const website      = data.website || 'www.unskillseducation.org'
   const headOffice   = data.headOfficeAddress || 'Nomlarr Sector Noida, UnSkills FuturePath Tech Pvt. Ltd.'
 
   drawText(page, `Contact : ${contactPhone}   |   Website : ${website}`, {
-    x: cx, y: 142, size: 8.5, font: fonts.bodyBold, color: C.textDark, align: 'center',
+    x: cx, y: 142, size: 8.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
   drawCenteredWrapped(page, `Head Office : ${headOffice}`, {
     cx, y: 128, maxWidth: W - 170,
-    size: 7.5, font: fonts.body, color: C.textSecondary, lineStep: 10,
+    size: 7.5, font: fonts.m400, color: C.textSecondary, lineStep: 10,
   })
 
-  // Footer badges — raised above the bottom ornament, larger so NSDC is visible
   await drawFooterBadges(doc, page, 85, W - 180)
 
   return doc.save()
