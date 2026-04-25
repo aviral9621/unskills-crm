@@ -305,23 +305,24 @@ export async function generateAtcCertificate(data: AtcCertificateData): Promise<
   const fonts = await loadFonts(doc)
 
   // ── 1. TOP META — Montserrat 500 (Medium) ─────────────────────────────────
+  // Pulled up slightly for cleaner spacing.
   drawText(page, 'Reg. by Govt. of India', {
-    x: LEFT + 20, y: H - 80, size: 8.5, font: fonts.m500, color: C.textDark,
+    x: LEFT + 20, y: H - 74, size: 8.5, font: fonts.m500, color: C.textDark,
   })
   drawText(page, `Reg. No.: ${data.regNumber || '220102'}`, {
-    x: RIGHT - 20, y: H - 80, size: 8.5, font: fonts.m500,
+    x: RIGHT - 20, y: H - 74, size: 8.5, font: fonts.m500,
     align: 'right', color: C.textDark,
   })
 
   // ── 2. BRAND MASTHEAD — Montserrat 700 (Bold), SKILLS in red ──────────────
-  drawMasthead(page, fonts.m700, cx, H - 112, 22)
+  drawMasthead(page, fonts.m700, cx, H - 105, 22)
 
   // ── 3. SUB-HEADING LINES — Montserrat 400 (Regular) ───────────────────────
   drawText(page, 'A Unit of: UnSkills FuturePath Tech Pvt. Ltd.  |  Regd. by Govt. of India Reg. No. 220102', {
-    x: cx, y: H - 134, size: 7.5, font: fonts.m400, color: C.textDark, align: 'center',
+    x: cx, y: H - 128, size: 7.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
   drawText(page, 'Alliance with Skills India, MSME, NITI Aayog, NSDC, Labour Department', {
-    x: cx, y: H - 146, size: 7.5, font: fonts.m400, color: C.textDark, align: 'center',
+    x: cx, y: H - 140, size: 7.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
 
   // ── 4. ISO STRIP — Montserrat 600 (SemiBold), white on dark navy bar ──────
@@ -329,39 +330,64 @@ export async function generateAtcCertificate(data: AtcCertificateData): Promise<
   const isoSize  = 9
   const isoTextW = fonts.m600.widthOfTextAtSize(isoText, isoSize)
   const isoStripW = isoTextW + 28
-  drawRect(page, cx - isoStripW / 2, H - 170, isoStripW, 15, C.navy)
+  drawRect(page, cx - isoStripW / 2, H - 162, isoStripW, 15, C.navy)
   drawText(page, isoText, {
-    x: cx, y: H - 166, size: isoSize, font: fonts.m600,
+    x: cx, y: H - 158, size: isoSize, font: fonts.m600,
     color: C.white, align: 'center', letterSpacing: 0.3,
   })
 
-  // (Round logo is baked into the template at this position — no overlay needed.)
-
   // ── 5. CERTIFICATE TITLE — Playfair Display Italic ────────────────────────
-  // The user's font guide specifies "Playfair Display 500 Italic"; we use the
-  // Italic variable font (default instance ≈ 400, visually similar to 500).
   drawText(page, 'Certificate', {
-    x: cx, y: H - 245, size: 38, font: fonts.pfdItalic, color: C.navy, align: 'center',
+    x: cx, y: H - 235, size: 36, font: fonts.pfdItalic, color: C.navy, align: 'center',
   })
-  // Gold divider with red diamond accent
-  drawLine(page, cx - 90, H - 257, cx - 12, H - 257, 0.8, C.gold)
-  drawLine(page, cx + 12, H - 257, cx + 90, H - 257, 0.8, C.gold)
-  page.drawRectangle({ x: cx - 3, y: H - 260, width: 6, height: 6, color: C.red, rotate: degrees(45) })
+  drawLine(page, cx - 90, H - 247, cx - 12, H - 247, 0.8, C.gold)
+  drawLine(page, cx + 12, H - 247, cx + 90, H - 247, 0.8, C.gold)
+  page.drawRectangle({ x: cx - 3, y: H - 250, width: 6, height: 6, color: C.red, rotate: degrees(45) })
 
   // ── 6. SECTION HEADING — Montserrat 700 (Bold), red ───────────────────────
   drawText(page, 'AUTHORISED TRAINING CENTER (ATC)', {
-    x: cx, y: H - 290, size: 13, font: fonts.m700, color: C.red, align: 'center', letterSpacing: 0.3,
+    x: cx, y: H - 280, size: 13, font: fonts.m700, color: C.red, align: 'center', letterSpacing: 0.3,
   })
 
   // ── 7. SUPPORTING SENTENCE — Montserrat 400 (Regular) ─────────────────────
   drawText(page, 'In acceptance to the terms and conditions, certified that', {
-    x: cx, y: H - 312, size: 9.5, font: fonts.m400, color: C.textDark, align: 'center',
+    x: cx, y: H - 300, size: 9.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
+
+  // ── 7.5 BRANCH LOGO — circular badge between sentence and branch name ─────
+  // Falls back to the UnSkills master logo if the branch hasn't uploaded its own.
+  const logoSrc = data.branchLogoUrl || data.unskillsLogoUrl
+  const logoCy  = H - 335
+  const logoR   = 22
+  if (logoSrc) {
+    const logoImg = await embedAny(doc, logoSrc)
+    if (logoImg) {
+      // White-filled circle with thin gold border — gives the "circular badge" look
+      // even when the source logo image has a non-transparent background.
+      page.drawCircle({
+        x: cx, y: logoCy, size: logoR,
+        color: C.white,
+        borderColor: C.gold,
+        borderWidth: 1.2,
+      })
+      // Inscribe the logo so its longest side ≈ 75% of the diameter, leaves a
+      // pleasant white margin inside the circle.
+      const ar = logoImg.width / logoImg.height
+      const maxDim = logoR * 1.5
+      const targetW = ar >= 1 ? maxDim : maxDim * ar
+      const targetH = ar >= 1 ? maxDim / ar : maxDim
+      page.drawImage(logoImg, {
+        x: cx - targetW / 2,
+        y: logoCy - targetH / 2,
+        width: targetW, height: targetH,
+      })
+    }
+  }
 
   // ── 8. ORGANISATION NAME — Montserrat 700 (Bold), red, wrapped ───────────
   const bodyMaxW = W - 200
   const nameEndY = drawCenteredWrapped(page, data.branchName.toUpperCase(), {
-    cx, y: H - 340, maxWidth: bodyMaxW,
+    cx, y: H - 378, maxWidth: bodyMaxW,
     size: 16, font: fonts.m700, color: C.red, lineStep: 20,
   })
 
@@ -372,8 +398,8 @@ export async function generateAtcCertificate(data: AtcCertificateData): Promise<
   })
 
   // ── 10/11. APPLICANT NAME + ATC CODE ──────────────────────────────────────
-  // Label: Montserrat 600 (SemiBold) · Value: Montserrat 500 (Medium)
-  const infoY = Math.min(addrEndY - 26, H - 432)
+  // Floor at H-470 so the bottom block stays well above the QR / signature row.
+  const infoY = Math.min(addrEndY - 22, H - 458)
   drawLabelValue(page, 'Applicant Name : ', data.ownerName || 'Branch Director', {
     cx, y: infoY, size: 11,
     labelFont: fonts.m600, valueFont: fonts.m500,
@@ -387,26 +413,26 @@ export async function generateAtcCertificate(data: AtcCertificateData): Promise<
 
   // ── 12. AMPERSAND — Playfair Display Italic, gold ─────────────────────────
   drawText(page, '&', {
-    x: cx, y: infoY - 46, size: 24, font: fonts.pfdItalic, color: C.gold, align: 'center',
+    x: cx, y: infoY - 42, size: 22, font: fonts.pfdItalic, color: C.gold, align: 'center',
   })
 
   // ── 13. DESCRIPTION — Montserrat 400 (Regular) ────────────────────────────
   drawText(page, `to conduct ${data.courseType} courses,`, {
-    x: cx, y: infoY - 72, size: 10.5, font: fonts.m400, color: C.textDark, align: 'center',
+    x: cx, y: infoY - 66, size: 10.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
   drawText(page, 'designed and developed by', {
-    x: cx, y: infoY - 88, size: 10, font: fonts.m400, color: C.textDark, align: 'center',
+    x: cx, y: infoY - 80, size: 10, font: fonts.m400, color: C.textDark, align: 'center',
   })
 
   // ── 14. COMPANY NAME — Montserrat 600 (SemiBold) ──────────────────────────
   drawText(page, 'UnSkills FuturePath Tech Pvt. Ltd.', {
-    x: cx, y: infoY - 105, size: 11.5, font: fonts.m600, color: C.textDark, align: 'center',
+    x: cx, y: infoY - 95, size: 11.5, font: fonts.m600, color: C.textDark, align: 'center',
   })
 
-  // ── 15. QR + 16. DATES (centered bottom block) ────────────────────────────
+  // ── 15. QR + 16. DATES (left side, raised so the footer breathes) ────────
   const qrSize = 72
   const qrX    = LEFT + 20
-  const qrY    = 200
+  const qrY    = 218          // raised from 200 → adds ~30pt gap above contact line
 
   const qrDataUrl = await generateQRDataUrl(
     `${(data.verificationUrlBase || '').replace(/\/+$/, '')}/verify/atc/${encodeURIComponent(data.atcCode)}`,
@@ -416,13 +442,12 @@ export async function generateAtcCertificate(data: AtcCertificateData): Promise<
     drawRect(page, qrX - 2, qrY - 2, qrSize + 4, qrSize + 4, C.white, C.navy, 0.8)
     page.drawImage(qr, { x: qrX, y: qrY, width: qrSize, height: qrSize })
   }
-  // QR caption — Montserrat 400 (Regular)
   drawText(page, 'Scan to verify', {
-    x: qrX + qrSize / 2, y: qrY - 13, size: 8, font: fonts.m400, color: C.textSecondary, align: 'center',
+    x: qrX + qrSize / 2, y: qrY - 12, size: 8, font: fonts.m400, color: C.textSecondary, align: 'center',
   })
 
   // Date lines under QR — Montserrat 500 (Medium)
-  const dateY = qrY - 30
+  const dateY = qrY - 28
   drawText(page, `Date of Issue     :  ${data.issueDate}`, {
     x: qrX, y: dateY, size: 9, font: fonts.m500, color: C.textDark,
   })
@@ -449,19 +474,21 @@ export async function generateAtcCertificate(data: AtcCertificateData): Promise<
   })
 
   // ── 18. FOOTER — Montserrat 400 (Regular) ────────────────────────────────
+  // Now sits at the very bottom with a clean ~35pt gap above it (under the
+  // dates block). Order: contact → head office → badges, badges sit lowest.
   const contactPhone = data.contactPhone || '8382898686 / 9838382898'
   const website      = data.website || 'www.unskillseducation.org'
   const headOffice   = data.headOfficeAddress || 'Nomlarr Sector Noida, UnSkills FuturePath Tech Pvt. Ltd.'
 
   drawText(page, `Contact : ${contactPhone}   |   Website : ${website}`, {
-    x: cx, y: 142, size: 8.5, font: fonts.m400, color: C.textDark, align: 'center',
+    x: cx, y: 138, size: 8.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
   drawCenteredWrapped(page, `Head Office : ${headOffice}`, {
-    cx, y: 128, maxWidth: W - 170,
+    cx, y: 124, maxWidth: W - 170,
     size: 7.5, font: fonts.m400, color: C.textSecondary, lineStep: 10,
   })
 
-  await drawFooterBadges(doc, page, 85, W - 180)
+  await drawFooterBadges(doc, page, 82, W - 180)
 
   return doc.save()
 }
