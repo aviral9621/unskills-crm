@@ -7,7 +7,9 @@ import {
   BookOpen, BarChart3, Upload,
   Clock, Ban, CircleDollarSign, ChevronDown,
   ArrowUpRight, ArrowDownRight, Filter,
+  MessageCircle, Target, Phone,
 } from 'lucide-react'
+import { useTodayFollowUps } from '../hooks/useLeads'
 import {
   ResponsiveContainer,
   AreaChart, Area,
@@ -192,16 +194,26 @@ const CHART_COLORS = {
   blueLight: '#DBEAFE',
 }
 
+/* ─── Lead Stats Type ─── */
+interface LeadStats {
+  totalLeads: number
+  admittedLeads: number
+  conversionRate: number
+  todayFollowUpCount: number
+}
+
 /* ═══════════════════════════════════════════════
    MAIN DASHBOARD
    ═══════════════════════════════════════════════ */
 export default function DashboardPage() {
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const { leads: todayFollowUps, loading: followUpsLoading } = useTodayFollowUps()
 
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterPeriod>('this_month')
   const [filterOpen, setFilterOpen] = useState(false)
+  const [leadStats, setLeadStats] = useState<LeadStats>({ totalLeads: 0, admittedLeads: 0, conversionRate: 0, todayFollowUpCount: 0 })
 
   const [overview, setOverview] = useState<OverviewStats>({
     totalStudents: 0, newAdmissions: 0, droppedStudents: 0, activeStudents: 0, completedStudents: 0,
@@ -261,12 +273,25 @@ export default function DashboardPage() {
         fetchMonthlyData(),
         fetchRecentStudents(),
         fetchRecentPayments(),
+        fetchLeadStats(),
       ])
     } catch (err) {
       console.error('Dashboard fetch error:', err)
     } finally {
       setLoading(false)
     }
+  }
+
+  async function fetchLeadStats() {
+    const bf = !isSuperAdmin && branchId ? branchId : null
+    const baseQ = bf
+      ? supabase.from('uce_leads').select('id, status', { count: 'exact' }).eq('branch_id', bf)
+      : supabase.from('uce_leads').select('id, status', { count: 'exact' })
+    const { data: allLeads, count: totalLeads } = await baseQ
+    const admittedLeads = (allLeads ?? []).filter(l => l.status === 'admitted').length
+    const total = totalLeads ?? 0
+    const rate = total > 0 ? Math.round((admittedLeads / total) * 100) : 0
+    setLeadStats({ totalLeads: total, admittedLeads, conversionRate: rate, todayFollowUpCount: 0 })
   }
 
   async function fetchOverview() {
@@ -621,7 +646,131 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══════════════════════════════════════════
-          SECTION 3: Charts Row — Revenue + Fee Donut + Admissions
+          SECTION 3: Leads Performance
+          ═══════════════════════════════════════════ */}
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Leads Performance</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Stats strip */}
+          <div className="lg:col-span-1 grid grid-cols-2 gap-3">
+            {/* Total Leads */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate('/admin/leads')}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-medium text-gray-500">Total Leads</p>
+                  <p className="mt-1 text-2xl font-bold text-gray-900 font-heading">
+                    {loading ? <span className="skeleton h-7 w-12 inline-block" /> : leadStats.totalLeads}
+                  </p>
+                </div>
+                <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                  <MessageCircle size={20} className="text-blue-600" />
+                </div>
+              </div>
+            </div>
+            {/* Admitted */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate('/admin/leads')}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-medium text-gray-500">Admitted</p>
+                  <p className="mt-1 text-2xl font-bold text-gray-900 font-heading">
+                    {loading ? <span className="skeleton h-7 w-12 inline-block" /> : leadStats.admittedLeads}
+                  </p>
+                </div>
+                <div className="h-10 w-10 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
+                  <GraduationCap size={20} className="text-green-600" />
+                </div>
+              </div>
+            </div>
+            {/* Conversion Rate */}
+            <div className="col-span-2 bg-gradient-to-br from-red-50 to-red-100/50 rounded-xl border border-red-200 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-medium text-red-700">Conversion Rate</p>
+                  <p className="mt-1 text-3xl font-bold text-red-800 font-heading">
+                    {loading ? <span className="skeleton h-9 w-16 inline-block" /> : `${leadStats.conversionRate}%`}
+                  </p>
+                  <p className="text-xs text-red-600 mt-0.5">leads → admissions</p>
+                </div>
+                <div className="h-12 w-12 rounded-xl bg-red-500 flex items-center justify-center shrink-0">
+                  <Target size={24} className="text-white" />
+                </div>
+              </div>
+              {/* Progress bar */}
+              {!loading && (
+                <div className="mt-3 h-2 bg-red-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-red-500 rounded-full transition-all duration-700"
+                    style={{ width: `${Math.min(leadStats.conversionRate, 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Today's Follow-ups */}
+          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 font-heading">Today's Follow-ups</h3>
+                {!followUpsLoading && (
+                  <p className="text-xs text-gray-500 mt-0.5">{todayFollowUps.length} lead{todayFollowUps.length !== 1 ? 's' : ''} to follow up</p>
+                )}
+              </div>
+              <button onClick={() => navigate('/admin/leads')} className="text-xs font-medium text-red-600 hover:text-red-700 flex items-center gap-1">
+                View Leads <ArrowRight size={14} />
+              </button>
+            </div>
+
+            {followUpsLoading ? (
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="skeleton h-14 rounded-lg" />)}</div>
+            ) : todayFollowUps.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                <Calendar size={32} className="mb-2 text-gray-300" />
+                <p className="text-sm font-medium">No follow-ups for today</p>
+                <p className="text-xs mt-0.5">You're all caught up!</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[260px] overflow-y-auto">
+                {todayFollowUps.map(lead => (
+                  <div
+                    key={lead.id}
+                    onClick={() => navigate('/admin/leads')}
+                    className="flex items-center gap-3 rounded-xl border border-amber-100 bg-amber-50/50 px-3 py-2.5 hover:bg-amber-50 transition-colors cursor-pointer"
+                  >
+                    <div className="h-9 w-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-bold text-amber-700">
+                        {lead.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{lead.name}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {lead.phone}{lead.course_interest ? ` · ${lead.course_interest}` : ''}
+                      </p>
+                      {lead.follow_up_note && (
+                        <p className="text-xs text-amber-700 truncate mt-0.5 italic">"{lead.follow_up_note}"</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <a href={`tel:${lead.phone}`} onClick={e => e.stopPropagation()}
+                        className="h-7 w-7 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors">
+                        <Phone size={13} className="text-gray-500" />
+                      </a>
+                      <a href={`https://wa.me/${lead.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                        className="h-7 w-7 rounded-full bg-green-50 border border-green-200 flex items-center justify-center hover:bg-green-100 transition-colors">
+                        <MessageCircle size={13} className="text-green-600" />
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════
+          SECTION 4: Charts Row — Revenue + Fee Donut + Admissions
           ═══════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Monthly Fee Collection — Area Chart */}
@@ -694,7 +843,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══════════════════════════════════════════
-          SECTION 4: Admission Growth + Quick Actions
+          SECTION 5: Admission Growth + Quick Actions
           ═══════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Admission Growth Bar Chart */}
@@ -777,7 +926,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══════════════════════════════════════════
-          SECTION 5: Recent Students + Recent Payments
+          SECTION 6: Recent Students + Recent Payments
           ═══════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent Students */}
