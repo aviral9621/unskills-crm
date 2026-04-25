@@ -1,4 +1,17 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+  type DragStartEvent,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import { GraduationCap, Phone, MessageCircle, Calendar, Flame, Thermometer, Snowflake, UserCircle } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { Lead, LeadStatus } from '../../types/leads'
@@ -26,30 +39,21 @@ function TempIcon({ t }: { t: string }) {
   return null
 }
 
-function PipelineCard({ lead, onClick, performedByName }: { lead: Lead; onClick: () => void; performedByName: string }) {
+/* ── Card inner content (shared between draggable + overlay) ── */
+function CardContent({ lead, isDragging }: { lead: Lead; isDragging?: boolean }) {
   const isFollowUpOverdue = lead.follow_up_date && new Date(lead.follow_up_date) < new Date(new Date().setHours(0,0,0,0))
   const isFollowUpToday = lead.follow_up_date && !isFollowUpOverdue && (() => {
-    const now = new Date()
     const d = new Date(lead.follow_up_date!)
-    return d.toDateString() === now.toDateString()
+    return d.toDateString() === new Date().toDateString()
   })()
 
-  async function handleStatusChange(e: React.MouseEvent, newStatus: LeadStatus) {
-    e.stopPropagation()
-    const oldLabel = LEAD_STATUS_CONFIG[lead.status].label
-    const newLabel = LEAD_STATUS_CONFIG[newStatus].label
-    try {
-      await updateLeadStatus(lead.id, newStatus)
-      await logActivity(lead.id, 'status_changed', `${oldLabel} → ${newLabel}`, performedByName)
-      toast.success(`Moved to ${newLabel}`)
-    } catch { toast.error('Failed to move lead') }
-  }
-
   return (
-    <div
-      onClick={onClick}
-      className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm hover:shadow-md hover:border-gray-300 cursor-pointer transition-all group"
-    >
+    <div className={cn(
+      'bg-white rounded-lg border p-3 shadow-sm transition-all select-none',
+      isDragging
+        ? 'border-red-300 shadow-xl ring-2 ring-red-500/20 rotate-1 opacity-95'
+        : 'border-gray-200 hover:shadow-md hover:border-gray-300'
+    )}>
       {/* Name + temp */}
       <div className="flex items-start justify-between gap-1 mb-2">
         <p className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{lead.name}</p>
@@ -65,9 +69,7 @@ function PipelineCard({ lead, onClick, performedByName }: { lead: Lead; onClick:
       <div className="flex items-center gap-1.5 text-[11px] text-gray-500 mb-1.5">
         <Phone size={10} className="shrink-0" />
         <span className="truncate">{lead.phone}</span>
-        {lead.source === 'whatsapp' && (
-          <MessageCircle size={10} className="text-green-500 shrink-0" />
-        )}
+        {lead.source === 'whatsapp' && <MessageCircle size={10} className="text-green-500 shrink-0" />}
       </div>
 
       {/* Course interest */}
@@ -91,39 +93,133 @@ function PipelineCard({ lead, onClick, performedByName }: { lead: Lead; onClick:
         </div>
       )}
 
-      {/* Assigned to initial */}
+      {/* Assigned */}
       {lead.assigned_to && (
         <div className="flex items-center gap-1 mt-1.5 text-[10px] text-gray-400">
           <UserCircle size={10} />
           <span>Assigned</span>
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* Quick move buttons — show on hover */}
-      <div className="hidden group-hover:flex items-center gap-1 mt-2 pt-2 border-t border-gray-100 flex-wrap">
-        {ALL_LEAD_STATUSES.filter(s => s !== lead.status).slice(0, 3).map(s => (
-          <button
-            key={s}
-            onClick={e => handleStatusChange(e, s)}
-            className={cn('text-[9px] px-1.5 py-0.5 rounded-full border font-semibold transition-colors', LEAD_STATUS_CONFIG[s].color)}
-          >
-            → {LEAD_STATUS_CONFIG[s].label}
-          </button>
-        ))}
+/* ── Draggable card ── */
+function DraggableCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: lead.id })
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    cursor: isDragging ? 'grabbing' : 'grab',
+    opacity: isDragging ? 0.3 : 1,
+    touchAction: 'none',
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={onClick}
+    >
+      <CardContent lead={lead} />
+    </div>
+  )
+}
+
+/* ── Droppable column ── */
+function DroppableColumn({
+  status,
+  label,
+  dot,
+  color,
+  leads,
+  onSelectLead,
+  isOver,
+}: {
+  status: string
+  label: string
+  dot: string
+  color: string
+  leads: Lead[]
+  onSelectLead: (id: string) => void
+  isOver: boolean
+}) {
+  const { setNodeRef } = useDroppable({ id: status })
+
+  return (
+    <div className={cn(
+      'shrink-0 w-[230px] sm:w-[240px] flex flex-col rounded-xl border overflow-hidden transition-colors duration-150',
+      isOver ? 'border-red-400 bg-red-50/30' : 'border-gray-200 bg-gray-50'
+    )}>
+      {/* Header */}
+      <div className={cn(
+        'px-3 py-2.5 border-b flex items-center justify-between gap-2 shrink-0 transition-colors',
+        isOver ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'
+      )}>
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={cn('w-2 h-2 rounded-full shrink-0', dot)} />
+          <span className="text-xs font-semibold text-gray-700 truncate">{label}</span>
+        </div>
+        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full border shrink-0', color)}>
+          {leads.length}
+        </span>
+      </div>
+
+      {/* Cards */}
+      <div ref={setNodeRef} className={cn(
+        'flex-1 overflow-y-auto p-2 space-y-2 min-h-[80px] transition-colors',
+        isOver && leads.length === 0 ? 'bg-red-50/50' : ''
+      )}>
+        {leads.length === 0 ? (
+          <div className={cn(
+            'flex items-center justify-center h-16 text-[11px] rounded-lg border-2 border-dashed transition-colors',
+            isOver ? 'border-red-300 text-red-400 bg-red-50/40' : 'border-gray-200 text-gray-400'
+          )}>
+            {isOver ? 'Drop here' : 'No leads'}
+          </div>
+        ) : (
+          leads.map(lead => (
+            <DraggableCard
+              key={lead.id}
+              lead={lead}
+              onClick={() => onSelectLead(lead.id)}
+            />
+          ))
+        )}
+        {/* Drop zone at bottom when column has cards */}
+        {leads.length > 0 && isOver && (
+          <div className="h-2 rounded-lg bg-red-200/50 border-2 border-dashed border-red-300" />
+        )}
       </div>
     </div>
   )
 }
 
+/* ── Main board ── */
 interface Props {
   leads: Lead[]
   onSelect: (id: string) => void
   performedByName: string
 }
 
+const CLOSED: LeadStatus[] = ['not_interested', 'dropped', 'b2b_partner']
+
 export default function LeadPipelineBoard({ leads, onSelect, performedByName }: Props) {
-  // Group leads into pipeline columns + a "Closed" column
-  const CLOSED: LeadStatus[] = ['not_interested', 'dropped', 'b2b_partner']
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
+    }),
+  )
+
+  const activeLead = useMemo(() => leads.find(l => l.id === activeId) ?? null, [leads, activeId])
 
   const columns = useMemo(() => {
     const pipeline = PIPELINE_STATUSES.map(status => ({
@@ -134,7 +230,7 @@ export default function LeadPipelineBoard({ leads, onSelect, performedByName }: 
       leads: leads.filter(l => l.status === status),
     }))
     const closed = {
-      status: 'closed' as const,
+      status: 'closed',
       label: 'Closed',
       dot: 'bg-gray-400',
       color: 'bg-gray-100 text-gray-700 border-gray-300',
@@ -143,38 +239,77 @@ export default function LeadPipelineBoard({ leads, onSelect, performedByName }: 
     return [...pipeline, closed]
   }, [leads])
 
-  return (
-    <div className="flex gap-3 overflow-x-auto pb-3 pt-1 px-1 h-full" style={{ minHeight: 0 }}>
-      {columns.map(col => (
-        <div key={col.status} className="shrink-0 w-[230px] sm:w-[240px] flex flex-col bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
-          {/* Column header */}
-          <div className="px-3 py-2.5 border-b border-gray-200 bg-white flex items-center justify-between gap-2 shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className={cn('w-2 h-2 rounded-full shrink-0', col.dot)} />
-              <span className="text-xs font-semibold text-gray-700 truncate">{col.label}</span>
-            </div>
-            <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full border shrink-0', col.color)}>
-              {col.leads.length}
-            </span>
-          </div>
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string)
+  }
 
-          {/* Cards */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {col.leads.length === 0 ? (
-              <div className="flex items-center justify-center h-16 text-[11px] text-gray-400">No leads</div>
-            ) : (
-              col.leads.map(lead => (
-                <PipelineCard
-                  key={lead.id}
-                  lead={lead}
-                  onClick={() => onSelect(lead.id)}
-                  performedByName={performedByName}
-                />
-              ))
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    setActiveId(null)
+    setOverId(null)
+
+    if (!over || active.id === over.id) return
+
+    const leadId = active.id as string
+    const targetColumnId = over.id as string
+
+    const lead = leads.find(l => l.id === leadId)
+    if (!lead) return
+
+    // Map "closed" column to a real status (default: not_interested)
+    let newStatus: LeadStatus
+    if (targetColumnId === 'closed') {
+      newStatus = 'not_interested'
+    } else if (ALL_LEAD_STATUSES.includes(targetColumnId as LeadStatus)) {
+      newStatus = targetColumnId as LeadStatus
+    } else {
+      return
+    }
+
+    if (lead.status === newStatus) return
+
+    const oldLabel = LEAD_STATUS_CONFIG[lead.status].label
+    const newLabel = LEAD_STATUS_CONFIG[newStatus].label
+
+    try {
+      await updateLeadStatus(leadId, newStatus)
+      await logActivity(leadId, 'status_changed', `${oldLabel} → ${newLabel}`, performedByName)
+      toast.success(`Moved to ${newLabel}`)
+    } catch {
+      toast.error('Failed to move lead')
+    }
+  }
+
+  function handleDragOver(event: { over: { id: string } | null }) {
+    setOverId(event.over?.id ?? null)
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver as never}
+    >
+      <div className="flex gap-3 overflow-x-auto pb-3 pt-1 px-1 h-full" style={{ minHeight: 0 }}>
+        {columns.map(col => (
+          <DroppableColumn
+            key={col.status}
+            status={col.status}
+            label={col.label}
+            dot={col.dot}
+            color={col.color}
+            leads={col.leads}
+            onSelectLead={onSelect}
+            isOver={overId === col.status}
+          />
+        ))}
+      </div>
+
+      {/* Drag overlay — floats under cursor/finger */}
+      <DragOverlay dropAnimation={{ duration: 180, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+        {activeLead ? <CardContent lead={activeLead} isDragging /> : null}
+      </DragOverlay>
+    </DndContext>
   )
 }
