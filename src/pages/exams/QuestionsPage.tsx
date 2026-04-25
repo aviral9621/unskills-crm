@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Pencil, Trash2, HelpCircle, Loader2,
-  CheckCircle2, XCircle, ChevronDown, ChevronUp,
+  CheckCircle2, XCircle, ChevronDown, ChevronUp, Languages,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import Modal from '../../components/Modal'
 import FormField, { inputClass, selectClass } from '../../components/FormField'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import { useBidirectionalAutoTranslate } from '../../hooks/useAutoTranslate'
 
 interface Question {
   id: string
@@ -40,12 +41,16 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'short_answer', label: 'Short Answer' },
   { value: 'long_answer', label: 'Long Answer' },
 ]
-const DIFFICULTIES = ['Easy', 'Medium', 'Hard']
+const DIFFICULTIES = [
+  { value: 'easy', label: 'Easy' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'hard', label: 'Hard' },
+]
 
 const emptyForm = {
   question_text_en: '', question_text_hi: '', question_type: 'mcq' as QuestionType,
   option_a: '', option_b: '', option_c: '', option_d: '',
-  correct_answer: '', marks: '1', difficulty: 'Medium', image_url: '',
+  correct_answer: '', marks: '1', difficulty: 'medium', image_url: '',
 }
 
 export default function QuestionsPage() {
@@ -101,7 +106,7 @@ export default function QuestionsPage() {
       option_d: q.option_d || '',
       correct_answer: q.correct_answer || '',
       marks: String(q.marks),
-      difficulty: q.difficulty || 'Medium',
+      difficulty: (q.difficulty || 'medium').toLowerCase(),
       image_url: q.image_url || '',
     })
     setModalOpen(true)
@@ -110,6 +115,15 @@ export default function QuestionsPage() {
   function updateForm(field: string, value: string) {
     setForm(prev => ({ ...prev, [field]: value }))
   }
+
+  // Auto-translate question text between English and Hindi
+  const { translating, notifyTyping } = useBidirectionalAutoTranslate({
+    enText: form.question_text_en,
+    hiText: form.question_text_hi,
+    setEnText: v => setForm(prev => ({ ...prev, question_text_en: v })),
+    setHiText: v => setForm(prev => ({ ...prev, question_text_hi: v })),
+    enabled: modalOpen,
+  })
 
   async function handleSave() {
     if (!form.question_text_en.trim()) { toast.error('Question text is required'); return }
@@ -133,7 +147,7 @@ export default function QuestionsPage() {
         option_d: form.question_type === 'mcq' ? (form.option_d || null) : null,
         correct_answer: form.correct_answer || null,
         marks: parseFloat(form.marks) || 1,
-        difficulty: form.difficulty || null,
+        difficulty: form.difficulty ? form.difficulty.toLowerCase() : null,
         image_url: form.image_url || null,
         display_order: editing ? editing.display_order : questions.length,
       }
@@ -243,7 +257,7 @@ export default function QuestionsPage() {
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">{q.question_type.replace('_', ' ').toUpperCase()}</span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">{q.marks} marks</span>
-                      {q.difficulty && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">{q.difficulty}</span>}
+                      {q.difficulty && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium capitalize">{q.difficulty}</span>}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -296,14 +310,42 @@ export default function QuestionsPage() {
       {/* Add/Edit Question Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Edit Question' : 'Add Question'} size="lg">
         <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-          <FormField label="Question (English)" required>
-            <textarea value={form.question_text_en} onChange={e => updateForm('question_text_en', e.target.value)} rows={3}
-              className={`${inputClass} resize-none`} placeholder="Enter question text..." />
+          <FormField
+            label="Question (English)"
+            required
+            hint={translating ? 'Translating…' : 'Auto-translates to/from Hindi when the other field is empty'}
+          >
+            <div className="relative">
+              <textarea
+                value={form.question_text_en}
+                onChange={e => { notifyTyping('en'); updateForm('question_text_en', e.target.value) }}
+                rows={3}
+                className={`${inputClass} resize-none`}
+                placeholder="Enter question text..."
+              />
+              {translating && (
+                <div className="absolute top-2 right-2 inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                  <Languages size={11} className="animate-pulse" /> Translating
+                </div>
+              )}
+            </div>
           </FormField>
 
-          <FormField label="Question (Hindi)" hint="Optional">
-            <textarea value={form.question_text_hi} onChange={e => updateForm('question_text_hi', e.target.value)} rows={2}
-              className={`${inputClass} resize-none`} placeholder="हिंदी में प्रश्न (वैकल्पिक)" />
+          <FormField label="Question (Hindi)" hint="Optional — auto-fills if you type in English (and vice versa)">
+            <div className="relative">
+              <textarea
+                value={form.question_text_hi}
+                onChange={e => { notifyTyping('hi'); updateForm('question_text_hi', e.target.value) }}
+                rows={2}
+                className={`${inputClass} resize-none`}
+                placeholder="हिंदी में प्रश्न (वैकल्पिक)"
+              />
+              {translating && (
+                <div className="absolute top-2 right-2 inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                  <Languages size={11} className="animate-pulse" /> Translating
+                </div>
+              )}
+            </div>
           </FormField>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -317,7 +359,7 @@ export default function QuestionsPage() {
             </FormField>
             <FormField label="Difficulty">
               <select value={form.difficulty} onChange={e => updateForm('difficulty', e.target.value)} className={selectClass}>
-                {DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
+                {DIFFICULTIES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
             </FormField>
           </div>

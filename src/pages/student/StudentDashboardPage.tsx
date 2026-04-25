@@ -2,17 +2,38 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   IndianRupee, FileText, Briefcase, Calendar, Video, Megaphone,
-  BookOpen, IdCard, Award, ClipboardList,
+  BookOpen, IdCard, Award, ClipboardList, AlertCircle, CheckCircle2,
+  Clock, ChevronRight,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useStudentRecord } from './useStudent'
 import { formatINR, formatDateDDMMYYYY } from '../../lib/utils'
+
+interface PendingExam {
+  id: string
+  paper_name: string
+  total_questions: number | null
+  total_marks: number | null
+  time_limit_minutes: number | null
+  available_to: string | null
+  is_mock_test: boolean | null
+}
+
+interface RecentSubmission {
+  paper_name: string
+  submitted_at: string
+  total_marks_obtained: number | null
+  total_marks: number | null
+  is_graded: boolean
+}
 
 export default function StudentDashboardPage() {
   const { rec, loading } = useStudentRecord()
   const [totals, setTotals] = useState<{ paid: number; due: number }>({ paid: 0, due: 0 })
   const [upcomingClass, setUpcomingClass] = useState<{ class_name: string; platform: string; link: string; schedule_date: string | null; schedule_time: string | null } | null>(null)
   const [latestAnn, setLatestAnn] = useState<{ title: string; body: string; created_at: string } | null>(null)
+  const [pendingExams, setPendingExams] = useState<PendingExam[]>([])
+  const [recentSubmission, setRecentSubmission] = useState<RecentSubmission | null>(null)
 
   useEffect(() => {
     if (!rec) return
@@ -54,8 +75,73 @@ export default function StudentDashboardPage() {
         return false
       })
       setLatestAnn(match as typeof latestAnn)
+
+      // Pending tests for this student's course (active right now, not yet submitted)
+      const nowIso = new Date().toISOString()
+      const { data: papers } = await supabase
+        .from('uce_paper_sets')
+        .select('id, paper_name, total_questions, total_marks, time_limit_minutes, available_from, available_to, is_mock_test')
+        .eq('course_id', rec.course_id)
+        .eq('is_active', true)
+        .or(`available_from.is.null,available_from.lte.${nowIso}`)
+        .or(`available_to.is.null,available_to.gte.${nowIso}`)
+        .order('available_to', { ascending: true })
+
+      const { data: attempts } = await supabase
+        .from('uce_exam_attempts')
+        .select('paper_set_id, is_submitted, submitted_at, total_marks_obtained, is_graded')
+        .eq('student_id', rec.id)
+
+      const submittedSet = new Set((attempts ?? []).filter(a => a.is_submitted).map(a => a.paper_set_id))
+      const pending = ((papers ?? []) as PendingExam[]).filter(p => !submittedSet.has(p.id))
+      setPendingExams(pending.slice(0, 3))
+
+      // Most recent submission (last 7 days) for "submitted" toast banner
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      const { data: latestSub } = await supabase
+        .from('uce_exam_attempts')
+        .select('submitted_at, total_marks_obtained, is_graded, paper_set:uce_paper_sets(paper_name, total_marks)')
+        .eq('student_id', rec.id)
+        .eq('is_submitted', true)
+        .gte('submitted_at', sevenDaysAgo)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (latestSub) {
+        const raw = latestSub as unknown as {
+          submitted_at: string
+          total_marks_obtained: number | null
+          is_graded: boolean | null
+          paper_set: { paper_name: string; total_marks: number | null } | { paper_name: string; total_marks: number | null }[] | null
+        }
+        const ps = Array.isArray(raw.paper_set) ? raw.paper_set[0] : raw.paper_set
+        setRecentSubmission({
+          paper_name: ps?.paper_name ?? 'Test',
+          submitted_at: raw.submitted_at,
+          total_marks_obtained: raw.total_marks_obtained,
+          total_marks: ps?.total_marks ?? null,
+          is_graded: !!raw.is_graded,
+        })
+      }
     })()
   }, [rec])
+
+  function formatDeadline(iso: string | null): string {
+    if (!iso) return 'Open'
+    const d = new Date(iso)
+    return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+
+  function timeLeft(iso: string | null): string {
+    if (!iso) return ''
+    const ms = new Date(iso).getTime() - Date.now()
+    if (ms <= 0) return 'Closing now'
+    const hours = Math.floor(ms / (1000 * 60 * 60))
+    const days  = Math.floor(hours / 24)
+    if (days >= 1) return `${days}d left`
+    if (hours >= 1) return `${hours}h left`
+    return `${Math.max(1, Math.floor(ms / (1000 * 60)))}m left`
+  }
 
   if (loading || !rec) {
     return <div className="space-y-4"><div className="skeleton h-32 rounded-2xl" /><div className="grid sm:grid-cols-3 gap-3"><div className="skeleton h-24 rounded-xl" /><div className="skeleton h-24 rounded-xl" /><div className="skeleton h-24 rounded-xl" /></div></div>
@@ -72,6 +158,82 @@ export default function StudentDashboardPage() {
           {rec.branch?.name && <> · {rec.branch.name}</>}
         </p>
       </div>
+
+      {/* Pending exam alert (top priority) */}
+      {pendingExams.length > 0 && (
+        <div className="rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 animate-pulse">
+              <AlertCircle size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs sm:text-sm font-bold text-amber-900 uppercase tracking-wider">
+                {pendingExams.length === 1 ? 'You have an exam to take' : `You have ${pendingExams.length} exams to take`}
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">Don't miss the submission deadline.</p>
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            {pendingExams.map(p => (
+              <Link
+                key={p.id}
+                to={`/student/tests/${p.id}`}
+                className="flex items-center gap-3 bg-white border border-amber-200 rounded-xl p-3 hover:border-amber-400 hover:shadow-sm transition-all group"
+              >
+                <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                  <ClipboardList size={16} className="text-amber-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">
+                    {p.paper_name}
+                    {p.is_mock_test && <span className="ml-1.5 text-[10px] font-bold text-blue-600 uppercase">Mock</span>}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500 flex-wrap">
+                    {p.total_questions && <span>{p.total_questions} Qs</span>}
+                    {p.total_marks && <span>· {p.total_marks} marks</span>}
+                    {p.time_limit_minutes && (
+                      <span className="flex items-center gap-0.5"><Clock size={10} /> {p.time_limit_minutes}m</span>
+                    )}
+                  </div>
+                  {p.available_to && (
+                    <p className="text-[11px] text-amber-700 font-semibold mt-1">
+                      Last date: {formatDeadline(p.available_to)} · {timeLeft(p.available_to)}
+                    </p>
+                  )}
+                </div>
+                <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 group-hover:bg-amber-600 text-white text-xs font-bold rounded-lg">
+                  Start <ChevronRight size={13} />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent submission confirmation */}
+      {recentSubmission && (
+        <div className="rounded-2xl border border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0">
+              <CheckCircle2 size={18} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs sm:text-sm font-bold text-green-900 uppercase tracking-wider">Exam Submitted Successfully</p>
+              <p className="text-sm text-green-800 mt-1 font-semibold">{recentSubmission.paper_name}</p>
+              <p className="text-xs text-green-700 mt-0.5">
+                Submitted on {formatDeadline(recentSubmission.submitted_at)}
+                {recentSubmission.is_graded && recentSubmission.total_marks != null && (
+                  <> · Score: <strong>{recentSubmission.total_marks_obtained ?? 0} / {recentSubmission.total_marks}</strong></>
+                )}
+                {!recentSubmission.is_graded && <> · Awaiting grading</>}
+              </p>
+            </div>
+            <Link to="/student/results" className="shrink-0 text-xs font-semibold text-green-700 hover:text-green-900 hidden sm:inline-flex items-center gap-1">
+              View results <ChevronRight size={13} />
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <Stat label="Total Fee" value={formatINR(rec.net_fee)} tone="blue" />
