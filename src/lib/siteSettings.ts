@@ -12,6 +12,7 @@ export interface SiteSettings {
   social_instagram: string
   social_youtube: string
   social_linkedin: string
+  kit_amount: string
 }
 
 const KEYS: Record<keyof SiteSettings, string> = {
@@ -26,6 +27,7 @@ const KEYS: Record<keyof SiteSettings, string> = {
   social_instagram:   'site_social_instagram',
   social_youtube:     'site_social_youtube',
   social_linkedin:    'site_social_linkedin',
+  kit_amount:         'site_kit_amount',
 }
 
 export const SITE_DEFAULTS: SiteSettings = {
@@ -40,6 +42,7 @@ export const SITE_DEFAULTS: SiteSettings = {
   social_instagram:   '',
   social_youtube:     '',
   social_linkedin:    '',
+  kit_amount:         '500',
 }
 
 export async function getSiteSettings(): Promise<SiteSettings> {

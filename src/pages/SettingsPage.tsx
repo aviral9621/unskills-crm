@@ -3,7 +3,7 @@ import { Navigate, Link } from 'react-router-dom'
 import {
   Settings, Save, Loader2, Info, Building2, Mail, Phone, Globe, MapPin,
   Link2, IdCard, FileBadge2, Users, Briefcase,
-  BookOpen, LogOut, ShieldCheck, Clock, ChevronRight, Upload, X,
+  BookOpen, LogOut, ShieldCheck, Clock, ChevronRight, Upload, X, Package,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import FormField, { inputClass } from '../components/FormField'
@@ -200,6 +200,35 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        <div className="flex justify-end pt-2">
+          <button onClick={handleSave} disabled={saving}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 shadow-sm">
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            {saving ? 'Saving…' : 'Save Settings'}
+          </button>
+        </div>
+      </div>
+
+      {/* Registration Settings */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Package size={16} className="text-red-600" />
+          <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Registration Settings</h2>
+        </div>
+        <p className="text-xs text-gray-500">Configure fees charged during student registration at franchise branches.</p>
+        <FormField label="Kit Amount (₹)" hint="Amount charged per student when franchise selects 'Certificate + Kit' during registration. Default: ₹500.">
+          <div className="relative w-48">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
+            <input
+              type="number"
+              min={0}
+              value={s.kit_amount}
+              onChange={e => update('kit_amount', e.target.value)}
+              className={`${inputClass} pl-8`}
+              placeholder="500"
+            />
+          </div>
+        </FormField>
         <div className="flex justify-end pt-2">
           <button onClick={handleSave} disabled={saving}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 shadow-sm">
