@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Settings, ShieldCheck, LogOut, Clock, Loader2, Mail, UserCircle } from 'lucide-react'
+import { Settings, ShieldCheck, LogOut, Clock, Mail, UserCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import { useAuth } from '../../contexts/AuthContext'
