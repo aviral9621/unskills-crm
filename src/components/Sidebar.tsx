@@ -5,7 +5,7 @@ import {
   GraduationCap, BookOpen,
   FileText, Video, ClipboardList, ScrollText, Award,
   Briefcase, IndianRupee,
-  BarChart3, MonitorPlay,
+  BarChart3, MonitorPlay, Users2,
   Settings, UserCircle, ChevronDown, LogOut, X,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -114,6 +114,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
           { label: 'Download Center', path: '/admin/website/downloads', permission: 'website.downloads' },
         ],
       },
+      { label: 'Referrals', icon: Users2, path: '/admin/referrals', permission: 'referral' },
       { label: 'Announcements', icon: MessageSquare, path: '/admin/announcements' },
     ],
   },

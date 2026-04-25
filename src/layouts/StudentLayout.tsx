@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FileText, Briefcase, ClipboardList, ScrollText, IndianRupee,
-  LogOut, Menu, X, Video, IdCard, BookOpen, Megaphone, UserCircle, MessageCircle,
+  LogOut, Menu, X, Video, IdCard, BookOpen, Megaphone, UserCircle, MessageCircle, Gift,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -19,6 +19,7 @@ const NAV = [
   { label: 'Exam Forms', icon: ClipboardList, path: '/student/exam-forms' },
   { label: 'Results', icon: ScrollText, path: '/student/results' },
   { label: 'Jobs', icon: Briefcase, path: '/student/jobs' },
+  { label: 'Refer & Earn', icon: Gift, path: '/student/refer-earn' },
   { label: 'Announcements', icon: Megaphone, path: '/student/announcements' },
   { label: 'Profile', icon: UserCircle, path: '/student/profile' },
 ]

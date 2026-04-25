@@ -13,6 +13,14 @@ export interface SiteSettings {
   social_youtube: string
   social_linkedin: string
   kit_amount: string
+  // ── Referral system ───────────────────────────────────────────────────────
+  referral_enabled: string
+  referral_l1_amount: string
+  referral_l2_amount: string
+  referral_l2_enabled: string
+  referral_min_withdrawal: string
+  referral_clawback_window_days: string
+  referral_share_base_url: string
 }
 
 const KEYS: Record<keyof SiteSettings, string> = {
@@ -28,6 +36,13 @@ const KEYS: Record<keyof SiteSettings, string> = {
   social_youtube:     'site_social_youtube',
   social_linkedin:    'site_social_linkedin',
   kit_amount:         'site_kit_amount',
+  referral_enabled:              'referral_enabled',
+  referral_l1_amount:            'referral_l1_amount',
+  referral_l2_amount:            'referral_l2_amount',
+  referral_l2_enabled:           'referral_l2_enabled',
+  referral_min_withdrawal:       'referral_min_withdrawal',
+  referral_clawback_window_days: 'referral_clawback_window_days',
+  referral_share_base_url:       'referral_share_base_url',
 }
 
 export const SITE_DEFAULTS: SiteSettings = {
@@ -43,6 +58,13 @@ export const SITE_DEFAULTS: SiteSettings = {
   social_youtube:     '',
   social_linkedin:    '',
   kit_amount:         '500',
+  referral_enabled:              'true',
+  referral_l1_amount:            '100',
+  referral_l2_amount:            '30',
+  referral_l2_enabled:           'true',
+  referral_min_withdrawal:       '500',
+  referral_clawback_window_days: '7',
+  referral_share_base_url:       'https://unskills-computer-education.vercel.app',
 }
 
 export async function getSiteSettings(): Promise<SiteSettings> {

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   IndianRupee, FileText, Briefcase, Calendar, Video, Megaphone,
   BookOpen, IdCard, Award, ClipboardList, AlertCircle, CheckCircle2,
-  Clock, ChevronRight,
+  Clock, ChevronRight, Gift,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useStudentRecord } from './useStudent'
@@ -282,6 +282,7 @@ export default function StudentDashboardPage() {
         <QuickLink to="/student/syllabus" icon={BookOpen} label="Syllabus" />
         <QuickLink to="/student/results" icon={Award} label="Results" />
         <QuickLink to="/student/jobs" icon={Briefcase} label="Jobs" />
+        <QuickLink to="/student/refer-earn" icon={Gift} label="Refer & Earn" />
       </div>
 
       <div className="rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4 text-center">

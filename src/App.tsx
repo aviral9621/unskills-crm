@@ -73,6 +73,7 @@ import ProfilePage from './pages/ProfilePage'
 import AdminPromotionsPage from './pages/admin/AdminPromotionsPage'
 import AdminTicketsPage from './pages/admin/AdminTicketsPage'
 import AdminExamFormsPage from './pages/admin/AdminExamFormsPage'
+import AdminReferralsPage from './pages/admin/AdminReferralsPage'
 import AdminFeesOverviewPage from './pages/admin/fees/AdminFeesOverviewPage'
 import AdminStudentFeePlanPage from './pages/admin/fees/AdminStudentFeePlanPage'
 
@@ -102,6 +103,7 @@ import {
 import StudentDashboardPage from './pages/student/StudentDashboardPage'
 import StudentFeesPage from './pages/student/StudentFeesPage'
 import StudentMaterialsPage from './pages/student/StudentMaterialsPage'
+import StudentReferEarnPage from './pages/student/StudentReferEarnPage'
 import StudentSyllabusPage from './pages/student/StudentSyllabusPage'
 import StudentClassesPage from './pages/student/StudentClassesPage'
 import StudentDocumentsPage from './pages/student/StudentDocumentsPage'
@@ -202,6 +204,7 @@ function AppRoutes() {
         <Route path="website/newsletters" element={<NewsletterPage />} />
         <Route path="website/downloads" element={<DownloadCenterPage />} />
 
+        <Route path="referrals" element={<AdminReferralsPage />} />
         <Route path="promotions" element={<AdminPromotionsPage />} />
         <Route path="support/tickets" element={<AdminTicketsPage />} />
         <Route path="support/tickets/:id" element={<FTicketDetailPage />} />
@@ -258,6 +261,7 @@ function AppRoutes() {
         <Route path="dashboard" element={<StudentDashboardPage />} />
         <Route path="fees" element={<StudentFeesPage />} />
         <Route path="documents" element={<StudentDocumentsPage />} />
+        <Route path="refer-earn" element={<StudentReferEarnPage />} />
         <Route path="classes" element={<StudentClassesPage />} />
         <Route path="materials" element={<StudentMaterialsPage />} />
         <Route path="syllabus" element={<StudentSyllabusPage />} />

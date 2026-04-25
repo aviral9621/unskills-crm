@@ -41,6 +41,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/admin/website/videos': 'Videos',
   '/admin/website/newsletters': 'Newsletters',
   '/admin/website/downloads': 'Download Center',
+  '/admin/referrals': 'Referrals',
   '/admin/settings': 'Settings',
   '/admin/profile': 'My Profile',
 }

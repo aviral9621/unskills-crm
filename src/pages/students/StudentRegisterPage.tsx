@@ -62,6 +62,7 @@ const schema = z.object({
   fee_start_month: z.string().optional().or(z.literal('')),
   installment_count: z.coerce.number().int().min(0).optional(),
   monthly_fee: z.coerce.number().min(0).optional(),
+  referral_code: z.string().regex(/^([A-Z0-9]{6,7})?$/, 'Code must be 6-7 letters/digits').optional().or(z.literal('')),
 })
 
 type FormData = z.infer<typeof schema>
@@ -99,6 +100,11 @@ export default function StudentRegisterPage() {
 
   const [walletError, setWalletError] = useState(false)
   const [payLaterLoading, setPayLaterLoading] = useState(false)
+
+  // Referral code: lookup state — 'idle' | 'checking' | 'valid' | 'invalid'
+  const [refState, setRefState] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
+  const [refReferrerName, setRefReferrerName] = useState<string>('')
+  const refTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const currentAcademicYear = (() => {
     const cy = new Date().getFullYear()
@@ -201,6 +207,31 @@ export default function StudentRegisterPage() {
         monthly_fee: data.monthly_fee ?? 0,
       })
     } catch { toast.error('Failed to load student') }
+  }
+
+  // Resolve a referral code to a referrer's first name (returns null if invalid).
+  // Uses the public RPC so we never need full referrer-row select access.
+  async function resolveReferralCode(code: string): Promise<string | null> {
+    const trimmed = code.trim().toUpperCase()
+    if (!/^[A-Z0-9]{6,7}$/.test(trimmed)) return null
+    const { data, error } = await supabase.rpc('fn_resolve_referral_code_public', { p_code: trimmed })
+    if (error) return null
+    const row = Array.isArray(data) ? data[0] : data
+    return row?.referrer_first_name ?? null
+  }
+
+  function onReferralCodeChange(raw: string) {
+    const code = raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 7)
+    setValue('referral_code', code, { shouldValidate: false })
+    if (refTimerRef.current) clearTimeout(refTimerRef.current)
+    if (!code) { setRefState('idle'); setRefReferrerName(''); return }
+    if (code.length < 6) { setRefState('idle'); setRefReferrerName(''); return }
+    setRefState('checking')
+    refTimerRef.current = setTimeout(async () => {
+      const name = await resolveReferralCode(code)
+      if (name) { setRefState('valid'); setRefReferrerName(name) }
+      else      { setRefState('invalid'); setRefReferrerName('') }
+    }, 500)
   }
 
   async function fetchBatches(cid: string) {
@@ -352,6 +383,26 @@ export default function StudentRegisterPage() {
             console.warn('create-student-auth failed', fnErr)
             toast.warning('Student saved, but login account could not be created. Contact admin.')
           }
+        }
+
+        // Referral: re-validate at submit time and insert referral row.
+        // Silent failure — never block admission over a referral hiccup.
+        if (newStudent && form.referral_code && refState === 'valid') {
+          try {
+            const { data: refResolved } = await supabase.rpc('fn_resolve_referral_code', {
+              p_code: form.referral_code.trim().toUpperCase(),
+            })
+            const referrerId = refResolved as string | null
+            if (referrerId && referrerId !== newStudent.id) {
+              await supabase.from('uce_referrals').insert({
+                referrer_student_id: referrerId,
+                referee_student_id: newStudent.id,
+                referee_phone: newStudent.phone,
+                level: 1,
+                status: 'pending',
+              })
+            }
+          } catch (e) { console.warn('Referral insert failed (non-blocking)', e) }
         }
 
         if (!payLater) toast.success('Student registered successfully')
@@ -520,6 +571,37 @@ export default function StudentRegisterPage() {
                 />
               </FormField>
             </div>
+            {/* Referral code (optional) */}
+            <FormField
+              label="Referral Code"
+              hint="Optional — 6-character code if this student was referred by an existing student"
+              error={errors.referral_code?.message}
+            >
+              <div className="relative">
+                <input
+                  value={watch('referral_code') || ''}
+                  onChange={e => onReferralCodeChange(e.target.value)}
+                  className={cn(inputClass, 'uppercase tracking-widest font-mono')}
+                  placeholder="e.g. AB12CD"
+                  maxLength={7}
+                />
+                {refState === 'checking' && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 inline-flex items-center gap-1">
+                    <Loader2 size={11} className="animate-spin" /> Checking…
+                  </span>
+                )}
+                {refState === 'valid' && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-green-600 inline-flex items-center gap-1">
+                    <Check size={12} /> Referred by {refReferrerName}
+                  </span>
+                )}
+                {refState === 'invalid' && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-red-500">
+                    Unknown code
+                  </span>
+                )}
+              </div>
+            </FormField>
           </>)}
 
           {step === 2 && (<>
