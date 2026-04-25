@@ -78,6 +78,7 @@ import AdminStudentFeePlanPage from './pages/admin/fees/AdminStudentFeePlanPage'
 // Franchise pages
 import FDashboardPage from './pages/franchise/FDashboardPage'
 import FProfilePage from './pages/franchise/FProfilePage'
+import FSettingsPage from './pages/franchise/FSettingsPage'
 import FCourseListPage from './pages/franchise/courses/FCourseListPage'
 import FCourseFormPage from './pages/franchise/courses/FCourseFormPage'
 import FPaymentAccountsPage from './pages/franchise/fees/FPaymentAccountsPage'
@@ -246,7 +247,7 @@ function AppRoutes() {
         <Route path="reports/wallet" element={<FWalletReportPage />} />
 
         <Route path="profile" element={<FProfilePage />} />
-        <Route path="settings" element={<FProfilePage />} />
+        <Route path="settings" element={<FSettingsPage />} />
       </Route>
 
       {/* Student panel */}
