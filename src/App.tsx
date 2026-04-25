@@ -67,6 +67,7 @@ import GalleryManagePage from './pages/website/GalleryManagePage'
 import BannerManagePage from './pages/website/BannerManagePage'
 import VideoManagePage from './pages/website/VideoManagePage'
 import NewsletterPage from './pages/website/NewsletterPage'
+import DownloadCenterPage from './pages/website/DownloadCenterPage'
 import SettingsPage from './pages/SettingsPage'
 import ProfilePage from './pages/ProfilePage'
 import AdminPromotionsPage from './pages/admin/AdminPromotionsPage'
@@ -199,6 +200,7 @@ function AppRoutes() {
         <Route path="website/banners" element={<BannerManagePage />} />
         <Route path="website/videos" element={<VideoManagePage />} />
         <Route path="website/newsletters" element={<NewsletterPage />} />
+        <Route path="website/downloads" element={<DownloadCenterPage />} />
 
         <Route path="promotions" element={<AdminPromotionsPage />} />
         <Route path="support/tickets" element={<AdminTicketsPage />} />

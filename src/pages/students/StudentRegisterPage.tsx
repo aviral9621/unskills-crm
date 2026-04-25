@@ -4,7 +4,7 @@ import { isStudentLocked } from '../../lib/studentLock'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle, Package } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { uploadPublicFile, deletePublicFile, isBlobUrl, STORAGE_BUCKETS } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
@@ -54,7 +54,7 @@ const schema = z.object({
   pincode: z.string().regex(/^(\d{6})?$/, '6 digits').optional().or(z.literal('')),
   course_id: z.string().min(1, 'Course required'),
   batch_id: z.string().optional(),
-  session: z.string().min(1, 'Session required'),
+  admission_date: z.string().optional(),
   admission_year: z.string().min(1, 'Year required'),
   total_fee: z.coerce.number().min(0),
   discount: z.coerce.number().min(0),
@@ -65,6 +65,8 @@ const schema = z.object({
 })
 
 type FormData = z.infer<typeof schema>
+
+type PackageType = 'certificate_only' | 'certificate_kit'
 
 export default function StudentRegisterPage() {
   const navigate = useNavigate()
@@ -84,30 +86,29 @@ export default function StudentRegisterPage() {
 
   const [courses, setCourses] = useState<Course[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
-  const [branch, setBranch] = useState<Branch | null>(null)        // selected (or only) branch used for wallet
-  const [branchesList, setBranchesList] = useState<Branch[]>([])   // all branches (super_admin picker)
+  const [branch, setBranch] = useState<Branch | null>(null)
+  const [branchesList, setBranchesList] = useState<Branch[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string>('')
   const [certFee, setCertFee] = useState(0)
+  const [kitAmount, setKitAmount] = useState(500)
+  const [packageType, setPackageType] = useState<PackageType>('certificate_only')
 
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
-  const savedPhotoUrlRef = useRef<string | null>(null) // tracks the URL actually saved in DB
+  const savedPhotoUrlRef = useRef<string | null>(null)
 
   const [walletError, setWalletError] = useState(false)
+  const [payLaterLoading, setPayLaterLoading] = useState(false)
 
   const currentAcademicYear = (() => {
     const cy = new Date().getFullYear()
     return `${cy}-${cy + 1}`
   })()
-  const currentSession = (() => {
-    const cy = new Date().getFullYear()
-    return `${cy}-${String((cy + 1) % 100).padStart(2, '0')}`
-  })()
 
   const { register, handleSubmit, watch, reset, trigger, setValue, formState: { errors } } = useForm<FormData>({
     defaultValues: {
       state: 'Uttar Pradesh',
-      session: currentSession,
+      admission_date: new Date().toISOString().split('T')[0],
       admission_year: currentAcademicYear,
       total_fee: 0, discount: 0, registration_fee: 0,
     },
@@ -118,20 +119,23 @@ export default function StudentRegisterPage() {
   const discount = watch('discount')
   const netFee = Math.max(0, (totalFee || 0) - (discount || 0))
 
+  // Total amount to deduct based on package selection
+  const totalDeduction = certFee + (packageType === 'certificate_kit' ? kitAmount : 0)
+
   useEffect(() => { fetchInitial() }, [])
   useEffect(() => { if (courseId) fetchBatches(courseId) }, [courseId])
 
   async function fetchInitial() {
     setLoading(true)
     try {
-      const [cRes, branchRes] = await Promise.all([
+      const [cRes, branchRes, kitRes] = await Promise.all([
         supabase.from('uce_courses').select('*').eq('is_active', true).order('name'),
-        // Super admin sees ALL active branches; branch user only their own
         isSuperAdmin
           ? supabase.from('uce_branches').select('*').eq('is_active', true).order('name')
           : profile?.branch_id
             ? supabase.from('uce_branches').select('*').eq('id', profile.branch_id)
             : Promise.resolve({ data: [], error: null }),
+        supabase.from('uce_site_settings').select('value').eq('key', 'site_kit_amount').maybeSingle(),
       ])
       setCourses(cRes.data ?? [])
       const list = (branchRes.data ?? []) as Branch[]
@@ -140,10 +144,11 @@ export default function StudentRegisterPage() {
         setBranch(list[0])
         setSelectedBranchId(list[0].id)
       } else if (isSuperAdmin && list.length === 1) {
-        // only one branch exists — pre-select for convenience
         setBranch(list[0])
         setSelectedBranchId(list[0].id)
       }
+      const kitVal = parseInt(kitRes.data?.value || '500', 10)
+      setKitAmount(isNaN(kitVal) ? 500 : kitVal)
 
       if (!isEdit) await generateRegNo()
       else await loadStudent()
@@ -151,7 +156,6 @@ export default function StudentRegisterPage() {
     finally { setLoading(false) }
   }
 
-  // Whenever super_admin changes the branch dropdown, keep `branch` (for wallet) in sync
   useEffect(() => {
     if (!selectedBranchId) { setBranch(null); return }
     const b = branchesList.find(x => x.id === selectedBranchId) || null
@@ -179,6 +183,7 @@ export default function StudentRegisterPage() {
       setPhotoUrl(data.photo_url)
       savedPhotoUrlRef.current = data.photo_url
       setSelectedBranchId(data.branch_id || '')
+      if (data.package_type) setPackageType(data.package_type as PackageType)
       reset({
         name: data.name, father_name: data.father_name, mother_name: data.mother_name || '',
         dob: data.dob || '', gender: data.gender || '',
@@ -187,8 +192,9 @@ export default function StudentRegisterPage() {
         phone: data.phone, alt_phone: data.alt_phone || '', email: data.email || '', whatsapp: data.whatsapp || '',
         address: data.address || '', village: data.village || '', block: data.block || '',
         district: data.district || '', state: data.state || 'Uttar Pradesh', pincode: data.pincode || '',
-        course_id: data.course_id, batch_id: data.batch_id || '', session: data.session || '2025-26',
-        admission_year: data.admission_year || '2025-2026',
+        course_id: data.course_id, batch_id: data.batch_id || '',
+        admission_date: data.admission_date || new Date().toISOString().split('T')[0],
+        admission_year: data.admission_year || currentAcademicYear,
         total_fee: data.total_fee, discount: data.discount, registration_fee: data.registration_fee,
         fee_start_month: data.fee_start_month || '',
         installment_count: data.installment_count ?? 0,
@@ -202,21 +208,18 @@ export default function StudentRegisterPage() {
     setBatches(data ?? [])
     const c = courses.find(x => x.id === cid)
     if (c) {
-      // Only pre-fill fee when creating — don't overwrite the student's existing fee on edit
       if (!isEdit) setValue('total_fee', c.total_fee)
       setCertFee(c.certification_fee)
     }
   }
 
   const stepFields: Record<number, (keyof FormData)[]> = {
-    // Aadhaar is optional but, when present, must be 12 digits — so validate it here.
     1: ['name', 'father_name', 'aadhar_number'],
     2: ['phone', 'alt_phone', 'email'],
     3: ['district', 'state', 'pincode'],
-    4: ['course_id', 'session', 'admission_year'],
+    4: ['course_id', 'admission_year'],
   }
 
-  // Human-readable field names, so toast/error messages can say *where* the problem is.
   const fieldStepMap: Partial<Record<keyof FormData, { step: number; label: string }>> = {
     name: { step: 1, label: 'Student Name (Step 1)' },
     father_name: { step: 1, label: "Father's Name (Step 1)" },
@@ -228,7 +231,6 @@ export default function StudentRegisterPage() {
     state: { step: 3, label: 'State (Step 3)' },
     pincode: { step: 3, label: 'Pincode (Step 3)' },
     course_id: { step: 4, label: 'Course (Step 4)' },
-    session: { step: 4, label: 'Session (Step 4)' },
     admission_year: { step: 4, label: 'Admission Year (Step 4)' },
   }
 
@@ -237,7 +239,6 @@ export default function StudentRegisterPage() {
     if (fields) {
       const ok = await trigger(fields)
       if (!ok) {
-        // react-hook-form's `errors` is already populated; surface the first one.
         const firstErrField = fields.find(f => errors[f])
         if (firstErrField) {
           const meta = fieldStepMap[firstErrField]
@@ -250,23 +251,7 @@ export default function StudentRegisterPage() {
     if (step < 4) setStep(step + 1)
   }
 
-  async function onSubmit(form: FormData) {
-    if (step !== 4) return  // guard: never save unless user is on the final step
-    if (isEdit && locked && !isSuperAdmin) {
-      toast.error('This student is locked because a certificate or result has been issued')
-      return
-    }
-    const parsed = schema.safeParse(form)
-    if (!parsed.success) {
-      const issue = parsed.error.issues[0]
-      const key = issue.path[0] as keyof FormData
-      const meta = fieldStepMap[key]
-      toast.error(meta ? `${meta.label}: ${issue.message}` : issue.message)
-      if (meta) setStep(meta.step)
-      return
-    }
-
-    // Resolve branch_id: super_admin picks from dropdown, branch user uses their own
+  async function saveStudent(form: FormData, payLater: boolean) {
     const effectiveBranchId = isSuperAdmin
       ? selectedBranchId
       : (profile?.branch_id || selectedBranchId)
@@ -277,20 +262,8 @@ export default function StudentRegisterPage() {
       return
     }
 
-    // Wallet check (only when we have a branch and cert fee applies, on create).
-    // Super admins bypass the wallet — UnSkills (UCE-BR-001) is the main owner
-    // branch, not a franchise, so the owner company shouldn't be charged.
-    if (!isEdit && branch && certFee > 0 && !isSuperAdmin) {
-      if ((branch.wallet_balance || 0) < certFee) {
-        setWalletError(true); return
-      }
-    }
-
     setSaving(true)
     try {
-      // Start from the persisted URL only (never a blob: preview).
-      // If the caller has an un-saved blob URL in `photoUrl` but no
-      // `photoFile`, there's nothing to upload — keep null.
       let photoFinalUrl: string | null = isBlobUrl(photoUrl) ? null : photoUrl
       if (photoFile) {
         const ext = (photoFile.name.split('.').pop() || 'jpg').toLowerCase()
@@ -314,8 +287,11 @@ export default function StudentRegisterPage() {
         district: form.district, state: form.state, pincode: form.pincode || null,
         course_id: form.course_id, batch_id: form.batch_id || null,
         total_fee: form.total_fee, discount: form.discount, net_fee: netFee,
-        registration_fee: form.registration_fee, session: form.session,
-        admission_year: form.admission_year, enrollment_date: new Date().toISOString().split('T')[0],
+        registration_fee: form.registration_fee,
+        admission_date: form.admission_date || new Date().toISOString().split('T')[0],
+        admission_year: form.admission_year,
+        enrollment_date: new Date().toISOString().split('T')[0],
+        package_type: packageType,
         fee_start_month: form.fee_start_month ? `${form.fee_start_month}-01` : null,
         installment_count: form.installment_count && form.installment_count > 0 ? form.installment_count : null,
         monthly_fee: form.monthly_fee && form.monthly_fee > 0 ? form.monthly_fee : null,
@@ -323,31 +299,39 @@ export default function StudentRegisterPage() {
       }
 
       if (isEdit) {
-        // Delete old R2 photo if it was replaced or cleared
         const oldUrl = savedPhotoUrlRef.current
         if (oldUrl && oldUrl !== photoFinalUrl) void deletePublicFile(oldUrl)
         const { error } = await supabase.from('uce_students').update(payload).eq('id', editId)
         if (error) throw error
         savedPhotoUrlRef.current = photoFinalUrl
-        // Regenerate monthly schedule whenever plan fields could have changed
         if (editId) { void supabase.rpc('fn_generate_fee_schedule', { p_student_id: editId }) }
         toast.success('Student updated')
       } else {
         const { data: newStudent, error } = await supabase.from('uce_students').insert({ ...payload, is_active: true }).select().single()
         if (error) { if (error.message?.includes('duplicate')) toast.error('Registration number already exists'); else throw error; return }
 
-        // Wallet deduction — skip for super_admin (owner company is not billed)
-        if (branch && certFee > 0 && newStudent && !isSuperAdmin) {
-          const newBal = (branch.wallet_balance || 0) - certFee
-          await supabase.from('uce_branches').update({ wallet_balance: newBal }).eq('id', branch.id)
-          await supabase.from('uce_branch_wallet_transactions').insert({
-            branch_id: branch.id, type: 'debit', amount: certFee, balance_after: newBal,
-            description: `Certificate fee - ${regNo}`, reference_type: 'student_registration',
-            reference_id: newStudent.id, performed_by: user?.id || null,
-          })
+        if (branch && totalDeduction > 0 && newStudent && !isSuperAdmin) {
+          if (payLater) {
+            // Record pending payment — deduction happens within 24 hours
+            const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+            await supabase.from('uce_pending_wallet_payments').insert({
+              branch_id: branch.id, student_id: newStudent.id, amount: totalDeduction,
+              description: `${packageType === 'certificate_kit' ? 'Certificate + Kit' : 'Certificate'} fee - ${regNo} (Pay Later)`,
+              due_at: dueAt, status: 'pending', created_by: user?.id || null,
+            })
+            toast.warning(`Student registered. ₹${totalDeduction} payment due within 24 hours.`)
+          } else {
+            const newBal = (branch.wallet_balance || 0) - totalDeduction
+            await supabase.from('uce_branches').update({ wallet_balance: newBal }).eq('id', branch.id)
+            await supabase.from('uce_branch_wallet_transactions').insert({
+              branch_id: branch.id, type: 'debit', amount: totalDeduction, balance_after: newBal,
+              description: `${packageType === 'certificate_kit' ? 'Certificate + Kit' : 'Certificate'} fee - ${regNo}`,
+              reference_type: 'student_registration', reference_id: newStudent.id,
+              performed_by: user?.id || null,
+            })
+          }
         }
 
-        // Record registration fee payment
         if (form.registration_fee > 0 && newStudent) {
           await supabase.from('uce_student_fee_payments').insert({
             student_id: newStudent.id, branch_id: effectiveBranchId, amount: form.registration_fee,
@@ -356,13 +340,10 @@ export default function StudentRegisterPage() {
           })
         }
 
-        // Generate monthly fee schedule if a plan was configured
         if (newStudent && form.fee_start_month && form.installment_count && form.installment_count > 0) {
           void supabase.rpc('fn_generate_fee_schedule', { p_student_id: newStudent.id })
         }
 
-        // Create Supabase auth account for student (reg_no + phone).
-        // Non-blocking — if it fails we keep the student row and warn.
         if (newStudent) {
           const { error: fnErr } = await supabase.functions.invoke('create-student-auth', {
             body: { student_id: newStudent.id },
@@ -373,11 +354,57 @@ export default function StudentRegisterPage() {
           }
         }
 
-        toast.success('Student registered successfully')
+        if (!payLater) toast.success('Student registered successfully')
       }
       navigate(`${base}/students`)
     } catch (err) { console.error(err); toast.error('Failed to save student') }
     finally { setSaving(false) }
+  }
+
+  async function onSubmit(form: FormData) {
+    if (step !== 4) return
+    if (isEdit && locked && !isSuperAdmin) {
+      toast.error('This student is locked because a certificate or result has been issued')
+      return
+    }
+    const parsed = schema.safeParse(form)
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0]
+      const key = issue.path[0] as keyof FormData
+      const meta = fieldStepMap[key]
+      toast.error(meta ? `${meta.label}: ${issue.message}` : issue.message)
+      if (meta) setStep(meta.step)
+      return
+    }
+
+    const effectiveBranchId = isSuperAdmin
+      ? selectedBranchId
+      : (profile?.branch_id || selectedBranchId)
+
+    if (!effectiveBranchId) {
+      toast.error(isSuperAdmin ? 'Please select a branch' : 'Your account is not attached to a branch — contact super admin')
+      if (isSuperAdmin) setStep(4)
+      return
+    }
+
+    if (!isEdit && branch && totalDeduction > 0 && !isSuperAdmin) {
+      if ((branch.wallet_balance || 0) < totalDeduction) {
+        setWalletError(true); return
+      }
+    }
+
+    await saveStudent(form, false)
+  }
+
+  async function handlePayLater() {
+    const form = watch()
+    setWalletError(false)
+    setPayLaterLoading(true)
+    try {
+      await saveStudent(form as FormData, true)
+    } finally {
+      setPayLaterLoading(false)
+    }
   }
 
   if (loading) return <div className="max-w-3xl mx-auto space-y-4"><div className="skeleton h-8 w-48 rounded-lg" /><div className="skeleton h-3 w-full rounded-full" /><div className="bg-white rounded-xl border p-6 space-y-4">{[1,2,3,4].map(i => <div key={i} className="skeleton h-12 rounded-lg" />)}</div></div>
@@ -460,7 +487,6 @@ export default function StudentRegisterPage() {
                   placeholder="12-digit Aadhar"
                   maxLength={12}
                   onInput={e => {
-                    // Strip non-digits so the regex only needs to enforce length.
                     const el = e.currentTarget
                     const cleaned = el.value.replace(/\D/g, '')
                     if (cleaned !== el.value) el.value = cleaned
@@ -568,8 +594,11 @@ export default function StudentRegisterPage() {
                 />
               </FormField>
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField label="Session" required><input {...register('session')} className={inputClass} placeholder={currentSession} /></FormField>
+              <FormField label="Admission Date">
+                <input type="date" {...register('admission_date')} className={inputClass} />
+              </FormField>
               <FormField label="Admission Year" required error={errors.admission_year?.message}>
                 <Select
                   value={watch('admission_year') || ''}
@@ -580,6 +609,46 @@ export default function StudentRegisterPage() {
                 />
               </FormField>
             </div>
+
+            {/* Package Selection */}
+            {!isEdit && certFee > 0 && !isSuperAdmin && (
+              <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Package size={15} className="text-red-500" />
+                  <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Registration Package</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className={cn(
+                    'flex items-start gap-3 p-3.5 rounded-lg border-2 cursor-pointer transition-all',
+                    packageType === 'certificate_only' ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                  )}>
+                    <input type="radio" name="packageType" value="certificate_only"
+                      checked={packageType === 'certificate_only'}
+                      onChange={() => setPackageType('certificate_only')}
+                      className="mt-0.5 accent-red-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Only Certificate</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Certificate fee only</p>
+                      <p className="text-sm font-bold text-red-600 mt-1">{formatINR(certFee)}</p>
+                    </div>
+                  </label>
+                  <label className={cn(
+                    'flex items-start gap-3 p-3.5 rounded-lg border-2 cursor-pointer transition-all',
+                    packageType === 'certificate_kit' ? 'border-red-500 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                  )}>
+                    <input type="radio" name="packageType" value="certificate_kit"
+                      checked={packageType === 'certificate_kit'}
+                      onChange={() => setPackageType('certificate_kit')}
+                      className="mt-0.5 accent-red-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Certificate + Kit</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Certificate + study kit ({formatINR(kitAmount)})</p>
+                      <p className="text-sm font-bold text-red-600 mt-1">{formatINR(certFee + kitAmount)}</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
 
             {/* Fee breakdown */}
             <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3 mt-2">
@@ -610,21 +679,22 @@ export default function StudentRegisterPage() {
                   </FormField>
                 </div>
               </div>
-              {!isEdit && certFee > 0 && !isSuperAdmin && (
-                <div className={`rounded-lg p-3 border ${(branch?.wallet_balance || 0) >= certFee ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+
+              {!isEdit && totalDeduction > 0 && !isSuperAdmin && (
+                <div className={cn('rounded-lg p-3 border', (branch?.wallet_balance || 0) >= totalDeduction ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200')}>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-600">Certification Fee:</span>
-                    <span className="text-sm font-bold text-gray-900">{formatINR(certFee)}</span>
+                    <span className="text-xs text-gray-600">{packageType === 'certificate_kit' ? 'Certificate + Kit Fee:' : 'Certification Fee:'}</span>
+                    <span className="text-sm font-bold text-gray-900">{formatINR(totalDeduction)}</span>
                   </div>
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-xs text-gray-600">Branch Wallet:</span>
-                    <span className={`text-sm font-bold ${(branch?.wallet_balance || 0) >= certFee ? 'text-green-600' : 'text-red-600'}`}>{formatINR(branch?.wallet_balance || 0)}</span>
+                    <span className={cn('text-sm font-bold', (branch?.wallet_balance || 0) >= totalDeduction ? 'text-green-600' : 'text-red-600')}>{formatINR(branch?.wallet_balance || 0)}</span>
                   </div>
                 </div>
               )}
-              {!isEdit && certFee > 0 && isSuperAdmin && (
+              {!isEdit && totalDeduction > 0 && isSuperAdmin && (
                 <div className="rounded-lg p-3 border bg-blue-50 border-blue-200 text-xs text-blue-800">
-                  Super admin — certification fee (<b>{formatINR(certFee)}</b>) is not billed to the branch wallet.
+                  Super admin — {packageType === 'certificate_kit' ? 'certificate + kit' : 'certification'} fee (<b>{formatINR(totalDeduction)}</b>) is not billed to the branch wallet.
                 </div>
               )}
             </div>
@@ -654,13 +724,36 @@ export default function StudentRegisterPage() {
         </div>
       </form>
 
-      {/* Wallet insufficient modal */}
-      <Modal open={walletError} onClose={() => setWalletError(false)} title="Insufficient Balance" size="sm">
-        <div className="text-center space-y-4">
-          <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto"><AlertTriangle size={24} className="text-amber-600" /></div>
-          <p className="text-sm text-gray-600">Your branch wallet balance (<span className="font-bold text-red-600">{formatINR(branch?.wallet_balance || 0)}</span>) is insufficient to cover the certification fee (<span className="font-bold">{formatINR(certFee)}</span>).</p>
-          <p className="text-xs text-gray-400">Contact your Super Admin to recharge your wallet.</p>
-          <button onClick={() => setWalletError(false)} className="w-full px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700">OK, Understood</button>
+      {/* Wallet insufficient modal — with pay later option */}
+      <Modal open={walletError} onClose={() => setWalletError(false)} title="Insufficient Wallet Balance" size="sm">
+        <div className="space-y-4">
+          <div className="flex flex-col items-center text-center gap-2">
+            <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center"><AlertTriangle size={24} className="text-amber-600" /></div>
+            <p className="text-sm text-gray-600">
+              Your branch wallet balance (<span className="font-bold text-red-600">{formatINR(branch?.wallet_balance || 0)}</span>) is insufficient to cover the {packageType === 'certificate_kit' ? 'certificate + kit' : 'certification'} fee (<span className="font-bold">{formatINR(totalDeduction)}</span>).
+            </p>
+          </div>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <p className="font-semibold mb-0.5">Pay Later option</p>
+            <p>Register the student now and clear the outstanding amount within <strong>24 hours</strong>. Failure to pay may result in account restrictions.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <button
+              onClick={() => setWalletError(false)}
+              className="px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Go Back
+            </button>
+            <button
+              onClick={handlePayLater}
+              disabled={payLaterLoading}
+              className="px-4 py-2.5 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {payLaterLoading && <Loader2 size={14} className="animate-spin" />}
+              Pay Later (24h)
+            </button>
+          </div>
+          <p className="text-center text-xs text-gray-400">Or recharge your wallet first — contact your Super Admin.</p>
         </div>
       </Modal>
     </div>
