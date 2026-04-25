@@ -2,9 +2,10 @@
  * Authorised Training Center (ATC) Certificate generator.
  *
  * PORTRAIT A4 (595.28 × 841.89 pt). Border + ornamentation comes from the
- * template asset at `/public/Branch Certificate.pdf` (embedded as the page
- * background). The round UnSkills logo is also baked into the template, so we
- * don't draw side logos any more — content sits inside the inner safe zone.
+ * template asset at `/public/Authorized Center Certificate New .pdf` (embedded
+ * as the page background). The round UnSkills logo is also baked into the
+ * template, so we don't draw side logos any more — content sits inside the
+ * inner safe zone.
  *
  * Fonts (per design guide):
  *   - Montserrat 400 / 500 / 600 / 700  → almost everything
@@ -265,14 +266,15 @@ async function drawFooterBadges(doc: PDFDocument, page: PDFPage, y: number, tota
 // ─── Portrait template loader ────────────────────────────────────────────────
 
 const A4_PORTRAIT: [number, number] = [595.28, 841.89]
-const TEMPLATE_PATH = '/Branch Certificate.pdf'
+const TEMPLATE_PATH = '/Authorized Center Certificate New .pdf'
 
 async function makeDocWithTemplate(): Promise<PDFDocument> {
   const doc = await PDFDocument.create()
   const page = doc.addPage(A4_PORTRAIT)
   const [W, H] = A4_PORTRAIT
 
-  const bytes = await fetchBytes(TEMPLATE_PATH)
+  // Browser auto-encodes spaces in fetch URLs, but be explicit for safety.
+  const bytes = await fetchBytes(encodeURI(TEMPLATE_PATH))
   if (bytes) {
     try {
       const [embedded] = await doc.embedPdf(bytes, [0])
