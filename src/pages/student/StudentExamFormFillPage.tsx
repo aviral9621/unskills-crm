@@ -195,6 +195,10 @@ export default function StudentExamFormFillPage() {
       ])
       const photoDataUrl = rec.photo_url ? await toDataUrl(rec.photo_url).catch(() => '') : ''
 
+      const branchAddressLine = rec.branch
+        ? [rec.branch.address_line1, rec.branch.district, rec.branch.state, rec.branch.pincode]
+            .filter(Boolean).join(', ')
+        : null
       const blob = await buildExamFormPdfBlob({
         student: {
           registration_no: rec.registration_no,
@@ -203,7 +207,8 @@ export default function StudentExamFormFillPage() {
           course_name: rec.course?.name || '',
           course_code: rec.course?.code || null,
           branch_name: rec.branch?.name || null,
-          branch_code: rec.branch?.code || null,
+          branch_code: rec.branch?.b_code || rec.branch?.code || null,
+          branch_address: branchAddressLine,
           session: rec.session,
           photo_url: rec.photo_url,
           phone: phone || rec.phone,

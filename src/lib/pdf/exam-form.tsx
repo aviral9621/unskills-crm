@@ -1,6 +1,9 @@
 /**
- * Exam form PDF — mirrors admit-card branding.
- * Title swaps to "RETEST EXAMINATION FORM" + a CARRY-FORWARD ribbon for CF.
+ * Exam form PDF — A4 portrait, single page.
+ * Mirrors admit-card branding. Title swaps to "RETEST / CARRY-FORWARD" + amber
+ * ribbon for CF. Footer always pinned to A4 bottom; bottom block carries the
+ * STUDENT BRANCH'S address (not org HQ) so a branch's exam form looks like
+ * theirs.
  */
 import type { AdmitCardSettings } from '../admitCardSettings'
 import { toDataUrl } from './admit-card'
@@ -19,6 +22,7 @@ export interface ExamFormStudent {
   course_code: string | null
   branch_name: string | null
   branch_code: string | null
+  branch_address: string | null
   session: string | null
   photo_url: string | null
   phone: string | null
@@ -39,9 +43,8 @@ export interface BuildExamFormPdfInput {
   logoDataUrl: string
   isoLogoDataUrl: string
   photoDataUrl: string
-  // optional acknowledgement number (set after server insert)
   ackNumber?: string
-  submittedOn?: string  // ISO date
+  submittedOn?: string
 }
 
 let fontsRegistered = false
@@ -88,45 +91,51 @@ export async function buildExamFormPdfBlob(input: BuildExamFormPdfInput): Promis
   const TEAL = '#0D6B5E'
   const GOLD = '#B8962E'
   const AMBER = '#B45309'
+  const GREEN_OK = '#16A34A'
 
   const isCF = formType === 'carry_forward'
+
+  // Footer text: prefer the student's branch address (so a branch's form
+  // looks like THEIR form). Fall back to org HQ.
+  const branchAddressLine = student.branch_address?.trim() || settings.footer_address || ''
+  const branchName = student.branch_name || ''
 
   const s = StyleSheet.create({
     page: {
       paddingTop: 0, paddingBottom: 0, paddingLeft: 0, paddingRight: 0,
-      fontFamily: 'DMSans', fontSize: 10, color: BLACK, backgroundColor: '#FFFFFF',
+      fontFamily: 'DMSans', fontSize: 9.5, color: BLACK, backgroundColor: '#FFFFFF',
     },
 
-    // Top decorative bars (tricolor-inspired)
+    // Top decorative bars
     topBarGreen: { height: 5, backgroundColor: TEAL },
     topBarGold:  { height: 2, backgroundColor: GOLD },
     topBarWhite: { height: 2, backgroundColor: '#FFFFFF' },
     topBarRed:   { height: 2, backgroundColor: RED },
 
-    headerWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10 },
-    logoCol:    { width: 72, alignItems: 'center', justifyContent: 'center' },
-    logo:       { width: 58, height: 58, objectFit: 'contain' },
+    headerWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8 },
+    logoCol:    { width: 64, alignItems: 'center', justifyContent: 'center' },
+    logo:       { width: 56, height: 56, objectFit: 'contain' },
     middleCol:  { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
-    brand:      { fontSize: 20, fontWeight: 700, color: DARK, letterSpacing: 0.5, textAlign: 'center' },
-    subtitleRow:{ flexDirection: 'row', alignItems: 'center', marginTop: 3, gap: 6 },
-    subtitleDash:{ width: 24, height: 1.5, backgroundColor: RED },
-    subtitleText:{ fontSize: 9, color: BLACK, fontWeight: 400 },
-    certLine:   { fontSize: 8, color: MUTED, marginTop: 4, textAlign: 'center', lineHeight: 1.4 },
-    isoCol:     { width: 80, alignItems: 'center', justifyContent: 'center' },
-    isoImg:     { width: 72, height: 72, objectFit: 'contain' },
+    brand:      { fontSize: 19, fontWeight: 700, color: DARK, letterSpacing: 0.5, textAlign: 'center' },
+    subtitleRow:{ flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 6 },
+    subtitleDash:{ width: 22, height: 1.5, backgroundColor: RED },
+    subtitleText:{ fontSize: 8.5, color: BLACK, fontWeight: 400 },
+    certLine:   { fontSize: 7.5, color: MUTED, marginTop: 3, textAlign: 'center', lineHeight: 1.3 },
+    isoCol:     { width: 70, alignItems: 'center', justifyContent: 'center' },
+    isoImg:     { width: 64, height: 64, objectFit: 'contain' },
 
     stripWrap: {
       backgroundColor: '#F8F8F8', borderTopWidth: 1, borderTopColor: BORDER,
       borderBottomWidth: 2, borderBottomColor: RED,
-      paddingVertical: 5, paddingHorizontal: 14, alignItems: 'center',
+      paddingVertical: 4, paddingHorizontal: 14, alignItems: 'center',
     },
-    stripText: { fontSize: 9.5, fontWeight: 700, color: DARK, letterSpacing: 0.3, textAlign: 'center' },
+    stripText: { fontSize: 9, fontWeight: 700, color: DARK, letterSpacing: 0.3, textAlign: 'center' },
 
-    titleWrap: { alignItems: 'center', marginTop: 10, marginBottom: 6 },
-    titleText: { fontSize: 15, fontWeight: 700, color: BLACK, letterSpacing: 1, textAlign: 'center' },
+    titleWrap: { alignItems: 'center', marginTop: 8, marginBottom: 4 },
+    titleText: { fontSize: 14, fontWeight: 700, color: BLACK, letterSpacing: 1, textAlign: 'center' },
     titleRule: { width: 100, height: 2, backgroundColor: RED, marginTop: 3 },
 
-    typeBadgeWrap: { alignItems: 'center', marginBottom: 8 },
+    typeBadgeWrap: { alignItems: 'center', marginBottom: 6 },
     typeBadge: {
       paddingHorizontal: 10, paddingVertical: 3,
       borderRadius: 3,
@@ -137,47 +146,46 @@ export async function buildExamFormPdfBlob(input: BuildExamFormPdfInput): Promis
 
     body: { flex: 1, paddingHorizontal: 18, flexDirection: 'column' },
 
-    studentRow: { flexDirection: 'row', borderWidth: 1, borderColor: BORDER, marginTop: 4 },
+    studentRow: { flexDirection: 'row', borderWidth: 1, borderColor: BORDER, marginTop: 2 },
     studentCol: { flex: 1, borderRightWidth: 1, borderRightColor: BORDER },
-    photoCol:   { width: 110, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
+    photoCol:   { width: 110, alignItems: 'center', justifyContent: 'flex-start', paddingVertical: 8 },
     photoBox:   { width: 84, height: 100, borderWidth: 1, borderColor: BORDER, objectFit: 'cover' },
     photoPlaceholder: { width: 84, height: 100, borderWidth: 1, borderColor: BORDER, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
     photoCaption: { fontSize: 7.5, color: MUTED, marginTop: 3 },
-    sigBox: { width: 84, height: 28, borderWidth: 1, borderColor: BORDER, marginTop: 6, alignItems: 'center', justifyContent: 'center' },
-    sigBoxLbl: { fontSize: 7, color: MUTED },
 
-    tRow:     { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER, minHeight: 20 },
-    tRowLast: { flexDirection: 'row', minHeight: 20 },
-    tLbl:     { width: 110, paddingVertical: 4, paddingHorizontal: 7, fontSize: 8.5, color: MUTED, borderRightWidth: 1, borderRightColor: BORDER },
-    tVal:     { flex: 1, paddingVertical: 4, paddingHorizontal: 7, fontSize: 8.5, color: BLACK, fontWeight: 700 },
+    tRow:     { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER, minHeight: 18 },
+    tRowLast: { flexDirection: 'row', minHeight: 18 },
+    tLbl:     { width: 105, paddingVertical: 3, paddingHorizontal: 7, fontSize: 8, color: MUTED, borderRightWidth: 1, borderRightColor: BORDER },
+    tVal:     { flex: 1, paddingVertical: 3, paddingHorizontal: 7, fontSize: 8.5, color: BLACK, fontWeight: 700 },
 
-    sectionTitle: { fontSize: 12, fontWeight: 700, color: BLACK, marginTop: 12, letterSpacing: 0.5 },
-    sectionRule:  { width: 80, height: 2, backgroundColor: RED, marginTop: 2, marginBottom: 5 },
+    sectionTitle: { fontSize: 11, fontWeight: 700, color: BLACK, marginTop: 10, letterSpacing: 0.5 },
+    sectionRule:  { width: 70, height: 2, backgroundColor: RED, marginTop: 2, marginBottom: 4 },
 
-    subjTable:    { borderWidth: 1, borderColor: BORDER, marginBottom: 6 },
+    subjTable:    { borderWidth: 1, borderColor: BORDER, marginBottom: 4 },
     subjHead:     { flexDirection: 'row', backgroundColor: BG_ROW, borderBottomWidth: 1, borderBottomColor: BORDER },
-    subjHeadCell: { paddingVertical: 5, paddingHorizontal: 7, fontSize: 8.5, fontWeight: 700, color: BLACK },
+    subjHeadCell: { paddingVertical: 4, paddingHorizontal: 6, fontSize: 8.5, fontWeight: 700, color: BLACK },
     subjRow:      { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER },
     subjRowLast:  { flexDirection: 'row' },
-    subjCell:     { paddingVertical: 4, paddingHorizontal: 7, fontSize: 8.5, color: BLACK },
-    checkbox:     { width: 9, height: 9, borderWidth: 1, borderColor: BLACK, marginRight: 6 },
-    checked:      { backgroundColor: BLACK },
+    subjCell:     { paddingVertical: 3, paddingHorizontal: 6, fontSize: 8.5, color: BLACK },
+    appliedCell:  { width: 60, borderLeftWidth: 1, borderLeftColor: BORDER, alignItems: 'center', justifyContent: 'center', paddingVertical: 3 },
+    tickText:     { fontSize: 12, fontWeight: 700, color: GREEN_OK },
 
     declarationWrap: {
-      marginTop: 10, padding: 7, borderWidth: 1, borderColor: BORDER, backgroundColor: BG_ROW,
+      marginTop: 8, padding: 6, borderWidth: 1, borderColor: BORDER, backgroundColor: BG_ROW,
     },
-    declarationText: { fontSize: 8.5, color: BLACK, lineHeight: 1.5 },
+    declarationText: { fontSize: 8, color: BLACK, lineHeight: 1.4 },
 
-    sigPusher: { marginTop: 'auto', paddingTop: 12 },
-    sigRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 4, paddingBottom: 10 },
+    bottomBlock: { marginTop: 'auto' },
+    sigRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 4, paddingTop: 16, paddingBottom: 6 },
     sigCell: { alignItems: 'center', width: 150 },
     sigLabel: { fontSize: 8.5, fontWeight: 700, color: BLACK, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 3, width: 140, textAlign: 'center' },
-    sigWebsite: { fontSize: 8.5, color: MUTED, alignSelf: 'center' },
+    sigCenterCol: { alignItems: 'center', flex: 1 },
+    sigWebsite: { fontSize: 8, color: MUTED, textAlign: 'center' },
+    ackLine: { fontSize: 7.5, color: MUTED, textAlign: 'center', marginTop: 2, marginBottom: 4 },
 
-    ackLine: { fontSize: 7.5, color: MUTED, textAlign: 'center', marginBottom: 4 },
-
-    footerWrap: { backgroundColor: RED, paddingVertical: 7, paddingHorizontal: 18, alignItems: 'center' },
-    footerText: { color: '#FFFFFF', fontSize: 8.5, fontWeight: 700, textAlign: 'center' },
+    footerWrap: { backgroundColor: RED, paddingVertical: 6, paddingHorizontal: 14, alignItems: 'center' },
+    footerBranchName: { color: '#FFFFFF', fontSize: 8.5, fontWeight: 700, textAlign: 'center', marginBottom: 1 },
+    footerText: { color: '#FFFFFF', fontSize: 8, fontWeight: 400, textAlign: 'center' },
   })
 
   const Doc = (
@@ -196,8 +204,7 @@ export async function buildExamFormPdfBlob(input: BuildExamFormPdfInput): Promis
           <View style={s.middleCol}>
             <Text style={s.brand}>
               <Text style={{ color: RED }}>UN</Text>
-              <Text style={{ color: DARK }}>SKILLS</Text>
-              <Text style={{ color: DARK }}> COMPUTER EDUCATION</Text>
+              <Text style={{ color: DARK }}>SKILLS COMPUTER EDUCATION</Text>
             </Text>
             <View style={s.subtitleRow}>
               <View style={s.subtitleDash} />
@@ -229,7 +236,7 @@ export async function buildExamFormPdfBlob(input: BuildExamFormPdfInput): Promis
 
         <View style={s.typeBadgeWrap}>
           <Text style={[s.typeBadge, {
-            color: isCF ? '#FFFFFF' : '#FFFFFF',
+            color: '#FFFFFF',
             backgroundColor: isCF ? AMBER : TEAL,
           }]}>
             {isCF ? 'CARRY-FORWARD STUDENT' : 'REGULAR STUDENT'}
@@ -258,7 +265,6 @@ export async function buildExamFormPdfBlob(input: BuildExamFormPdfInput): Promis
                 ? <PdfImage src={photoDataUrl} style={s.photoBox} />
                 : <View style={s.photoPlaceholder}><Text style={{ fontSize: 20, color: '#9CA3AF', fontWeight: 700 }}>{student.name.charAt(0).toUpperCase()}</Text></View>}
               <Text style={s.photoCaption}>Candidate Photo</Text>
-              <View style={s.sigBox}><Text style={s.sigBoxLbl}>Sign</Text></View>
             </View>
           </View>
 
@@ -268,7 +274,7 @@ export async function buildExamFormPdfBlob(input: BuildExamFormPdfInput): Promis
           <View style={s.subjTable}>
             <View style={s.subjHead}>
               <Text style={[s.subjHeadCell, { width: 30 }]}>S.No</Text>
-              <Text style={[s.subjHeadCell, { width: 70, borderLeftWidth: 1, borderLeftColor: BORDER }]}>Code</Text>
+              <Text style={[s.subjHeadCell, { width: 65, borderLeftWidth: 1, borderLeftColor: BORDER }]}>Code</Text>
               <Text style={[s.subjHeadCell, { flex: 1, borderLeftWidth: 1, borderLeftColor: BORDER }]}>Subject Name</Text>
               <Text style={[s.subjHeadCell, { width: 60, borderLeftWidth: 1, borderLeftColor: BORDER, textAlign: 'center' }]}>Applied</Text>
             </View>
@@ -277,10 +283,10 @@ export async function buildExamFormPdfBlob(input: BuildExamFormPdfInput): Promis
             ) : subjects.map((sub, idx) => (
               <View key={sub.id} style={idx === subjects.length - 1 ? s.subjRowLast : s.subjRow}>
                 <Text style={[s.subjCell, { width: 30 }]}>{idx + 1}.</Text>
-                <Text style={[s.subjCell, { width: 70, borderLeftWidth: 1, borderLeftColor: BORDER }]}>{sub.code || '—'}</Text>
+                <Text style={[s.subjCell, { width: 65, borderLeftWidth: 1, borderLeftColor: BORDER }]}>{sub.code || '—'}</Text>
                 <Text style={[s.subjCell, { flex: 1, borderLeftWidth: 1, borderLeftColor: BORDER }]}>{sub.name}</Text>
-                <View style={[s.subjCell, { width: 60, borderLeftWidth: 1, borderLeftColor: BORDER, alignItems: 'center', justifyContent: 'center' }]}>
-                  <View style={[s.checkbox, s.checked]} />
+                <View style={s.appliedCell}>
+                  <Text style={s.tickText}>✓</Text>
                 </View>
               </View>
             ))}
@@ -289,35 +295,40 @@ export async function buildExamFormPdfBlob(input: BuildExamFormPdfInput): Promis
           <View style={s.declarationWrap}>
             <Text style={s.declarationText}>
               I hereby declare that the particulars given above are true to the best of my knowledge.
-              I will abide by the rules and regulations of the institute. I understand that admit card
-              and roll number will be issued only after this form is approved by the institute. {isCF
+              I will abide by the rules and regulations of the institute. Admit card and roll number
+              will be issued only after this form is approved by the institute. {isCF
                 ? 'I am applying for CARRY-FORWARD examination of the subjects listed above where I previously did not clear the assessment.'
                 : 'I am applying as a REGULAR student for all subjects of the current semester listed above.'}
             </Text>
           </View>
 
-          <View style={s.sigPusher}>
+          {/* Bottom block — pinned to A4 bottom via marginTop:'auto' on body */}
+          <View style={s.bottomBlock}>
             <View style={s.sigRow}>
               <View style={s.sigCell}>
                 <View style={{ height: 32 }} />
                 <Text style={s.sigLabel}>Student Signature</Text>
               </View>
-              <Text style={s.sigWebsite}>{settings.website}</Text>
+              <View style={s.sigCenterCol}>
+                <Text style={s.sigWebsite}>{settings.website}</Text>
+                {ackNumber ? (
+                  <Text style={s.ackLine}>
+                    Acknowledgement: {ackNumber} · Submitted on {fmtDate(submittedOn)}
+                  </Text>
+                ) : null}
+              </View>
               <View style={s.sigCell}>
                 <View style={{ height: 32 }} />
                 <Text style={s.sigLabel}>{settings.right_signer || 'Director / Branch Head'}</Text>
               </View>
             </View>
-            {ackNumber ? (
-              <Text style={s.ackLine}>
-                Acknowledgement: {ackNumber} · Submitted on {fmtDate(submittedOn)}
-              </Text>
-            ) : null}
           </View>
         </View>
 
+        {/* Red footer with branch name + address — always at very bottom of A4 */}
         <View style={s.footerWrap}>
-          <Text style={s.footerText}>{settings.footer_address}</Text>
+          {branchName ? <Text style={s.footerBranchName}>{branchName}</Text> : null}
+          <Text style={s.footerText}>{branchAddressLine}</Text>
         </View>
       </Page>
     </Document>

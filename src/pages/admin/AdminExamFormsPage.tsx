@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Check, X, Eye, RotateCcw, IdCard } from 'lucide-react'
+import { Check, X, Eye, RotateCcw, IdCard, Building2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { formatDateDDMMYYYY } from '../../lib/utils'
+
+interface BranchOpt { id: string; name: string; is_main: boolean }
 
 type Status = 'submitted' | 'approved' | 'rejected' | 'resubmit'
 
@@ -36,17 +38,38 @@ export default function AdminExamFormsPage() {
   const [resubmitNote, setResubmitNote] = useState('')
 
   const isBranch = profile?.role === 'branch_admin' || profile?.role === 'branch_staff'
+  const isSuperAdmin = profile?.role === 'super_admin'
   const branchId = profile?.branch_id
+
+  const [branches, setBranches] = useState<BranchOpt[]>([])
+  const hqBranchId = useMemo(() => branches.find(b => b.is_main)?.id ?? null, [branches])
+  // Super admin: filter defaults to HQ branch ('hq'), '' means All Branches.
+  // Branch admin/staff: filter is irrelevant (always locked to their branch).
+  const [branchFilter, setBranchFilter] = useState<string>('hq')
+
+  // Resolve filter token to actual branch_id (or null = all)
+  const effectiveFilterBranchId: string | null = useMemo(() => {
+    if (isBranch) return branchId ?? null
+    if (branchFilter === '') return null
+    if (branchFilter === 'hq') return hqBranchId
+    return branchFilter
+  }, [isBranch, branchId, branchFilter, hqBranchId])
+
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    supabase.from('uce_branches').select('id, name, is_main').order('name')
+      .then(({ data }) => setBranches((data ?? []) as BranchOpt[]))
+  }, [isSuperAdmin])
 
   async function load() {
     let q = supabase.from('uce_exam_forms')
       .select('id,semester,exam_session,status,form_type,source,created_at,details,subject_ids,review_note,student:uce_students(id,name,registration_no,photo_url),course:uce_courses(name),branch:uce_branches(name,code)')
       .eq('status', tab).order('created_at', { ascending: false })
-    if (isBranch && branchId) q = q.eq('branch_id', branchId)
+    if (effectiveFilterBranchId) q = q.eq('branch_id', effectiveFilterBranchId)
     const { data } = await q
     setRows((data ?? []) as unknown as Row[])
   }
-  useEffect(() => { load() }, [tab])
+  useEffect(() => { load() /* eslint-disable-next-line */ }, [tab, effectiveFilterBranchId])
 
   async function openView(r: Row) {
     setViewing(r)
@@ -89,10 +112,34 @@ export default function AdminExamFormsPage() {
         <p className="text-sm text-gray-500">Review student-submitted exam forms{isBranch ? ' for your branch' : ''}.</p>
       </div>
 
-      <div className="inline-flex rounded-xl bg-gray-100 p-1 flex-wrap">
-        {(['submitted', 'approved', 'rejected', 'resubmit'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium capitalize ${tab === t ? 'bg-white shadow-sm text-red-600' : 'text-gray-600'}`}>{t}</button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-xl bg-gray-100 p-1 flex-wrap">
+          {(['submitted', 'approved', 'rejected', 'resubmit'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium capitalize ${tab === t ? 'bg-white shadow-sm text-red-600' : 'text-gray-600'}`}>{t}</button>
+          ))}
+        </div>
+        {isSuperAdmin && branches.length > 0 && (
+          <div className="inline-flex items-center gap-2 text-sm">
+            <Building2 size={14} className="text-gray-400" />
+            <select
+              value={branchFilter}
+              onChange={e => setBranchFilter(e.target.value)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-red-500/20 outline-none"
+            >
+              <option value="hq">
+                Headquarter only{hqBranchId ? '' : ' (no HQ branch flagged)'}
+              </option>
+              <option value="">All branches</option>
+              <optgroup label="Specific branch">
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}{b.is_main ? ' · HQ' : ''}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border bg-white overflow-x-auto">

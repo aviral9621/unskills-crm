@@ -24,11 +24,20 @@ export interface StudentRec {
   photo_url: string | null
   session: string | null
   course: { name: string; code: string } | null
-  branch: { name: string; code: string; director_phone: string } | null
+  branch: {
+    name: string
+    code: string
+    director_phone: string
+    b_code: string | null
+    address_line1: string | null
+    district: string | null
+    state: string | null
+    pincode: string | null
+  } | null
 }
 
 const SELECT_COLS =
-  'id,name,father_name,registration_no,phone,email,alt_phone,whatsapp,address,village,block,district,state,pincode,course_id,branch_id,net_fee,photo_url,session,course:uce_courses(name,code),branch:uce_branches(name,code,director_phone)'
+  'id,name,father_name,registration_no,phone,email,alt_phone,whatsapp,address,village,block,district,state,pincode,course_id,branch_id,net_fee,photo_url,session,course:uce_courses(name,code),branch:uce_branches(name,code,b_code,director_phone,address_line1,district,state,pincode)'
 
 export function useStudentRecord() {
   const { user } = useAuth()
