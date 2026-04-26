@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, NavLink, useParams, Link } from 'react-router-dom'
 import {
   LayoutDashboard, FileText, ClipboardList, ScrollText, IndianRupee,
   Menu, X, Video, IdCard, BookOpen, Megaphone, UserCircle, Eye, ArrowLeft,
 } from 'lucide-react'
 import { ImpersonationProvider } from '../../contexts/ImpersonationContext'
-import { useStudentRecord } from '../student/useStudent'
+import { supabase } from '../../lib/supabase'
 import { cn } from '../../lib/utils'
 
 const NAV = [
@@ -26,7 +26,17 @@ const NAV = [
 function ViewAsStudentInner() {
   const [open, setOpen] = useState(false)
   const { studentId } = useParams<{ studentId: string }>()
-  const { rec } = useStudentRecord()
+  const [student, setStudent] = useState<{ name: string; registration_no: string } | null>(null)
+
+  // Tiny query just for the banner — avoids re-fetching the full student record
+  // here on top of whatever the inner page also fetches via useStudentRecord.
+  useEffect(() => {
+    if (!studentId) return
+    let cancelled = false
+    supabase.from('uce_students').select('name, registration_no').eq('id', studentId).maybeSingle()
+      .then(({ data }) => { if (!cancelled && data) setStudent(data as { name: string; registration_no: string }) })
+    return () => { cancelled = true }
+  }, [studentId])
 
   const base = `/admin/view-as/${studentId}`
 
@@ -70,7 +80,7 @@ function ViewAsStudentInner() {
           <Eye size={14} className="text-amber-700 shrink-0" />
           <span className="text-amber-900">
             <strong>Read-only admin view</strong>
-            {rec && <> — {rec.name} <span className="font-mono text-amber-700">· {rec.registration_no}</span></>}
+            {student && <> — {student.name} <span className="font-mono text-amber-700">· {student.registration_no}</span></>}
           </span>
           <button
             onClick={() => window.close()}
@@ -83,7 +93,7 @@ function ViewAsStudentInner() {
           <button onClick={() => setOpen(true)} className="lg:hidden p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg"><Menu size={20} /></button>
           <div className="ml-auto text-sm truncate">
             <span className="text-gray-500 hidden sm:inline">Viewing:</span>{' '}
-            <span className="font-semibold">{rec?.name ?? '...'}</span>
+            <span className="font-semibold">{student?.name ?? '...'}</span>
           </div>
         </header>
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">
