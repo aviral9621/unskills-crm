@@ -17,6 +17,7 @@ import {
   toDataUrl,
   type MarksheetSubjectRow,
 } from '../../lib/pdf/marksheet'
+import { autoIssueCertificateForMarksheet } from '../../lib/certificate/autoIssue'
 
 async function buildQrDataUrl(url: string): Promise<string> {
   try {
@@ -87,7 +88,7 @@ function todayISO() { return new Date().toISOString().slice(0, 10) }
 export default function MarksheetPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { profile } = useAuth()
+  const { profile, user } = useAuth()
   const isSuperAdmin = profile?.role === 'super_admin'
 
   const [query, setQuery] = useState(searchParams.get('student') || '')
@@ -468,6 +469,24 @@ export default function MarksheetPage() {
           issue_date: issueDate,
         })
         if (insertError) { console.error(insertError); toast.error(`Save failed: ${insertError.message}`); return }
+
+        // Auto-issue certificate (best-effort, non-blocking) — only on first creation
+        const autoCert = await autoIssueCertificateForMarksheet({
+          studentId: student.id,
+          courseId: student.course_id,
+          grade,
+          result: resultStr,
+          marksScored: Number(totals.percentage.toFixed(0)),
+          issuedBy: user?.id ?? null,
+          supabase,
+        })
+        if (autoCert.ok && !autoCert.skipped) {
+          toast.success(`Certificate auto-issued: ${autoCert.certificateNumber}`)
+        } else if (autoCert.skipped === 'already_exists') {
+          // silent — student already has a cert for this course
+        } else if (autoCert.reason) {
+          console.warn('[auto-cert]', autoCert.reason)
+        }
       }
       const wasEditing = !!editingRecord
       loadHistory()

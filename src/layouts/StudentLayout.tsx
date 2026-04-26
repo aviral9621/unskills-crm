@@ -3,6 +3,7 @@ import { Outlet, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, FileText, Briefcase, ClipboardList, ScrollText, IndianRupee,
   LogOut, Menu, X, Video, IdCard, BookOpen, Megaphone, UserCircle, MessageCircle, Gift,
+  Bell,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -20,6 +21,7 @@ const NAV = [
   { label: 'Admit Card', icon: IdCard, path: '/student/admit-card' },
   { label: 'Results', icon: ScrollText, path: '/student/results' },
   { label: 'Jobs', icon: Briefcase, path: '/student/jobs' },
+  { label: 'Notifications', icon: Bell, path: '/student/notifications' },
   { label: 'Refer & Earn', icon: Gift, path: '/student/refer-earn' },
   { label: 'Announcements', icon: Megaphone, path: '/student/announcements' },
   { label: 'Profile', icon: UserCircle, path: '/student/profile' },

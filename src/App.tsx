@@ -83,6 +83,8 @@ const AdminStudentFeePlanPage = lazy(() => import('./pages/admin/fees/AdminStude
 const AdminExamFormWindowsPage = lazy(() => import('./pages/admin/AdminExamFormWindowsPage'))
 const AdminAdmitCardFormPage = lazy(() => import('./pages/admin/AdminAdmitCardFormPage'))
 const ViewAsStudentLayout = lazy(() => import('./pages/admin/ViewAsStudentLayout'))
+const AdminJobsPage = lazy(() => import('./pages/admin/AdminJobsPage'))
+const AdminJobApplicationsPage = lazy(() => import('./pages/admin/AdminJobApplicationsPage'))
 const PendingPaymentsPage = lazy(() => import('./pages/fees/PendingPaymentsPage'))
 
 // Franchise pages — lazy
@@ -118,6 +120,7 @@ const StudentClassesPage = lazy(() => import('./pages/student/StudentClassesPage
 const StudentDocumentsPage = lazy(() => import('./pages/student/StudentDocumentsPage'))
 const StudentResultsPage = lazy(() => import('./pages/student/StudentResultsPage'))
 const StudentJobsPage = lazy(() => import('./pages/student/StudentJobsPage'))
+const StudentNotificationsPage = lazy(() => import('./pages/student/StudentNotificationsPage'))
 const StudentExamFormPage = lazy(() => import('./pages/student/StudentExamFormPage'))
 const StudentAnnouncementsPage = lazy(() => import('./pages/student/StudentAnnouncementsPage'))
 const StudentProfilePage = lazy(() => import('./pages/student/StudentProfilePage'))
@@ -234,6 +237,8 @@ function AppRoutes() {
 
           <Route path="referrals" element={<AdminReferralsPage />} />
           <Route path="promotions" element={<AdminPromotionsPage />} />
+          <Route path="jobs" element={<AdminJobsPage />} />
+          <Route path="jobs/:jobId/applications" element={<AdminJobApplicationsPage />} />
           <Route path="support/tickets" element={<AdminTicketsPage />} />
           <Route path="support/tickets/:id" element={<FTicketDetailPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
@@ -271,6 +276,7 @@ function AppRoutes() {
           <Route path="certificates/:id" element={<CertificateDetailPage />} />
 
           <Route path="jobs" element={<FJobsPage />} />
+          <Route path="jobs/:jobId/applications" element={<AdminJobApplicationsPage />} />
           <Route path="promotions" element={<FPromotionsPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="tickets" element={<FTicketsPage />} />
@@ -302,6 +308,7 @@ function AppRoutes() {
           <Route path="admit-card" element={<StudentAdmitCardPage />} />
           <Route path="results" element={<StudentResultsPage />} />
           <Route path="jobs" element={<StudentJobsPage />} />
+          <Route path="notifications" element={<StudentNotificationsPage />} />
           <Route path="announcements" element={<StudentAnnouncementsPage />} />
           <Route path="profile" element={<StudentProfilePage />} />
         </Route>

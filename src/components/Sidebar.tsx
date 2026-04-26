@@ -7,6 +7,7 @@ import {
   Briefcase, IndianRupee,
   BarChart3, MonitorPlay, Users2,
   Settings, UserCircle, ChevronDown, LogOut, X,
+  Megaphone, Bell, LifeBuoy,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -123,7 +124,15 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
         ],
       },
       { label: 'Referrals', icon: Users2, path: '/admin/referrals', permission: 'referral' },
-      { label: 'Announcements', icon: MessageSquare, path: '/admin/announcements' },
+    ],
+  },
+  {
+    title: 'OPPORTUNITIES',
+    items: [
+      { label: 'Job Posting', icon: Briefcase, path: '/admin/jobs' },
+      { label: 'Promotion Material', icon: Megaphone, path: '/admin/promotions' },
+      { label: 'Announcements', icon: Bell, path: '/admin/announcements' },
+      { label: 'Support Tickets', icon: LifeBuoy, path: '/admin/support/tickets' },
     ],
   },
 ]
