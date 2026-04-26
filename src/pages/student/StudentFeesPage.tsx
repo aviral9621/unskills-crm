@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { Download, IndianRupee, Loader2, Send, CheckCircle2, Clock, XCircle, AlertTriangle, CalendarDays } from 'lucide-react'
+import { Download, IndianRupee, Loader2, Send, CheckCircle2, Clock, XCircle, AlertTriangle, CalendarDays, Upload, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useStudentRecord } from './useStudent'
+import { useImpersonation } from '../../contexts/ImpersonationContext'
 import { formatINR, formatDateDDMMYYYY } from '../../lib/utils'
 import Modal from '../../components/Modal'
 import FormField, { inputClass } from '../../components/FormField'
@@ -29,8 +30,11 @@ interface Account {
   is_default: boolean
 }
 
+const MAX_PROOF_BYTES = 5 * 1024 * 1024 // 5 MB
+
 export default function StudentFeesPage() {
   const { rec } = useStudentRecord()
+  const { isImpersonating } = useImpersonation()
   const [pays, setPays] = useState<Payment[]>([])
   const [schedule, setSchedule] = useState<ScheduleRow[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -39,6 +43,7 @@ export default function StudentFeesPage() {
   const [ref, setRef] = useState('')
   const [mode, setMode] = useState('upi')
   const [note, setNote] = useState('')
+  const [proofFile, setProofFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -77,21 +82,43 @@ export default function StudentFeesPage() {
   const due = Math.max(0, rec.net_fee - paid)
 
   async function submitPayment() {
+    if (isImpersonating) { toast.error('Read-only admin view — cannot submit'); return }
     const amt = Number(amount)
     if (!amt || amt <= 0) return toast.error('Enter amount')
+    if (proofFile && proofFile.size > MAX_PROOF_BYTES) {
+      return toast.error('Proof file too large (max 5 MB)')
+    }
     setSaving(true)
-    const { error } = await supabase.from('uce_student_fee_payments').insert({
-      student_id: rec!.id, branch_id: rec!.branch_id, amount: amt,
-      payment_date: new Date().toISOString().slice(0, 10),
-      payment_mode: mode, student_reference: ref.trim() || null, note: note.trim() || null,
-      status: 'pending_confirmation',
-    })
-    setSaving(false)
-    if (error) return toast.error(error.message)
-    toast.success('Submitted — your institute will confirm the payment')
-    setModalOpen(false)
-    setAmount(''); setRef(''); setNote('')
-    load()
+    try {
+      // 1) Insert the payment row first (so we have an id for the proof path).
+      const { data: inserted, error } = await supabase.from('uce_student_fee_payments').insert({
+        student_id: rec!.id, branch_id: rec!.branch_id, amount: amt,
+        payment_date: new Date().toISOString().slice(0, 10),
+        payment_mode: mode, student_reference: ref.trim() || null, note: note.trim() || null,
+        status: 'pending_confirmation',
+      }).select('id').single()
+      if (error) throw new Error(error.message)
+
+      // 2) If a proof was attached, upload it and store the path on the payment row.
+      if (proofFile) {
+        const ext = (proofFile.name.split('.').pop() || 'bin').toLowerCase().slice(0, 5)
+        const path = `${rec!.id}/${inserted.id}.${ext}`
+        const { error: upErr } = await supabase.storage
+          .from('payment-proofs')
+          .upload(path, proofFile, { upsert: true, contentType: proofFile.type })
+        if (upErr) throw new Error(`Upload failed: ${upErr.message}`)
+        await supabase.from('uce_student_fee_payments').update({ proof_path: path }).eq('id', inserted.id)
+      }
+
+      toast.success('Submitted — your institute will confirm the payment')
+      setModalOpen(false)
+      setAmount(''); setRef(''); setNote(''); setProofFile(null)
+      load()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function download(p: Payment) {
@@ -245,10 +272,36 @@ export default function StudentFeesPage() {
           <FormField label="Note">
             <input value={note} onChange={e => setNote(e.target.value)} className={inputClass} placeholder="Optional" />
           </FormField>
+          <FormField label="Payment Proof" hint="Optional — image or PDF, max 5 MB. Auto-deleted after approval.">
+            {proofFile ? (
+              <div className="flex items-center gap-2 rounded-lg border bg-gray-50 px-3 py-2 text-sm">
+                <Upload size={14} className="text-gray-500 shrink-0" />
+                <span className="flex-1 min-w-0 truncate">{proofFile.name}</span>
+                <span className="text-xs text-gray-500">{(proofFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                <button onClick={() => setProofFile(null)} className="text-gray-400 hover:text-red-600"><X size={14} /></button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50">
+                <Upload size={14} />
+                <span>Click to upload screenshot or PDF</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  className="hidden"
+                  onChange={e => {
+                    const f = e.target.files?.[0]
+                    if (!f) return
+                    if (f.size > MAX_PROOF_BYTES) { toast.error('Max 5 MB'); return }
+                    setProofFile(f)
+                  }}
+                />
+              </label>
+            )}
+          </FormField>
           <div className="flex justify-end gap-2">
             <button onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg border text-sm">Cancel</button>
-            <button onClick={submitPayment} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold disabled:opacity-50">
-              {saving && <Loader2 size={14} className="animate-spin" />} Submit
+            <button onClick={submitPayment} disabled={saving || isImpersonating} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold disabled:opacity-50">
+              {saving && <Loader2 size={14} className="animate-spin" />} {isImpersonating ? 'Read-only' : 'Submit'}
             </button>
           </div>
         </div>

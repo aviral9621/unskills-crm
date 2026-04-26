@@ -83,6 +83,7 @@ const AdminStudentFeePlanPage = lazy(() => import('./pages/admin/fees/AdminStude
 const AdminExamFormWindowsPage = lazy(() => import('./pages/admin/AdminExamFormWindowsPage'))
 const AdminAdmitCardFormPage = lazy(() => import('./pages/admin/AdminAdmitCardFormPage'))
 const ViewAsStudentLayout = lazy(() => import('./pages/admin/ViewAsStudentLayout'))
+const PendingPaymentsPage = lazy(() => import('./pages/fees/PendingPaymentsPage'))
 
 // Franchise pages — lazy
 const FDashboardPage = lazy(() => import('./pages/franchise/FDashboardPage'))
@@ -212,6 +213,7 @@ function AppRoutes() {
           <Route path="staff/salary-slips" element={<SalarySlipPage />} />
 
           <Route path="fees" element={<AdminFeesOverviewPage />} />
+          <Route path="fees/pending" element={<PendingPaymentsPage />} />
           <Route path="fees/:studentId" element={<AdminStudentFeePlanPage />} />
 
           <Route path="reports/students" element={<StudentReportPage />} />
@@ -255,6 +257,7 @@ function AppRoutes() {
           <Route path="fees/accounts" element={<FPaymentAccountsPage />} />
           <Route path="fees/collect" element={<FFeeCollectionPage />} />
           <Route path="fees/history" element={<FFeeHistoryPage />} />
+          <Route path="fees/pending" element={<PendingPaymentsPage />} />
 
           <Route path="wallet" element={<FWalletPage />} />
           <Route path="wallet/request" element={<FWalletRequestPage />} />

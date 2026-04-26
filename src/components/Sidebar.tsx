@@ -83,7 +83,13 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
   {
     title: 'MANAGEMENT',
     items: [
-      { label: 'Fees', icon: IndianRupee, path: '/admin/fees', permission: 'fee' },
+      {
+        label: 'Fees', icon: IndianRupee, permission: 'fee',
+        children: [
+          { label: 'Overview', path: '/admin/fees' },
+          { label: 'Pending Payments', path: '/admin/fees/pending' },
+        ],
+      },
       {
         label: 'Staff', icon: Briefcase, permission: 'staff',
         children: [

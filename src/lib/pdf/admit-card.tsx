@@ -61,16 +61,34 @@ async function registerFonts() {
   fontsRegistered = true
 }
 
-export async function toDataUrl(url: string): Promise<string> {
-  const res = await fetch(url, { mode: 'cors' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const blob = await res.blob()
+async function blobToDataUrl(blob: Blob): Promise<string> {
   return await new Promise((resolve, reject) => {
     const r = new FileReader()
     r.onloadend = () => resolve(r.result as string)
     r.onerror = reject
     r.readAsDataURL(blob)
   })
+}
+
+export async function toDataUrl(url: string): Promise<string> {
+  // 1. If already a data: URL, pass through.
+  if (url.startsWith('data:')) return url
+  // 2. Direct CORS fetch — works for same-origin and CORS-enabled hosts.
+  try {
+    const res = await fetch(url, { mode: 'cors' })
+    if (res.ok) return await blobToDataUrl(await res.blob())
+  } catch { /* fall through to proxy */ }
+  // 3. Proxy via Supabase edge function — bypasses third-party CORS for
+  //    public buckets (e.g. Cloudflare R2 dev URLs without CORS config).
+  try {
+    const supaUrl = (import.meta as { env?: { VITE_SUPABASE_URL?: string } }).env?.VITE_SUPABASE_URL
+    if (supaUrl) {
+      const proxied = `${supaUrl}/functions/v1/image-proxy?url=${encodeURIComponent(url)}`
+      const res = await fetch(proxied)
+      if (res.ok) return await blobToDataUrl(await res.blob())
+    }
+  } catch { /* give up below */ }
+  throw new Error(`could not fetch image: ${url}`)
 }
 
 /** Format YYYY-MM-DD → "26 May, 26" (DD Mon, YY) */

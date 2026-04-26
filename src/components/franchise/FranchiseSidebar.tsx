@@ -57,6 +57,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
         children: [
           { label: 'Collect Fee', path: '/franchise/fees/collect' },
           { label: 'Fee History', path: '/franchise/fees/history' },
+          { label: 'Pending Payments', path: '/franchise/fees/pending' },
           { label: 'Payment Accounts', path: '/franchise/fees/accounts' },
         ],
       },
