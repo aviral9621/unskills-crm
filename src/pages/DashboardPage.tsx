@@ -7,7 +7,7 @@ import {
   BookOpen, BarChart3, Upload,
   Clock, Ban, CircleDollarSign, ChevronDown,
   ArrowUpRight, ArrowDownRight, Filter,
-  MessageCircle, Target, Phone,
+  MessageCircle, Target, Phone, Tag, X,
 } from 'lucide-react'
 import { useTodayFollowUps } from '../hooks/useLeads'
 import {
@@ -58,6 +58,34 @@ interface OverviewStats {
   pendingFees: number
   expenses: number
   profit: number
+  discountGiven: number
+}
+
+interface DroppedDetail {
+  id: string
+  name: string
+  registration_no: string
+  dropped_at: string | null
+  dropped_reason: string | null
+  course_name: string | null
+}
+
+interface DiscountDetail {
+  id: string
+  name: string
+  registration_no: string
+  course_name: string | null
+  total_fee: number
+  discount: number
+}
+
+interface UpcomingDue {
+  student_id: string
+  student_name: string
+  registration_no: string
+  due_date: string
+  expected_amount: number
+  paid_amount: number
 }
 
 interface FeeStats {
@@ -217,8 +245,15 @@ export default function DashboardPage() {
 
   const [overview, setOverview] = useState<OverviewStats>({
     totalStudents: 0, newAdmissions: 0, droppedStudents: 0, activeStudents: 0, completedStudents: 0,
-    totalRevenue: 0, pendingFees: 0, expenses: 0, profit: 0,
+    totalRevenue: 0, pendingFees: 0, expenses: 0, profit: 0, discountGiven: 0,
   })
+  const [droppedList, setDroppedList] = useState<DroppedDetail[]>([])
+  const [showDroppedModal, setShowDroppedModal] = useState(false)
+  const [expandedDropId, setExpandedDropId] = useState<string | null>(null)
+  const [discountList, setDiscountList] = useState<DiscountDetail[]>([])
+  const [showDiscountModal, setShowDiscountModal] = useState(false)
+  const [upcomingDue, setUpcomingDue] = useState<UpcomingDue[]>([])
+  const [showUpcomingModal, setShowUpcomingModal] = useState(false)
   const [feeStats, setFeeStats] = useState<FeeStats>({
     todayCollection: 0, todayDue: 0, overdueFees: 0, totalPending: 0,
   })
@@ -274,12 +309,93 @@ export default function DashboardPage() {
         fetchRecentStudents(),
         fetchRecentPayments(),
         fetchLeadStats(),
+        fetchDroppedDetails(),
+        fetchDiscountDetails(),
+        fetchUpcomingDue(),
       ])
     } catch (err) {
       console.error('Dashboard fetch error:', err)
     } finally {
       setLoading(false)
     }
+  }
+
+  async function fetchDroppedDetails() {
+    const bf = !isSuperAdmin && branchId ? branchId : null
+    const q = bf
+      ? supabase.from('uce_students').select('id, name, registration_no, dropped_at, dropped_reason, course:uce_courses(name)').eq('branch_id', bf).eq('is_active', false).order('dropped_at', { ascending: false }).limit(200)
+      : supabase.from('uce_students').select('id, name, registration_no, dropped_at, dropped_reason, course:uce_courses(name)').eq('is_active', false).order('dropped_at', { ascending: false }).limit(200)
+    const { data } = await q
+    setDroppedList(((data ?? []) as Record<string, unknown>[]).map(r => ({
+      id: r.id as string,
+      name: r.name as string,
+      registration_no: r.registration_no as string,
+      dropped_at: r.dropped_at as string | null,
+      dropped_reason: r.dropped_reason as string | null,
+      course_name: (r.course as { name: string } | null)?.name || null,
+    })))
+  }
+
+  async function fetchDiscountDetails() {
+    const bf = !isSuperAdmin && branchId ? branchId : null
+    const q = bf
+      ? supabase.from('uce_students').select('id, name, registration_no, total_fee, discount, course:uce_courses(name)').eq('branch_id', bf).eq('is_active', true).gt('discount', 0).order('discount', { ascending: false }).limit(500)
+      : supabase.from('uce_students').select('id, name, registration_no, total_fee, discount, course:uce_courses(name)').eq('is_active', true).gt('discount', 0).order('discount', { ascending: false }).limit(500)
+    const { data } = await q
+    setDiscountList(((data ?? []) as Record<string, unknown>[]).map(r => ({
+      id: r.id as string,
+      name: r.name as string,
+      registration_no: r.registration_no as string,
+      total_fee: Number(r.total_fee || 0),
+      discount: Number(r.discount || 0),
+      course_name: (r.course as { name: string } | null)?.name || null,
+    })))
+  }
+
+  async function fetchUpcomingDue() {
+    // Schedule entries due in the next 48 hours that have no matching payment.
+    const today = new Date()
+    const todayIso = today.toISOString().split('T')[0]
+    const in48 = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+    const bf = !isSuperAdmin && branchId ? branchId : null
+    let q = supabase
+      .from('uce_student_fee_schedule')
+      .select('id, student_id, month_for, expected_amount, student:uce_students!inner(id, name, registration_no, branch_id, is_active)')
+      .gte('month_for', todayIso)
+      .lte('month_for', in48)
+    if (bf) q = q.eq('student.branch_id', bf)
+
+    const { data } = await q
+    const rows = (data ?? []) as Record<string, unknown>[]
+
+    // Fetch payments per (student, month) so we can subtract.
+    const studentIds = [...new Set(rows.map(r => (r.student as { id: string }).id))]
+    let paidMap: Record<string, number> = {}
+    if (studentIds.length > 0) {
+      const { data: pays } = await supabase
+        .from('uce_student_fee_payments')
+        .select('student_id, amount, schedule_id')
+        .in('student_id', studentIds)
+      pays?.forEach(p => {
+        if (!p.schedule_id) return
+        paidMap[p.schedule_id] = (paidMap[p.schedule_id] || 0) + Number(p.amount || 0)
+      })
+    }
+
+    const result: UpcomingDue[] = rows
+      .filter(r => ((r.student as { is_active?: boolean }).is_active !== false))
+      .map(r => ({
+        student_id: (r.student as { id: string }).id,
+        student_name: (r.student as { name: string }).name,
+        registration_no: (r.student as { registration_no: string }).registration_no,
+        due_date: r.month_for as string,
+        expected_amount: Number(r.expected_amount || 0),
+        paid_amount: paidMap[r.id as string] || 0,
+      }))
+      .filter(r => r.paid_amount < r.expected_amount)
+      .sort((a, b) => a.due_date.localeCompare(b.due_date))
+    setUpcomingDue(result)
   }
 
   async function fetchLeadStats() {
@@ -345,12 +461,13 @@ export default function DashboardPage() {
     const { data: expenseRows } = await expQ
     const expenses = (expenseRows ?? []).reduce((s, e) => s + (e.amount || 0), 0)
 
-    // Pending fees: sum(net_fee) - sum(all payments) for all active students
+    // Pending fees + discount in a single query (both off uce_students)
     const studFeeQ = bf
-      ? supabase.from('uce_students').select('net_fee').eq('branch_id', bf).eq('is_active', true)
-      : supabase.from('uce_students').select('net_fee').eq('is_active', true)
+      ? supabase.from('uce_students').select('net_fee, discount').eq('branch_id', bf).eq('is_active', true)
+      : supabase.from('uce_students').select('net_fee, discount').eq('is_active', true)
     const { data: studFees } = await studFeeQ
     const totalNetFee = (studFees ?? []).reduce((s, st) => s + (st.net_fee || 0), 0)
+    const discountGiven = (studFees ?? []).reduce((s, st) => s + (st.discount || 0), 0)
 
     const { data: allPayments } = await supabase.from('uce_student_fee_payments').select('amount')
     const totalPaid = (allPayments ?? []).reduce((s, p) => s + (p.amount || 0), 0)
@@ -366,6 +483,7 @@ export default function DashboardPage() {
       pendingFees,
       expenses,
       profit: totalRevenue - expenses,
+      discountGiven,
     })
 
     // Fee breakdown for donut
@@ -556,7 +674,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Total Students" value={overview.totalStudents} icon={Users} iconColor="text-blue-600" iconBg="bg-blue-50" loading={loading} />
           <StatCard label="New Admissions" value={overview.newAdmissions} icon={UserPlus} iconColor="text-green-600" iconBg="bg-green-50" trend={admissionStats.growthPercent} trendLabel="vs last month" loading={loading} />
-          <StatCard label="Dropped Students" value={overview.droppedStudents} icon={UserMinus} iconColor="text-red-600" iconBg="bg-red-50" loading={loading} />
+          <StatCard label="Dropped Students" value={overview.droppedStudents} icon={UserMinus} iconColor="text-red-600" iconBg="bg-red-50" loading={loading} onClick={() => setShowDroppedModal(true)} />
           <StatCard label="Active Students" value={overview.activeStudents} icon={UserCheck} iconColor="text-emerald-600" iconBg="bg-emerald-50" loading={loading} />
           <StatCard
             label="Completed Students"
@@ -578,8 +696,37 @@ export default function DashboardPage() {
             iconBg={overview.profit >= 0 ? 'bg-green-50' : 'bg-red-50'}
             loading={loading}
           />
+          <StatCard
+            label="Discount Given"
+            value={formatINR(overview.discountGiven)}
+            icon={Tag}
+            iconColor="text-purple-600"
+            iconBg="bg-purple-50"
+            loading={loading}
+            onClick={() => setShowDiscountModal(true)}
+          />
         </div>
       </div>
+
+      {/* ─── Upcoming Fees Due Alert (next 48hrs) ─── */}
+      {!loading && upcomingDue.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+          <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+            <AlertTriangle size={18} className="text-amber-700" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-900">Fee due in the next 48 hours</p>
+            <p className="text-xs text-amber-800 mt-0.5">
+              {upcomingDue.length} student{upcomingDue.length === 1 ? '' : 's'} have an installment due by{' '}
+              <b>{new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</b>.
+              Please follow up.
+            </p>
+          </div>
+          <button onClick={() => setShowUpcomingModal(true)} className="text-xs font-semibold text-amber-900 bg-white border border-amber-300 px-3 py-1.5 rounded-lg hover:bg-amber-100 shrink-0">
+            View list
+          </button>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════
           SECTION 2: Fee Management (4 cards)
@@ -1002,6 +1149,146 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ─── Dropped Students Modal ─── */}
+      {showDroppedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setShowDroppedModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 font-heading">Dropped Students</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{droppedList.length} students · click any to see the reason</p>
+              </div>
+              <button onClick={() => setShowDroppedModal(false)} className="p-2 rounded-lg hover:bg-gray-100"><X size={18} className="text-gray-500" /></button>
+            </div>
+            <div className="overflow-y-auto p-3 flex-1">
+              {droppedList.length === 0 ? (
+                <div className="py-12 text-center text-gray-400">
+                  <UserMinus size={36} className="mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm">No dropped students</p>
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {droppedList.map(s => {
+                    const expanded = expandedDropId === s.id
+                    return (
+                      <li key={s.id} className="border border-gray-200 rounded-xl">
+                        <button onClick={() => setExpandedDropId(expanded ? null : s.id)}
+                          className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 rounded-xl">
+                          <div className="h-9 w-9 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-red-600">{s.name.charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
+                            <p className="text-xs text-gray-500 truncate font-mono">{s.registration_no}{s.course_name ? ` · ${s.course_name}` : ''}</p>
+                          </div>
+                          <ChevronDown size={16} className={`text-gray-400 transition-transform shrink-0 ${expanded ? 'rotate-180' : ''}`} />
+                        </button>
+                        {expanded && (
+                          <div className="px-4 pb-3 pt-1 border-t border-gray-100">
+                            <p className="text-[11px] uppercase tracking-wider text-gray-400 font-semibold mt-2">Reason</p>
+                            <p className="text-sm text-gray-700 mt-1">{s.dropped_reason || <span className="italic text-gray-400">No reason recorded</span>}</p>
+                            {s.dropped_at && (
+                              <p className="text-xs text-gray-400 mt-2">Dropped on {new Date(s.dropped_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Discount Breakdown Modal ─── */}
+      {showDiscountModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setShowDiscountModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 font-heading">Discount Given</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Total: <b className="text-purple-700">{formatINR(overview.discountGiven)}</b> across {discountList.length} students</p>
+              </div>
+              <button onClick={() => setShowDiscountModal(false)} className="p-2 rounded-lg hover:bg-gray-100"><X size={18} className="text-gray-500" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {discountList.length === 0 ? (
+                <div className="py-12 text-center text-gray-400">
+                  <Tag size={36} className="mx-auto mb-2 text-gray-300" />
+                  <p className="text-sm">No discounts given yet</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
+                    <tr className="text-[11px] uppercase tracking-wider text-gray-500">
+                      <th className="py-2 px-4 text-left font-semibold">Student</th>
+                      <th className="py-2 px-4 text-left font-semibold">Course</th>
+                      <th className="py-2 px-4 text-right font-semibold">Total Fee</th>
+                      <th className="py-2 px-4 text-right font-semibold">Discount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {discountList.map(d => (
+                      <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50/60">
+                        <td className="py-2 px-4">
+                          <p className="text-gray-900 font-medium">{d.name}</p>
+                          <p className="text-xs text-gray-400 font-mono">{d.registration_no}</p>
+                        </td>
+                        <td className="py-2 px-4 text-gray-600">{d.course_name || '—'}</td>
+                        <td className="py-2 px-4 text-gray-700 text-right">{formatINR(d.total_fee)}</td>
+                        <td className="py-2 px-4 text-purple-700 text-right font-semibold">−{formatINR(d.discount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Upcoming Fee Due Modal ─── */}
+      {showUpcomingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setShowUpcomingModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 font-heading">Fees Due — Next 48 hours</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{upcomingDue.length} students · contact them to collect on time</p>
+              </div>
+              <button onClick={() => setShowUpcomingModal(false)} className="p-2 rounded-lg hover:bg-gray-100"><X size={18} className="text-gray-500" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <ul className="divide-y divide-gray-100">
+                {upcomingDue.map(d => {
+                  const due = Math.max(0, d.expected_amount - d.paid_amount)
+                  return (
+                    <li key={`${d.student_id}-${d.due_date}`} className="px-4 py-3 flex items-center gap-3 hover:bg-gray-50/60">
+                      <div className="h-9 w-9 rounded-full bg-amber-50 flex items-center justify-center shrink-0">
+                        <Clock size={16} className="text-amber-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">{d.student_name}</p>
+                        <p className="text-xs text-gray-500 truncate font-mono">{d.registration_no}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-semibold text-amber-700">{formatINR(due)}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">due {new Date(d.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</p>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

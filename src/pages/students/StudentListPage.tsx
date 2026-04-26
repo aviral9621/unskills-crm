@@ -2,8 +2,8 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
-  GraduationCap, Plus, Search, MoreVertical, Pencil, Power,
-  X, Phone, BookOpen, CreditCard, ClipboardList,
+  GraduationCap, Plus, Search, MoreVertical, Pencil,
+  X, Phone, BookOpen, CreditCard, ClipboardList, UserMinus, RotateCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -12,6 +12,7 @@ import { formatINR, cn } from '../../lib/utils'
 import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import Modal from '../../components/Modal'
 import { lockedStudentIds } from '../../lib/studentLock'
 import { Lock } from 'lucide-react'
 
@@ -43,7 +44,9 @@ export default function StudentListPage() {
   const [search, setSearch] = useState('')
   const initialStatus = (() => {
     const p = new URLSearchParams(location.search).get('filter')
-    return p === 'completed' ? 'completed' : 'all'
+    if (p === 'completed') return 'completed'
+    if (p === 'dropped') return 'inactive'
+    return 'active'
   })() as 'all' | 'active' | 'inactive' | 'completed'
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'completed'>(initialStatus)
   const [programFilter, setProgramFilter] = useState<string>('all')
@@ -52,8 +55,11 @@ export default function StudentListPage() {
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
   const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
-  const [toggleTarget, setToggleTarget] = useState<StudentRow | null>(null)
+  const [reactivateTarget, setReactivateTarget] = useState<StudentRow | null>(null)
   const [toggling, setToggling] = useState(false)
+  const [dropTarget, setDropTarget] = useState<StudentRow | null>(null)
+  const [dropReason, setDropReason] = useState('')
+  const [dropping, setDropping] = useState(false)
 
   useEffect(() => { fetchStudents() }, [])
   useEffect(() => {
@@ -118,16 +124,39 @@ export default function StudentListPage() {
 
   const menuStudent = useMemo(() => students.find(s => s.id === menuOpen), [students, menuOpen])
 
-  async function handleToggle() {
-    if (!toggleTarget) return; setToggling(true)
+  async function handleReactivate() {
+    if (!reactivateTarget) return; setToggling(true)
     try {
-      const ns = !toggleTarget.is_active
-      const { error } = await supabase.from('uce_students').update({ is_active: ns, updated_at: new Date().toISOString() }).eq('id', toggleTarget.id)
+      const { error } = await supabase.from('uce_students').update({
+        is_active: true,
+        dropped_reason: null,
+        dropped_at: null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', reactivateTarget.id)
       if (error) throw error
-      toast.success(`${toggleTarget.name} ${ns ? 'activated' : 'deactivated'}`)
-      setStudents(p => p.map(s => s.id === toggleTarget.id ? { ...s, is_active: ns } : s))
+      toast.success(`${reactivateTarget.name} reactivated`)
+      setStudents(p => p.map(s => s.id === reactivateTarget.id ? { ...s, is_active: true } : s))
     } catch { toast.error('Failed') }
-    finally { setToggling(false); setToggleTarget(null) }
+    finally { setToggling(false); setReactivateTarget(null) }
+  }
+
+  async function handleDrop() {
+    if (!dropTarget) return
+    if (!dropReason.trim()) { toast.error('Please enter a reason for dropping the student'); return }
+    setDropping(true)
+    try {
+      const { error } = await supabase.from('uce_students').update({
+        is_active: false,
+        dropped_reason: dropReason.trim(),
+        dropped_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', dropTarget.id)
+      if (error) throw error
+      toast.success(`${dropTarget.name} marked as dropped`)
+      // Remove from current list view (user explicitly asked: "should be removed from the student list")
+      setStudents(p => p.filter(s => s.id !== dropTarget.id))
+    } catch { toast.error('Failed to mark as dropped') }
+    finally { setDropping(false); setDropTarget(null); setDropReason('') }
   }
 
   const filtered = useMemo(() => {
@@ -149,7 +178,7 @@ export default function StudentListPage() {
     colHelper.display({ id: 'due', header: 'Due', cell: i => { const due = (i.row.original.net_fee || 0) - (i.row.original.paid || 0); return <span className={`text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatINR(Math.max(0, due))}</span> } }),
     colHelper.accessor('is_active', { header: 'Status', cell: i => (
       <div className="flex items-center gap-1.5 flex-wrap">
-        <StatusBadge label={i.getValue() ? 'Active' : 'Inactive'} variant={i.getValue() ? 'success' : 'error'} />
+        <StatusBadge label={i.getValue() ? 'Active' : 'Dropped'} variant={i.getValue() ? 'success' : 'error'} />
         {i.row.original.completed && <span title="Course completed — certificate issued" className="inline-flex items-center gap-1 rounded bg-indigo-50 text-indigo-700 px-1.5 py-0.5 text-[10px] font-semibold"><GraduationCap size={10} /> COMPLETED</span>}
         {i.row.original.locked && <span title="Locked — certificate/result issued" className="inline-flex items-center gap-1 rounded bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px] font-semibold"><Lock size={10} /> LOCKED</span>}
       </div>
@@ -176,7 +205,7 @@ export default function StudentListPage() {
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <StatusBadge label={s.is_active ? 'Active' : 'Inactive'} variant={s.is_active ? 'success' : 'error'} />
+            <StatusBadge label={s.is_active ? 'Active' : 'Dropped'} variant={s.is_active ? 'success' : 'error'} />
             <button ref={el => { if (el) menuBtnRefs.current.set(s.id, el) }} onClick={e => { e.stopPropagation(); openMenu(s.id) }}
               className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><MoreVertical size={16} /></button>
           </div>
@@ -230,16 +259,16 @@ export default function StudentListPage() {
           </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive' | 'completed')}
             className="px-3 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none">
-            <option value="all">All Status</option>
             <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="inactive">Dropped</option>
             <option value="completed">Completed (Cert Issued)</option>
+            <option value="all">All (incl. dropped)</option>
           </select>
           {statusFilter === 'completed' && (
             <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded flex items-center gap-1"><GraduationCap size={12} /> Showing {filtered.length} completed</span>
           )}
-          {(programFilter !== 'all' || statusFilter !== 'all' || search) && (
-            <button onClick={() => { setProgramFilter('all'); setStatusFilter('all'); setSearch('') }}
+          {(programFilter !== 'all' || statusFilter !== 'active' || search) && (
+            <button onClick={() => { setProgramFilter('all'); setStatusFilter('active'); setSearch('') }}
               className="text-xs text-gray-500 hover:text-red-600 underline underline-offset-2 sm:ml-auto">
               Clear filters
             </button>
@@ -265,24 +294,62 @@ export default function StudentListPage() {
           <div className="space-y-1">
             {menuActions.map(a => <button key={a.label} onClick={() => { setMenuOpen(null); a.onClick() }} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"><a.icon size={16} /> {a.label}</button>)}
             <div className="border-t border-gray-100 my-1" />
-            <button onClick={() => { setMenuOpen(null); setToggleTarget(menuStudent) }}
-              className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium ${menuStudent.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}>
-              <Power size={16} /> {menuStudent.is_active ? 'Deactivate' : 'Activate'}</button>
+            {menuStudent.is_active ? (
+              <button onClick={() => { setMenuOpen(null); setDropTarget(menuStudent); setDropReason('') }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50">
+                <UserMinus size={16} /> Mark as Dropped</button>
+            ) : (
+              <button onClick={() => { setMenuOpen(null); setReactivateTarget(menuStudent) }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-green-600 hover:bg-green-50">
+                <RotateCcw size={16} /> Reactivate</button>
+            )}
           </div>
         </div>
         <div className="hidden md:block fixed z-50 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1" style={{ top: menuPos.top, left: menuPos.left }}>
           {menuActions.map(a => <button key={a.label} onClick={() => { setMenuOpen(null); a.onClick() }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><a.icon size={14} /> {a.label}</button>)}
           <div className="border-t border-gray-100 my-1" />
-          <button onClick={() => { setMenuOpen(null); setToggleTarget(menuStudent) }}
-            className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm ${menuStudent.is_active ? 'text-red-600 hover:bg-red-50' : 'text-green-600 hover:bg-green-50'}`}>
-            <Power size={14} /> {menuStudent.is_active ? 'Deactivate' : 'Activate'}</button>
+          {menuStudent.is_active ? (
+            <button onClick={() => { setMenuOpen(null); setDropTarget(menuStudent); setDropReason('') }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-600 hover:bg-red-50">
+              <UserMinus size={14} /> Mark as Dropped</button>
+          ) : (
+            <button onClick={() => { setMenuOpen(null); setReactivateTarget(menuStudent) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-green-600 hover:bg-green-50">
+              <RotateCcw size={14} /> Reactivate</button>
+          )}
         </div>
       </>)}
 
-      <ConfirmDialog open={!!toggleTarget} onClose={() => setToggleTarget(null)} onConfirm={handleToggle}
-        title={toggleTarget?.is_active ? 'Deactivate Student?' : 'Activate Student?'}
-        message={toggleTarget?.is_active ? `"${toggleTarget?.name}" will lose login access.` : `"${toggleTarget?.name}" will regain access.`}
-        confirmText={toggleTarget?.is_active ? 'Deactivate' : 'Activate'} variant={toggleTarget?.is_active ? 'danger' : 'info'} loading={toggling} />
+      <Modal open={!!dropTarget} onClose={() => { if (!dropping) { setDropTarget(null); setDropReason('') } }} title="Mark Student as Dropped" size="sm">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+            <UserMinus size={18} className="text-red-600 mt-0.5 shrink-0" />
+            <div className="text-xs text-red-800">
+              <p className="font-semibold">{dropTarget?.name} ({dropTarget?.registration_no})</p>
+              <p className="mt-0.5">This student will be removed from the active list and shown as <b>DROPPED</b> on public verification. Login access will be revoked.</p>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason for dropping <span className="text-red-500">*</span></label>
+            <textarea
+              value={dropReason}
+              onChange={e => setDropReason(e.target.value)}
+              rows={3}
+              placeholder="e.g. Joined another institute, financial issues, relocated, lost interest…"
+              className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm placeholder:text-gray-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none resize-none"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={() => { setDropTarget(null); setDropReason('') }} disabled={dropping} className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cancel</button>
+            <button onClick={handleDrop} disabled={dropping || !dropReason.trim()} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50">{dropping ? 'Saving...' : 'Confirm Drop'}</button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog open={!!reactivateTarget} onClose={() => setReactivateTarget(null)} onConfirm={handleReactivate}
+        title="Reactivate Student?"
+        message={`"${reactivateTarget?.name}" will be restored to the active list. Public verification will no longer show DROPPED.`}
+        confirmText="Reactivate" variant="info" loading={toggling} />
     </div>
   )
 }

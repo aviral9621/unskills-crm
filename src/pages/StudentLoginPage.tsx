@@ -5,6 +5,7 @@ import { z } from 'zod/v4'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Eye, EyeOff, Loader2, GraduationCap } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 
 const loginSchema = z.object({
   registration_no: z.string().min(3, 'Enter your registration number'),
@@ -44,8 +45,24 @@ export default function StudentLoginPage() {
 
   async function onSubmit(data: LoginForm) {
     setError(null)
-    const email = studentAuthEmail(data.registration_no)
-    const { error: e } = await signIn(email, data.phone)
+    // Resolve student → ensures auth user exists with correct password,
+    // even if account was never created or phone was changed after registration.
+    const { data: resolved, error: rErr } = await supabase.functions.invoke('student-login-resolve', {
+      body: { registration_no: data.registration_no, phone: data.phone },
+    })
+    if (rErr || !resolved?.ok) {
+      const code = (resolved as { error?: string } | null)?.error
+      if (code === 'student_inactive') {
+        setError('This student account has been marked as dropped/inactive. Please contact your institute.')
+      } else if (code === 'invalid_credentials') {
+        setError("Registration number or phone doesn't match our records.")
+      } else {
+        setError("Registration number or phone doesn't match our records.")
+      }
+      return
+    }
+    const email = (resolved as { email: string }).email || studentAuthEmail(data.registration_no)
+    const { error: e } = await signIn(email, data.phone.replace(/\D/g, ''))
     if (e) {
       setError(
         /invalid login/i.test(e)

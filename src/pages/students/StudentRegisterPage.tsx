@@ -323,7 +323,11 @@ export default function StudentRegisterPage() {
         admission_year: form.admission_year,
         enrollment_date: new Date().toISOString().split('T')[0],
         package_type: packageType,
-        fee_start_month: form.fee_start_month ? `${form.fee_start_month}-01` : null,
+        // fee_start_month accepts a full ISO date (YYYY-MM-DD); legacy month-only
+        // values (YYYY-MM) get auto-promoted to the 1st of that month.
+        fee_start_month: form.fee_start_month
+          ? (/^\d{4}-\d{2}$/.test(form.fee_start_month) ? `${form.fee_start_month}-01` : form.fee_start_month)
+          : null,
         installment_count: form.installment_count && form.installment_count > 0 ? form.installment_count : null,
         monthly_fee: form.monthly_fee && form.monthly_fee > 0 ? form.monthly_fee : null,
         registered_by: user?.id || null, updated_at: new Date().toISOString(),
@@ -750,8 +754,8 @@ export default function StudentRegisterPage() {
                 <p className="text-xs font-semibold text-gray-700 mb-0.5">Monthly Fee Plan <span className="text-gray-400 font-normal">(optional)</span></p>
                 <p className="text-[11px] text-gray-500 mb-3">Set this to auto-generate a monthly payment schedule. Leave blank for flat / one-shot fees.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <FormField label="Fee Start Month">
-                    <input type="month" {...register('fee_start_month')} className={inputClass} />
+                  <FormField label="Fee Start Date" hint="Date the first installment is due">
+                    <input type="date" {...register('fee_start_month')} className={inputClass} />
                   </FormField>
                   <FormField label="Installments">
                     <input type="number" min={0} {...register('installment_count')} className={inputClass} placeholder="e.g. 12" />

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
-import { Wallet, Plus, Search, X, Download, Pencil, Trash2, Calendar, Tag, Crown, Store, Info, TrendingDown } from 'lucide-react'
+import { Wallet, Plus, Search, X, Download, Pencil, Trash2, Calendar, Tag, Crown, Store, Info, TrendingDown, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -26,6 +27,7 @@ const PIE_COLORS = ['#DC2626', '#2563EB', '#16A34A', '#D97706', '#7C3AED', '#EC4
 type Tab = 'ho' | 'all'
 
 export default function ExpensesPage() {
+  const navigate = useNavigate()
   const { profile, user } = useAuth()
   const isSuperAdmin = profile?.role === 'super_admin'
 
@@ -218,6 +220,12 @@ export default function ExpensesPage() {
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Operating costs · head office expenses hit SA P&L</p>
         </div>
         <div className="flex items-center gap-2">
+          {isSuperAdmin && (
+            <button onClick={() => navigate('/admin/reports/expenses/categories')}
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 shrink-0">
+              <Settings size={16} /> Categories
+            </button>
+          )}
           <button onClick={exportCSV} className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50 shrink-0"><Download size={16} /> Export</button>
           <button onClick={() => { setEditId(null); setForm({ category_id: '', amount: '', expense_date: new Date().toISOString().split('T')[0], description: '', receipt_url: '' }); setShowModal(true) }}
             className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm shrink-0"><Plus size={16} /> Add Expense</button>
