@@ -8,6 +8,7 @@ import {
   Clock, Ban, CircleDollarSign, ChevronDown,
   ArrowUpRight, ArrowDownRight, Filter,
   MessageCircle, Target, Phone, Tag, X,
+  ClipboardList,
 } from 'lucide-react'
 import { useTodayFollowUps } from '../hooks/useLeads'
 import {
@@ -264,6 +265,7 @@ export default function DashboardPage() {
   const [feeBreakdown, setFeeBreakdown] = useState<{ name: string; value: number; color: string }[]>([])
   const [recentStudents, setRecentStudents] = useState<RecentStudent[]>([])
   const [recentPayments, setRecentPayments] = useState<RecentPayment[]>([])
+  const [pendingFormsCount, setPendingFormsCount] = useState(0)
 
   const isSuperAdmin = profile?.role === 'super_admin'
   const branchId = profile?.branch_id
@@ -312,6 +314,7 @@ export default function DashboardPage() {
         fetchDroppedDetails(),
         fetchDiscountDetails(),
         fetchUpcomingDue(),
+        fetchPendingExamForms(),
       ])
     } catch (err) {
       console.error('Dashboard fetch error:', err)
@@ -396,6 +399,13 @@ export default function DashboardPage() {
       .filter(r => r.paid_amount < r.expected_amount)
       .sort((a, b) => a.due_date.localeCompare(b.due_date))
     setUpcomingDue(result)
+  }
+
+  async function fetchPendingExamForms() {
+    let q = supabase.from('uce_exam_forms').select('id', { count: 'exact', head: true }).eq('status', 'submitted')
+    if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
+    const { count } = await q
+    setPendingFormsCount(count ?? 0)
   }
 
   async function fetchLeadStats() {
@@ -707,6 +717,24 @@ export default function DashboardPage() {
           />
         </div>
       </div>
+
+      {/* ─── Pending Exam Forms Alert ─── */}
+      {!loading && pendingFormsCount > 0 && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 flex items-start gap-3">
+          <div className="h-9 w-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+            <ClipboardList size={18} className="text-blue-700" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-blue-900">Pending Exam Form Requests</p>
+            <p className="text-xs text-blue-800 mt-0.5">
+              <b>{pendingFormsCount}</b> student{pendingFormsCount === 1 ? '' : 's'} {pendingFormsCount === 1 ? 'has' : 'have'} submitted an exam form awaiting your review.
+            </p>
+          </div>
+          <button onClick={() => navigate('/admin/exams/forms')} className="text-xs font-semibold text-blue-900 bg-white border border-blue-300 px-3 py-1.5 rounded-lg hover:bg-blue-100 shrink-0">
+            Review →
+          </button>
+        </div>
+      )}
 
       {/* ─── Upcoming Fees Due Alert (next 48hrs) ─── */}
       {!loading && upcomingDue.length > 0 && (

@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext'
 const loginSchema = z.object({
   email: z.email('Enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  remember: z.boolean().optional(),
 })
 
 type LoginForm = z.infer<typeof loginSchema>
@@ -23,11 +24,11 @@ export default function FranchiseLoginPage() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) })
+  } = useForm<LoginForm>({ resolver: zodResolver(loginSchema), defaultValues: { remember: true } })
 
   async function onSubmit(data: LoginForm) {
     setError(null)
-    const { error } = await signIn(data.email, data.password)
+    const { error } = await signIn(data.email, data.password, { remember: data.remember !== false })
     if (error) setError(error)
     else navigate('/franchise/dashboard', { replace: true })
   }
@@ -91,6 +92,17 @@ export default function FranchiseLoginPage() {
                 </div>
                 {errors.password && <p className="mt-1.5 text-xs text-red-500">{errors.password.message}</p>}
               </div>
+            </div>
+
+            <div className="flex items-center mt-4">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300"
+                  {...register('remember')}
+                />
+                <span className="text-sm text-gray-600">Remember me</span>
+              </label>
             </div>
 
             <button

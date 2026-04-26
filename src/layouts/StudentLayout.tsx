@@ -17,6 +17,7 @@ const NAV = [
   { label: 'Syllabus', icon: BookOpen, path: '/student/syllabus' },
   { label: 'Online Tests', icon: ClipboardList, path: '/student/tests' },
   { label: 'Exam Forms', icon: ClipboardList, path: '/student/exam-forms' },
+  { label: 'Admit Card', icon: IdCard, path: '/student/admit-card' },
   { label: 'Results', icon: ScrollText, path: '/student/results' },
   { label: 'Jobs', icon: Briefcase, path: '/student/jobs' },
   { label: 'Refer & Earn', icon: Gift, path: '/student/refer-earn' },

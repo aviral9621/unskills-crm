@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext'
 const loginSchema = z.object({
   email: z.email('Enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  remember: z.boolean().optional(),
 })
 
 type LoginForm = z.infer<typeof loginSchema>
@@ -25,11 +26,12 @@ export default function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
+    defaultValues: { remember: true },
   })
 
   async function onSubmit(data: LoginForm) {
     setError(null)
-    const { error } = await signIn(data.email, data.password)
+    const { error } = await signIn(data.email, data.password, { remember: data.remember !== false })
     if (error) {
       setError(error)
     } else {
@@ -125,6 +127,7 @@ export default function LoginPage() {
                 <input
                   type="checkbox"
                   className="h-4 w-4 rounded border-gray-300"
+                  {...register('remember')}
                 />
                 <span className="text-sm text-gray-600">Remember me</span>
               </label>

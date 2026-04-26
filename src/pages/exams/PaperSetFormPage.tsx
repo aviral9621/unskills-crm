@@ -9,6 +9,8 @@ import type { Course } from '../../types'
 
 interface PaperFormData {
   course_id: string
+  semester: string
+  subject_id: string
   category: string
   paper_name: string
   total_questions: string
@@ -22,6 +24,9 @@ interface PaperFormData {
   is_mock_test: boolean
 }
 
+type CourseExt = Course & { total_semesters?: number | null }
+interface SubjectOpt { id: string; name: string; code: string | null; semester: number | null }
+
 const CATEGORIES = ['Theory', 'Practical', 'Mock Test', 'Final Exam', 'Mid-Term', 'Assignment']
 
 export default function PaperSetFormPage() {
@@ -30,12 +35,13 @@ export default function PaperSetFormPage() {
   const { user } = useAuth()
   const isEdit = !!id
 
-  const [courses, setCourses] = useState<Course[]>([])
+  const [courses, setCourses] = useState<CourseExt[]>([])
+  const [subjects, setSubjects] = useState<SubjectOpt[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const [form, setForm] = useState<PaperFormData>({
-    course_id: '', category: '', paper_name: '', total_questions: '10',
+    course_id: '', semester: '', subject_id: '', category: '', paper_name: '', total_questions: '10',
     marks_per_question: '1', total_marks: '10', minus_marking: false,
     minus_marks: '0', time_limit_minutes: '30', available_from: '',
     available_to: '', is_mock_test: false,
@@ -44,9 +50,26 @@ export default function PaperSetFormPage() {
   useEffect(() => { fetchCourses(); if (isEdit) loadPaper() }, [id])
 
   async function fetchCourses() {
-    const { data } = await supabase.from('uce_courses').select('id, name, code').eq('is_active', true).order('name')
-    setCourses((data ?? []) as Course[])
+    const { data } = await supabase.from('uce_courses').select('id, name, code, total_semesters').eq('is_active', true).order('name')
+    setCourses((data ?? []) as unknown as CourseExt[])
   }
+
+  // Reload subjects whenever course or semester changes
+  useEffect(() => {
+    if (!form.course_id || !form.semester) { setSubjects([]); return }
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase
+        .from('uce_subjects')
+        .select('id, name, code, semester')
+        .eq('course_id', form.course_id)
+        .eq('semester', parseInt(form.semester))
+        .eq('is_active', true)
+        .order('display_order', { ascending: true })
+      if (!cancelled) setSubjects((data ?? []) as SubjectOpt[])
+    })()
+    return () => { cancelled = true }
+  }, [form.course_id, form.semester])
 
   async function loadPaper() {
     setLoading(true)
@@ -56,6 +79,8 @@ export default function PaperSetFormPage() {
       if (!data) { toast.error('Paper set not found'); navigate('/admin/exams/paper-sets'); return }
       setForm({
         course_id: data.course_id,
+        semester: data.semester != null ? String(data.semester) : '',
+        subject_id: data.subject_id || '',
         category: data.category || '',
         paper_name: data.paper_name,
         total_questions: String(data.total_questions),
@@ -81,6 +106,9 @@ export default function PaperSetFormPage() {
         const m = parseFloat(field === 'marks_per_question' ? String(value) : next.marks_per_question) || 0
         next.total_marks = String(q * m)
       }
+      // Reset subject when course or semester changes
+      if (field === 'course_id') { next.semester = ''; next.subject_id = '' }
+      if (field === 'semester') { next.subject_id = '' }
       return next
     })
   }
@@ -88,6 +116,8 @@ export default function PaperSetFormPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.course_id) { toast.error('Select a course'); return }
+    if (!form.semester) { toast.error('Select a semester'); return }
+    if (!form.subject_id) { toast.error('Select a subject'); return }
     if (!form.paper_name.trim()) { toast.error('Paper name is required'); return }
     if (!form.total_questions || parseInt(form.total_questions) < 1) { toast.error('Total questions must be at least 1'); return }
     if (!form.time_limit_minutes || parseInt(form.time_limit_minutes) < 1) { toast.error('Time limit must be at least 1 minute'); return }
@@ -96,6 +126,8 @@ export default function PaperSetFormPage() {
     try {
       const payload = {
         course_id: form.course_id,
+        semester: parseInt(form.semester),
+        subject_id: form.subject_id,
         category: form.category || null,
         paper_name: form.paper_name.trim(),
         total_questions: parseInt(form.total_questions),
@@ -149,6 +181,27 @@ export default function PaperSetFormPage() {
               <select value={form.course_id} onChange={e => update('course_id', e.target.value)} className={selectClass}>
                 <option value="">Select course</option>
                 {courses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+              </select>
+            </FormField>
+            <FormField label="Semester" required>
+              <select value={form.semester} onChange={e => update('semester', e.target.value)} className={selectClass} disabled={!form.course_id}>
+                <option value="">Select semester</option>
+                {(() => {
+                  const c = courses.find(c => c.id === form.course_id)
+                  const max = c?.total_semesters || 0
+                  return Array.from({ length: max || 8 }, (_, i) => i + 1).map(n => (
+                    <option key={n} value={n}>Semester {n}</option>
+                  ))
+                })()}
+              </select>
+            </FormField>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField label="Subject" required>
+              <select value={form.subject_id} onChange={e => update('subject_id', e.target.value)} className={selectClass} disabled={!form.semester || subjects.length === 0}>
+                <option value="">{form.semester ? (subjects.length === 0 ? 'No subjects for this semester' : 'Select subject') : 'Select semester first'}</option>
+                {subjects.map(s => <option key={s.id} value={s.id}>{s.name}{s.code ? ` (${s.code})` : ''}</option>)}
               </select>
             </FormField>
             <FormField label="Category">

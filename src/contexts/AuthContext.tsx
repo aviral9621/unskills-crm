@@ -11,7 +11,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>
+  signIn: (email: string, password: string, opts?: { remember?: boolean }) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
@@ -46,21 +46,50 @@ function getCachedProfile(userId: string): Profile | null {
   return null
 }
 
+async function fetchProfileOnce(userId: string, timeoutMs: number): Promise<Profile | null> {
+  const result = await Promise.race([
+    supabase.from('uce_profiles').select('*').eq('id', userId).single(),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+  ])
+  if (result.error) return null
+  return result.data as Profile
+}
+
 async function fetchProfileWithTimeout(userId: string): Promise<Profile | null> {
   try {
-    const result = await Promise.race([
-      supabase.from('uce_profiles').select('*').eq('id', userId).single(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
-    ])
+    const profile = await fetchProfileOnce(userId, 2000)
+    if (profile) {
+      setProfileCache({ id: userId, data: profile })
+      return profile
+    }
+  } catch { /* fall through to retry */ }
+  // One silent retry with a longer window for slow networks (new-tab cold path).
+  try {
+    const profile = await fetchProfileOnce(userId, 4000)
+    if (profile) {
+      setProfileCache({ id: userId, data: profile })
+      return profile
+    }
+  } catch { /* network/timeout — fall through */ }
+  return getCachedProfile(userId)
+}
 
-    if (result.error) return null
-    const profile = result.data as Profile
-    setProfileCache({ id: userId, data: profile })
-    return profile
-  } catch {
-    // On timeout/network error, keep returning whatever we have cached (if any)
-    return getCachedProfile(userId)
-  }
+// Remember-Me handling: if user unchecks "Remember me", we mark this tab as
+// session-only and sign out on tab/window close. Default behavior (remember=true)
+// keeps the Supabase session in localStorage indefinitely until explicit logout.
+const SESSION_ONLY_KEY = 'uce_session_only'
+let unloadHandlerInstalled = false
+function installSessionOnlyUnloadHandler() {
+  if (unloadHandlerInstalled) return
+  unloadHandlerInstalled = true
+  window.addEventListener('beforeunload', () => {
+    try {
+      if (sessionStorage.getItem(SESSION_ONLY_KEY) === '1') {
+        // Best-effort: fire and forget; sign-out clears localStorage session.
+        void supabase.auth.signOut()
+      }
+    } catch { /* ignore */ }
+  })
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -162,10 +191,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  async function signIn(email: string, password: string) {
+  async function signIn(email: string, password: string, opts?: { remember?: boolean }) {
     explicitSignOut.current = false
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }
+    // Default: remember=true → persistent session (Supabase localStorage).
+    // remember=false → mark tab session-only so we sign out on tab close.
+    try {
+      if (opts?.remember === false) {
+        sessionStorage.setItem(SESSION_ONLY_KEY, '1')
+        installSessionOnlyUnloadHandler()
+      } else {
+        sessionStorage.removeItem(SESSION_ONLY_KEY)
+      }
+    } catch { /* storage may be disabled — ignore */ }
     return { error: null }
   }
 

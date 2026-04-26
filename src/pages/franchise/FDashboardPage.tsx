@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Wallet, Users, IndianRupee, AlertTriangle, Briefcase, ScrollText } from 'lucide-react'
+import { Wallet, Users, IndianRupee, AlertTriangle, Briefcase, ScrollText, ClipboardList } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useBranch, useBranchId } from '../../lib/franchise'
 import { formatINR } from '../../lib/utils'
@@ -12,6 +12,7 @@ interface Stats {
   pendingFees: number
   openTickets: number
   pendingCourses: number
+  pendingExamForms: number
 }
 
 export default function FDashboardPage() {
@@ -22,7 +23,7 @@ export default function FDashboardPage() {
   useEffect(() => {
     if (!branchId) return
     ;(async () => {
-      const [stu, active, payCol, tickets, courses] = await Promise.all([
+      const [stu, active, payCol, tickets, courses, pendingForms] = await Promise.all([
         supabase.from('uce_students').select('*', { count: 'exact', head: true }).eq('branch_id', branchId),
         supabase.from('uce_students').select('*', { count: 'exact', head: true }).eq('branch_id', branchId).eq('is_active', true),
         supabase.from('uce_student_fee_payments')
@@ -30,6 +31,7 @@ export default function FDashboardPage() {
           .gte('payment_date', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)),
         supabase.from('uce_support_tickets').select('*', { count: 'exact', head: true }).eq('branch_id', branchId).in('status', ['open', 'in_progress']),
         supabase.from('uce_courses').select('*', { count: 'exact', head: true }).eq('created_by_branch_id', branchId).eq('approval_status', 'pending'),
+        supabase.from('uce_exam_forms').select('*', { count: 'exact', head: true }).eq('branch_id', branchId).eq('status', 'submitted'),
       ])
       const allStudents = await supabase.from('uce_students').select('id,net_fee').eq('branch_id', branchId)
       const studentIds = (allStudents.data ?? []).map(s => s.id)
@@ -50,6 +52,7 @@ export default function FDashboardPage() {
         pendingFees,
         openTickets: tickets.count ?? 0,
         pendingCourses: courses.count ?? 0,
+        pendingExamForms: pendingForms.count ?? 0,
       })
     })()
   }, [branchId])
@@ -89,6 +92,21 @@ export default function FDashboardPage() {
         <StatCard icon={IndianRupee} label="Collected (this month)" value={formatINR(stats?.collectedThisMonth ?? 0)} color="bg-green-50 text-green-700" />
         <StatCard icon={AlertTriangle} label="Pending Fees" value={formatINR(stats?.pendingFees ?? 0)} color="bg-amber-50 text-amber-700" />
       </div>
+
+      {(stats?.pendingExamForms ?? 0) > 0 && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 sm:p-4 flex items-start gap-3 flex-wrap sm:flex-nowrap">
+          <ClipboardList className="text-blue-700 mt-0.5 shrink-0" size={20} />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-blue-900 text-sm sm:text-base">Pending Exam Form Requests</p>
+            <p className="text-xs sm:text-sm text-blue-800 break-words">
+              <b>{stats?.pendingExamForms}</b> student{stats?.pendingExamForms === 1 ? '' : 's'} {stats?.pendingExamForms === 1 ? 'has' : 'have'} submitted an exam form awaiting review.
+            </p>
+          </div>
+          <Link to="/franchise/exam-forms" className="text-xs sm:text-sm font-semibold text-blue-900 underline whitespace-nowrap">
+            Review →
+          </Link>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Link to="/franchise/students/register" className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 hover:shadow-md transition">

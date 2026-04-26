@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
   IndianRupee, FileText, Briefcase, Calendar, Video, Megaphone,
-  BookOpen, IdCard, Award, ClipboardList, AlertCircle, CheckCircle2,
-  Clock, ChevronRight, Gift,
+  IdCard, Award, ClipboardList, AlertCircle, CheckCircle2,
+  Clock, ChevronRight, Gift, ArrowRight,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useStudentRecord } from './useStudent'
+import { useImpersonation } from '../../contexts/ImpersonationContext'
 import { formatINR, formatDateDDMMYYYY } from '../../lib/utils'
 
 interface PendingExam {
@@ -27,13 +28,39 @@ interface RecentSubmission {
   is_graded: boolean
 }
 
+interface OpenWindow {
+  id: string
+  semester: number
+  exam_session: string
+  closes_at: string | null
+  status: 'fill' | 'resubmit'
+  review_note: string | null
+}
+
+interface ActiveAdmitCard {
+  id: string
+  semester: number | null
+  exam_session: string | null
+  created_at: string
+}
+
 export default function StudentDashboardPage() {
   const { rec, loading } = useStudentRecord()
+  const { isImpersonating } = useImpersonation()
   const [totals, setTotals] = useState<{ paid: number; due: number }>({ paid: 0, due: 0 })
   const [upcomingClass, setUpcomingClass] = useState<{ class_name: string; platform: string; link: string; schedule_date: string | null; schedule_time: string | null } | null>(null)
   const [latestAnn, setLatestAnn] = useState<{ title: string; body: string; created_at: string } | null>(null)
   const [pendingExams, setPendingExams] = useState<PendingExam[]>([])
   const [recentSubmission, setRecentSubmission] = useState<RecentSubmission | null>(null)
+  const [openWindows, setOpenWindows] = useState<OpenWindow[]>([])
+  const [admitCards, setAdmitCards] = useState<ActiveAdmitCard[]>([])
+
+  // Route prefix derives from the current path so the dashboard works under both
+  // /student/* and the admin /admin/view-as/:studentId/* shells. Mutating actions
+  // are still blocked separately by isImpersonating checks.
+  const location = useLocation()
+  const m = location.pathname.match(/^(\/admin\/view-as\/[^/]+)\//)
+  const studentBase = m ? m[1] : '/student'
 
   useEffect(() => {
     if (!rec) return
@@ -76,16 +103,8 @@ export default function StudentDashboardPage() {
       })
       setLatestAnn(match as typeof latestAnn)
 
-      // Pending tests for this student's course (active right now, not yet submitted)
-      const nowIso = new Date().toISOString()
-      const { data: papers } = await supabase
-        .from('uce_paper_sets')
-        .select('id, paper_name, total_questions, total_marks, time_limit_minutes, available_from, available_to, is_mock_test')
-        .eq('course_id', rec.course_id)
-        .eq('is_active', true)
-        .or(`available_from.is.null,available_from.lte.${nowIso}`)
-        .or(`available_to.is.null,available_to.gte.${nowIso}`)
-        .order('available_to', { ascending: true })
+      // Pending tests — gated by admit card via RPC
+      const { data: papers } = await supabase.rpc('student_visible_papers', { p_student_id: rec.id })
 
       const { data: attempts } = await supabase
         .from('uce_exam_attempts')
@@ -95,6 +114,39 @@ export default function StudentDashboardPage() {
       const submittedSet = new Set((attempts ?? []).filter(a => a.is_submitted).map(a => a.paper_set_id))
       const pending = ((papers ?? []) as PendingExam[]).filter(p => !submittedSet.has(p.id))
       setPendingExams(pending.slice(0, 3))
+
+      // Open exam-form windows for this course where student hasn't submitted (or was asked to resubmit)
+      const { data: windows } = await supabase
+        .from('uce_exam_form_windows')
+        .select('id, semester, exam_session, opens_at, closes_at')
+        .eq('course_id', rec.course_id)
+        .eq('is_active', true)
+      const { data: myForms } = await supabase
+        .from('uce_exam_forms')
+        .select('id, window_id, status, review_note')
+        .eq('student_id', rec.id)
+      const openable: OpenWindow[] = []
+      ;(windows ?? []).forEach((w: { id: string; semester: number; exam_session: string; opens_at: string | null; closes_at: string | null }) => {
+        if (w.opens_at && w.opens_at > today) return
+        if (w.closes_at && w.closes_at < today) return
+        const sub = (myForms ?? []).find(f => f.window_id === w.id)
+        if (!sub) {
+          openable.push({ id: w.id, semester: w.semester, exam_session: w.exam_session, closes_at: w.closes_at, status: 'fill', review_note: null })
+        } else if (sub.status === 'resubmit') {
+          openable.push({ id: w.id, semester: w.semester, exam_session: w.exam_session, closes_at: w.closes_at, status: 'resubmit', review_note: sub.review_note })
+        }
+      })
+      setOpenWindows(openable)
+
+      // Active admit cards for this student
+      const { data: cards } = await supabase
+        .from('uce_admit_cards')
+        .select('id, semester, exam_session, is_active, student_visible, created_at')
+        .eq('student_id', rec.id)
+        .order('created_at', { ascending: false })
+      const visibleCards = ((cards ?? []) as { id: string; semester: number | null; exam_session: string | null; is_active: boolean | null; student_visible: boolean | null; created_at: string }[])
+        .filter(c => (c.is_active ?? true) && (c.student_visible ?? true))
+      setAdmitCards(visibleCards.slice(0, 1))
 
       // Most recent submission (last 7 days) for "submitted" toast banner
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -159,6 +211,62 @@ export default function StudentDashboardPage() {
         </p>
       </div>
 
+      {/* Active exam-form windows */}
+      {openWindows.length > 0 && (
+        <div className="space-y-2">
+          {openWindows.map(w => (
+            <div key={w.id} className={`rounded-2xl border p-4 sm:p-5 ${w.status === 'resubmit' ? 'border-orange-300 bg-orange-50' : 'border-yellow-300 bg-yellow-50'}`}>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className={`h-9 w-9 sm:h-10 sm:w-10 rounded-full text-white flex items-center justify-center shrink-0 ${w.status === 'resubmit' ? 'bg-orange-500' : 'bg-yellow-500'}`}>
+                    <ClipboardList size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-gray-900">
+                      {w.status === 'resubmit' ? 'Resubmit Exam Form' : 'Fill Exam Form'}
+                    </p>
+                    <p className="text-sm font-semibold text-gray-900 mt-0.5">Sem {w.semester} · Session {w.exam_session}</p>
+                    {w.closes_at && <p className="text-xs text-gray-600 mt-0.5">Closes on {formatDateDDMMYYYY(w.closes_at)}</p>}
+                    {w.review_note && <p className="text-xs text-orange-800 mt-1"><strong>Note:</strong> {w.review_note}</p>}
+                  </div>
+                </div>
+                {!isImpersonating && (
+                  <Link to={`${studentBase}/exam-forms/${w.id}/fill`} className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold ${w.status === 'resubmit' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-red-600 hover:bg-red-700'} text-white`}>
+                    {w.status === 'resubmit' ? 'Resubmit' : 'Fill Now'} <ArrowRight size={13} />
+                  </Link>
+                )}
+                {isImpersonating && (
+                  <span className="shrink-0 text-xs text-gray-500 px-2 py-1 rounded bg-gray-100">Read-only</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Active admit card */}
+      {admitCards.length > 0 && admitCards.map(c => (
+        <div key={c.id} className="rounded-2xl border border-blue-300 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 sm:p-5">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0">
+                <IdCard size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-blue-900">Your Admit Card is Ready</p>
+                <p className="text-sm font-semibold text-blue-900 mt-0.5">
+                  {rec.course?.name}{c.semester != null && ` · Sem ${c.semester}`}{c.exam_session && ` · ${c.exam_session}`}
+                </p>
+                <p className="text-xs text-blue-700 mt-0.5">Issued {formatDateDDMMYYYY(c.created_at)}</p>
+              </div>
+            </div>
+            <Link to={`${studentBase}/admit-card`} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg">
+              View / Download <ArrowRight size={13} />
+            </Link>
+          </div>
+        </div>
+      ))}
+
       {/* Pending exam alert (top priority) */}
       {pendingExams.length > 0 && (
         <div className="rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50 p-4 sm:p-5">
@@ -177,7 +285,7 @@ export default function StudentDashboardPage() {
             {pendingExams.map(p => (
               <Link
                 key={p.id}
-                to={`/student/tests/${p.id}`}
+                to={isImpersonating ? '#' : `${studentBase}/tests/${p.id}`}
                 className="flex items-center gap-3 bg-white border border-amber-200 rounded-xl p-3 hover:border-amber-400 hover:shadow-sm transition-all group"
               >
                 <div className="h-9 w-9 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
@@ -228,7 +336,7 @@ export default function StudentDashboardPage() {
                 {!recentSubmission.is_graded && <> · Awaiting grading</>}
               </p>
             </div>
-            <Link to="/student/results" className="shrink-0 text-xs font-semibold text-green-700 hover:text-green-900 hidden sm:inline-flex items-center gap-1">
+            <Link to={`${studentBase}/results`} className="shrink-0 text-xs font-semibold text-green-700 hover:text-green-900 hidden sm:inline-flex items-center gap-1">
               View results <ChevronRight size={13} />
             </Link>
           </div>
@@ -265,7 +373,7 @@ export default function StudentDashboardPage() {
             <>
               <p className="font-semibold text-text-primary">{latestAnn.title}</p>
               <p className="text-sm text-gray-600 mt-1 line-clamp-2">{latestAnn.body}</p>
-              <Link to="/student/announcements" className="inline-block mt-2 text-sm font-semibold text-red-600 hover:underline">See all →</Link>
+              <Link to={`${studentBase}/announcements`} className="inline-block mt-2 text-sm font-semibold text-red-600 hover:underline">See all →</Link>
             </>
           ) : (
             <p className="text-sm text-gray-400">No announcements yet.</p>
@@ -274,15 +382,16 @@ export default function StudentDashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-        <QuickLink to="/student/fees" icon={IndianRupee} label="Fees" />
-        <QuickLink to="/student/documents" icon={IdCard} label="Documents" />
-        <QuickLink to="/student/classes" icon={Video} label="Classes" />
-        <QuickLink to="/student/materials" icon={FileText} label="Materials" />
-        <QuickLink to="/student/tests" icon={ClipboardList} label="Tests" />
-        <QuickLink to="/student/syllabus" icon={BookOpen} label="Syllabus" />
-        <QuickLink to="/student/results" icon={Award} label="Results" />
-        <QuickLink to="/student/jobs" icon={Briefcase} label="Jobs" />
-        <QuickLink to="/student/refer-earn" icon={Gift} label="Refer & Earn" />
+        <QuickLink to={`${studentBase}/fees`} icon={IndianRupee} label="Fees" />
+        <QuickLink to={`${studentBase}/documents`} icon={IdCard} label="Documents" />
+        <QuickLink to={`${studentBase}/classes`} icon={Video} label="Classes" />
+        <QuickLink to={`${studentBase}/materials`} icon={FileText} label="Materials" />
+        <QuickLink to={`${studentBase}/tests`} icon={ClipboardList} label="Tests" />
+        <QuickLink to={`${studentBase}/exam-forms`} icon={ClipboardList} label="Exam Forms" />
+        <QuickLink to={`${studentBase}/admit-card`} icon={IdCard} label="Admit Card" />
+        <QuickLink to={`${studentBase}/results`} icon={Award} label="Results" />
+        <QuickLink to={`${studentBase}/jobs`} icon={Briefcase} label="Jobs" />
+        {!isImpersonating && <QuickLink to="/student/refer-earn" icon={Gift} label="Refer & Earn" />}
       </div>
 
       <div className="rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-4 text-center">

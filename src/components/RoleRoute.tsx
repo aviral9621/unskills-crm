@@ -60,7 +60,16 @@ export function PublicRoute({ children }: { children: React.ReactNode }) {
       </div>
     )
   }
-  if (session && profile) {
+  // Session exists — never show the login form. If profile is still loading,
+  // show the spinner; once profile resolves, redirect home.
+  if (session) {
+    if (!profile) {
+      return (
+        <div className="flex h-screen items-center justify-center bg-bg-primary">
+          <Loader2 size={32} className="animate-spin text-red-600" />
+        </div>
+      )
+    }
     // If a student login carries ?returnTo=/student/... , honor it so users
     // arriving via the website "Online Test" link land where they intended.
     if (profile.role === 'student') {

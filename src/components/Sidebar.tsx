@@ -64,6 +64,8 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
         label: 'Online Exams', icon: ClipboardList, permission: 'exam',
         children: [
           { label: 'Paper Sets', path: '/admin/exams/paper-sets' },
+          { label: 'Form Windows', path: '/admin/exams/form-windows' },
+          { label: 'Exam Forms', path: '/admin/exams/forms' },
           { label: 'Results', path: '/admin/exams/results' },
         ],
       },

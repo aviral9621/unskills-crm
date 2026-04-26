@@ -170,7 +170,22 @@ export default function StudentListPage() {
   }, [students, statusFilter, programFilter, search])
 
   const columns = useMemo(() => [
-    colHelper.accessor('registration_no', { header: 'Reg No', cell: i => <span className="text-xs font-mono font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">{i.getValue()}</span> }),
+    colHelper.accessor('registration_no', { header: 'Reg No', cell: i => {
+      const regNo = i.getValue()
+      const studentId = i.row.original.id
+      if (isSuperAdmin) {
+        return (
+          <button
+            onClick={e => { e.stopPropagation(); window.open(`/admin/view-as/${studentId}/dashboard`, '_blank') }}
+            title="Open student dashboard view in new tab"
+            className="text-xs font-mono font-semibold text-red-700 bg-red-50 hover:bg-red-100 px-2 py-1 rounded cursor-pointer transition-colors"
+          >
+            {regNo}
+          </button>
+        )
+      }
+      return <span className="text-xs font-mono font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">{regNo}</span>
+    } }),
     colHelper.accessor('name', { header: 'Name', cell: i => <span className="text-sm font-medium text-gray-900 min-w-[120px] block">{i.getValue()}</span> }),
     colHelper.display({ id: 'course', header: 'Course', cell: i => <span className="text-sm text-gray-600">{(i.row.original.course as { name: string } | null)?.name || '—'}</span> }),
     colHelper.accessor('net_fee', { header: 'Fee', cell: i => <span className="text-sm text-gray-700">{formatINR(i.getValue())}</span> }),
@@ -187,7 +202,7 @@ export default function StudentListPage() {
       <button ref={el => { if (el) menuBtnRefs.current.set(i.row.original.id, el) }} onClick={e => { e.stopPropagation(); openMenu(i.row.original.id) }}
         className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><MoreVertical size={16} /></button>
     )}),
-  ], [openMenu])
+  ], [openMenu, isSuperAdmin])
 
   function StudentCard({ s }: { s: StudentRow }) {
     const course = s.course as { name: string } | null

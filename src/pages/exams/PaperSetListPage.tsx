@@ -15,6 +15,8 @@ import ConfirmDialog from '../../components/ConfirmDialog'
 interface PaperSet {
   id: string
   course_id: string
+  semester: number | null
+  subject_id: string | null
   category: string | null
   paper_name: string
   total_questions: number
@@ -30,6 +32,7 @@ interface PaperSet {
   created_by: string | null
   created_at: string
   course?: { name: string; code: string } | null
+  subject?: { name: string; code: string | null } | null
   question_count?: number
 }
 
@@ -50,7 +53,7 @@ export default function PaperSetListPage() {
     try {
       const { data, error } = await supabase
         .from('uce_paper_sets')
-        .select('*, course:uce_courses(name, code)')
+        .select('*, course:uce_courses(name, code), subject:uce_subjects(name, code)')
         .order('created_at', { ascending: false })
       if (error) throw error
 
@@ -111,12 +114,22 @@ export default function PaperSetListPage() {
 
   const columns = useMemo(() => [
     colHelper.accessor('paper_name', {
-      header: 'Paper Name', cell: i => (
-        <div className="min-w-[150px]">
-          <p className="text-sm font-medium text-gray-900">{i.getValue()}</p>
-          <p className="text-xs text-gray-400">{(i.row.original.course as { name: string } | null)?.name || '—'}</p>
-        </div>
-      ),
+      header: 'Paper Name', cell: i => {
+        const subj = (i.row.original.subject as { name: string } | null)?.name
+        const sem = i.row.original.semester
+        const isLegacy = !sem || !subj
+        return (
+          <div className="min-w-[150px]">
+            <p className="text-sm font-medium text-gray-900">{i.getValue()}</p>
+            <p className="text-xs text-gray-400">
+              {(i.row.original.course as { name: string } | null)?.name || '—'}
+              {sem ? ` · Sem ${sem}` : ''}
+              {subj ? ` · ${subj}` : ''}
+              {isLegacy && <span className="ml-1 text-amber-600">(Legacy)</span>}
+            </p>
+          </div>
+        )
+      },
     }),
     colHelper.accessor('category', { header: 'Category', cell: i => <span className="text-sm text-gray-600">{i.getValue() || '—'}</span> }),
     colHelper.display({
@@ -154,7 +167,13 @@ export default function PaperSetListPage() {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">{p.paper_name}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{course?.name || '—'}{p.category ? ` · ${p.category}` : ''}</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {course?.name || '—'}
+              {p.semester ? ` · Sem ${p.semester}` : ''}
+              {(p.subject as { name: string } | null)?.name ? ` · ${(p.subject as { name: string }).name}` : ''}
+              {p.category ? ` · ${p.category}` : ''}
+              {(!p.semester || !p.subject_id) && <span className="ml-1 text-amber-600">(Legacy)</span>}
+            </p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <StatusBadge label={p.is_mock_test ? 'Mock' : 'Exam'} variant={p.is_mock_test ? 'warning' : 'info'} />

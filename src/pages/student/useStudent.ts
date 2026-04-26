@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
+import { useImpersonation } from '../../contexts/ImpersonationContext'
 
 export interface StudentRec {
   id: string
@@ -26,26 +27,30 @@ export interface StudentRec {
   branch: { name: string; code: string; director_phone: string } | null
 }
 
+const SELECT_COLS =
+  'id,name,father_name,registration_no,phone,email,alt_phone,whatsapp,address,village,block,district,state,pincode,course_id,branch_id,net_fee,photo_url,session,course:uce_courses(name,code),branch:uce_branches(name,code,director_phone)'
+
 export function useStudentRecord() {
   const { user } = useAuth()
+  const { studentId, isImpersonating } = useImpersonation()
   const [rec, setRec] = useState<StudentRec | null>(null)
   const [loading, setLoading] = useState(true)
 
   async function reload() {
-    if (!user) return
     setLoading(true)
-    const { data } = await supabase
-      .from('uce_students')
-      .select(
-        'id,name,father_name,registration_no,phone,email,alt_phone,whatsapp,address,village,block,district,state,pincode,course_id,branch_id,net_fee,photo_url,session,course:uce_courses(name,code),branch:uce_branches(name,code,director_phone)',
-      )
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
-    setRec(data as unknown as StudentRec | null)
+    let data: unknown = null
+    if (isImpersonating && studentId) {
+      const res = await supabase.from('uce_students').select(SELECT_COLS).eq('id', studentId).maybeSingle()
+      data = res.data
+    } else if (user) {
+      const res = await supabase.from('uce_students').select(SELECT_COLS).eq('auth_user_id', user.id).maybeSingle()
+      data = res.data
+    }
+    setRec(data as StudentRec | null)
     setLoading(false)
   }
 
-  useEffect(() => { reload() }, [user?.id])
+  useEffect(() => { reload() }, [user?.id, studentId, isImpersonating])
 
   return { rec, loading, reload }
 }

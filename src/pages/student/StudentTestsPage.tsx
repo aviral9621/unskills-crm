@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { ClipboardList, Clock, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useStudentRecord } from './useStudent'
+import { useImpersonation } from '../../contexts/ImpersonationContext'
 
 interface PaperSet {
   id: string; paper_name: string; category: string | null
@@ -18,16 +19,18 @@ interface Attempt {
 
 export default function StudentTestsPage() {
   const { rec } = useStudentRecord()
+  const { isImpersonating } = useImpersonation()
   const [papers, setPapers] = useState<PaperSet[]>([])
   const [attempts, setAttempts] = useState<Record<string, Attempt>>({})
+
+  const location = useLocation()
+  const m = location.pathname.match(/^(\/admin\/view-as\/[^/]+)\//)
+  const studentBase = m ? m[1] : '/student'
 
   useEffect(() => {
     if (!rec) return
     ;(async () => {
-      const { data: ps } = await supabase.from('uce_paper_sets')
-        .select('id,paper_name,category,total_questions,total_marks,time_limit_minutes,is_mock_test,available_from,available_to')
-        .eq('course_id', rec.course_id).eq('is_active', true)
-        .order('created_at', { ascending: false })
+      const { data: ps } = await supabase.rpc('student_visible_papers', { p_student_id: rec.id })
       setPapers((ps ?? []) as PaperSet[])
 
       const { data: att } = await supabase.from('uce_exam_attempts')
@@ -49,7 +52,8 @@ export default function StudentTestsPage() {
       <div className="grid sm:grid-cols-2 gap-3">
         {papers.length === 0 ? (
           <div className="sm:col-span-2 rounded-xl border bg-white p-10 text-center text-sm text-gray-400">
-            <ClipboardList size={28} className="mx-auto mb-2 text-gray-300" />No tests available.
+            <ClipboardList size={28} className="mx-auto mb-2 text-gray-300" />
+            No tests available. Tests unlock once your admit card is generated.
           </div>
         ) : papers.map(p => {
           const a = attempts[p.id]
@@ -70,8 +74,10 @@ export default function StudentTestsPage() {
                   </span>
                 ) : !isOpen ? (
                   <span className="text-xs text-gray-400">Not available yet</span>
+                ) : isImpersonating ? (
+                  <span className="text-xs text-gray-500 px-2 py-1 rounded bg-gray-100">Read-only (admin view)</span>
                 ) : (
-                  <Link to={`/student/tests/${p.id}`}
+                  <Link to={`${studentBase}/tests/${p.id}`}
                     className="inline-flex items-center gap-1.5 px-3 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700">
                     Start Test →
                   </Link>

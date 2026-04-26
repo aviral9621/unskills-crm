@@ -80,6 +80,9 @@ const AdminExamFormsPage = lazy(() => import('./pages/admin/AdminExamFormsPage')
 const AdminReferralsPage = lazy(() => import('./pages/admin/AdminReferralsPage'))
 const AdminFeesOverviewPage = lazy(() => import('./pages/admin/fees/AdminFeesOverviewPage'))
 const AdminStudentFeePlanPage = lazy(() => import('./pages/admin/fees/AdminStudentFeePlanPage'))
+const AdminExamFormWindowsPage = lazy(() => import('./pages/admin/AdminExamFormWindowsPage'))
+const AdminAdmitCardFormPage = lazy(() => import('./pages/admin/AdminAdmitCardFormPage'))
+const ViewAsStudentLayout = lazy(() => import('./pages/admin/ViewAsStudentLayout'))
 
 // Franchise pages — lazy
 const FDashboardPage = lazy(() => import('./pages/franchise/FDashboardPage'))
@@ -119,6 +122,8 @@ const StudentAnnouncementsPage = lazy(() => import('./pages/student/StudentAnnou
 const StudentProfilePage = lazy(() => import('./pages/student/StudentProfilePage'))
 const StudentTestsPage = lazy(() => import('./pages/student/StudentTestsPage'))
 const StudentTakeTestPage = lazy(() => import('./pages/student/StudentTakeTestPage'))
+const StudentAdmitCardPage = lazy(() => import('./pages/student/StudentAdmitCardPage'))
+const StudentExamFormFillPage = lazy(() => import('./pages/student/StudentExamFormFillPage'))
 const AnnouncementsPage = lazy(() => import('./pages/announcements/AnnouncementsPage'))
 
 function PageLoader() {
@@ -185,6 +190,8 @@ function AppRoutes() {
           <Route path="exams/paper-sets/:id/questions" element={<QuestionsPage />} />
           <Route path="exams/results" element={<ResultsPage />} />
           <Route path="exams/forms" element={<AdminExamFormsPage />} />
+          <Route path="exams/form-windows" element={<AdminExamFormWindowsPage />} />
+          <Route path="exams/admit-cards/new" element={<AdminAdmitCardFormPage />} />
 
           <Route path="marksheets" element={<MarksheetPage />} />
           <Route path="marksheets/settings" element={<MarksheetSettingsPage />} />
@@ -253,7 +260,8 @@ function AppRoutes() {
           <Route path="wallet/request" element={<FWalletRequestPage />} />
 
           <Route path="study-material" element={<FMaterialPage />} />
-          <Route path="exam-forms" element={<FExamFormPage />} />
+          <Route path="exam-forms" element={<AdminExamFormsPage />} />
+          <Route path="exam-forms-legacy" element={<FExamFormPage />} />
           <Route path="results" element={<FResultsPage />} />
           <Route path="marksheets" element={<MarksheetPage />} />
           <Route path="certificates" element={<CertificateListPage />} />
@@ -287,8 +295,27 @@ function AppRoutes() {
           <Route path="tests" element={<StudentTestsPage />} />
           <Route path="tests/:id" element={<StudentTakeTestPage />} />
           <Route path="exam-forms" element={<StudentExamFormPage />} />
+          <Route path="exam-forms/:windowId/fill" element={<StudentExamFormFillPage />} />
+          <Route path="admit-card" element={<StudentAdmitCardPage />} />
           <Route path="results" element={<StudentResultsPage />} />
           <Route path="jobs" element={<StudentJobsPage />} />
+          <Route path="announcements" element={<StudentAnnouncementsPage />} />
+          <Route path="profile" element={<StudentProfilePage />} />
+        </Route>
+
+        {/* Super-admin "view as student" — read-only data masquerade */}
+        <Route path="/admin/view-as/:studentId" element={<ProtectedRoute allow={['super_admin']}><ViewAsStudentLayout /></ProtectedRoute>}>
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<StudentDashboardPage />} />
+          <Route path="fees" element={<StudentFeesPage />} />
+          <Route path="documents" element={<StudentDocumentsPage />} />
+          <Route path="classes" element={<StudentClassesPage />} />
+          <Route path="materials" element={<StudentMaterialsPage />} />
+          <Route path="syllabus" element={<StudentSyllabusPage />} />
+          <Route path="tests" element={<StudentTestsPage />} />
+          <Route path="exam-forms" element={<StudentExamFormPage />} />
+          <Route path="admit-card" element={<StudentAdmitCardPage />} />
+          <Route path="results" element={<StudentResultsPage />} />
           <Route path="announcements" element={<StudentAnnouncementsPage />} />
           <Route path="profile" element={<StudentProfilePage />} />
         </Route>
