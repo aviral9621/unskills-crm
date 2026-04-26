@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, IdCard, Loader2 } from 'lucide-react'
+import { ArrowLeft, IdCard, Loader2, Calendar } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import FormField, { inputClass } from '../../components/FormField'
+import FormField, { inputClass, selectClass } from '../../components/FormField'
 import { getAdmitCardSettings, type AdmitCardSettings } from '../../lib/admitCardSettings'
 
 interface ExamForm {
@@ -15,10 +15,19 @@ interface ExamForm {
   semester: number | null
   exam_session: string | null
   status: string
+  form_type: string | null
   subject_ids: string[] | null
   details: Record<string, unknown> | null
   student: { id: string; name: string; registration_no: string; photo_url: string | null } | null
   course: { name: string; code: string } | null
+}
+
+interface PaperSetOption {
+  id: string
+  paper_name: string
+  category: string | null
+  available_from: string | null
+  available_to: string | null
 }
 
 interface SubjectRow { id: string; name: string; code: string | null }
@@ -46,6 +55,10 @@ export default function AdminAdmitCardFormPage() {
   const [centerName, setCenterName] = useState('')
   const [centerCode, setCenterCode] = useState('')
   const [centerAddress, setCenterAddress] = useState('')
+  const [visibleFrom, setVisibleFrom] = useState('')
+  const [visibleUntil, setVisibleUntil] = useState('')
+  const [paperSets, setPaperSets] = useState<PaperSetOption[]>([])
+  const [paperSetId, setPaperSetId] = useState('')
 
   useEffect(() => {
     if (!formId) {
@@ -57,7 +70,7 @@ export default function AdminAdmitCardFormPage() {
       setLoading(true)
       const { data, error } = await supabase
         .from('uce_exam_forms')
-        .select('id,student_id,course_id,branch_id,semester,exam_session,status,subject_ids,details,student:uce_students(id,name,registration_no,photo_url),course:uce_courses(name,code)')
+        .select('id,student_id,course_id,branch_id,semester,exam_session,status,form_type,subject_ids,details,student:uce_students(id,name,registration_no,photo_url),course:uce_courses(name,code)')
         .eq('id', formId)
         .maybeSingle()
       if (error || !data) {
@@ -94,6 +107,19 @@ export default function AdminAdmitCardFormPage() {
         setCenterAddress(settings.footer_address ?? '')
       } catch { /* ignore */ }
 
+      // Auto-suggest paper sets matching this course+semester (best-effort)
+      const { data: ps } = await supabase
+        .from('uce_paper_sets')
+        .select('id, paper_name, category, available_from, available_to, semester')
+        .eq('course_id', ef.course_id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+      const matched = ((ps ?? []) as Array<PaperSetOption & { semester: number | null }>)
+        .filter(p => p.semester == null || p.semester === ef.semester)
+      setPaperSets(matched as PaperSetOption[])
+      // Pre-select the most recent active paper set if any
+      if (matched.length > 0) setPaperSetId(matched[0].id)
+
       setLoading(false)
     })()
   }, [formId])
@@ -125,6 +151,9 @@ export default function AdminAdmitCardFormPage() {
       issue_date: new Date().toISOString().slice(0, 10),
       is_active: true,
       student_visible: true,
+      visible_from: visibleFrom ? new Date(visibleFrom).toISOString() : null,
+      visible_until: visibleUntil ? new Date(visibleUntil).toISOString() : null,
+      paper_set_id: paperSetId || null,
       generated_by: user?.id || null,
     })
     setSaving(false)
@@ -162,7 +191,16 @@ export default function AdminAdmitCardFormPage() {
           <div className="h-20 w-16 bg-gray-100 rounded border flex items-center justify-center text-gray-300 text-xs">No photo</div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900">{examForm.student?.name}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold text-gray-900">{examForm.student?.name}</p>
+            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
+              examForm.form_type === 'carry_forward'
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-emerald-100 text-emerald-700'
+            }`}>
+              {examForm.form_type === 'carry_forward' ? 'Carry-Forward' : 'Regular'}
+            </span>
+          </div>
           <p className="text-xs font-mono text-gray-500">{examForm.student?.registration_no}</p>
           <p className="text-xs text-gray-500 mt-1">
             {examForm.course?.name} · Semester {examForm.semester} · Session {examForm.exam_session}
@@ -200,6 +238,42 @@ export default function AdminAdmitCardFormPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Visibility & Online Paper */}
+      <div className="bg-white rounded-xl border p-4 sm:p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+          <Calendar size={14} /> Visibility & Online Paper
+        </h2>
+        <p className="text-xs text-gray-500">
+          Control when the admit card (and the linked online paper) becomes visible to the student. Leave empty to make it visible immediately and indefinitely.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField label="Visible From (date & time)">
+            <input type="datetime-local" value={visibleFrom} onChange={e => setVisibleFrom(e.target.value)} className={inputClass} />
+          </FormField>
+          <FormField label="Visible Until (date & time)">
+            <input type="datetime-local" value={visibleUntil} onChange={e => setVisibleUntil(e.target.value)} className={inputClass} />
+          </FormField>
+        </div>
+        <FormField
+          label="Linked Paper Set (optional)"
+          hint="When the admit card is visible, this paper set will become available for the student to attempt online"
+        >
+          <select value={paperSetId} onChange={e => setPaperSetId(e.target.value)} className={selectClass}>
+            <option value="">— No online paper —</option>
+            {paperSets.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.paper_name}{p.category ? ` · ${p.category}` : ''}
+              </option>
+            ))}
+          </select>
+        </FormField>
+        {paperSets.length === 0 && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+            No active paper sets found for this course/semester. Create one under Online Exams → Paper Sets if needed.
+          </p>
+        )}
       </div>
 
       {/* Exam Center */}

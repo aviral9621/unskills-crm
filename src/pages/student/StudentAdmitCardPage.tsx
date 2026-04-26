@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Download, Loader2, IdCard, MapPin, Clock } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Download, Loader2, IdCard, MapPin, Clock, FileText, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { useStudentRecord } from './useStudent'
@@ -23,7 +24,18 @@ interface AdmitCardRecord {
   schedule: AdmitCardSchedule[] | null
   is_active: boolean | null
   student_visible: boolean | null
+  visible_from: string | null
+  visible_until: string | null
+  paper_set_id: string | null
   created_at: string
+  paper_set?: { id: string; paper_name: string; available_from: string | null; available_to: string | null } | null
+}
+
+function paperIsActiveNow(p: { available_from: string | null; available_to: string | null }): boolean {
+  const now = Date.now()
+  if (p.available_from && new Date(p.available_from).getTime() > now) return false
+  if (p.available_to && new Date(p.available_to).getTime() < now) return false
+  return true
 }
 
 export default function StudentAdmitCardPage() {
@@ -38,11 +50,18 @@ export default function StudentAdmitCardPage() {
       setLoading(true)
       const { data } = await supabase
         .from('uce_admit_cards')
-        .select('id, student_id, course_id, semester, exam_session, exam_center_name, exam_center_code, exam_center_address, schedule, is_active, student_visible, created_at')
+        .select('id, student_id, course_id, semester, exam_session, exam_center_name, exam_center_code, exam_center_address, schedule, is_active, student_visible, visible_from, visible_until, paper_set_id, created_at, paper_set:uce_paper_sets(id, paper_name, available_from, available_to)')
         .eq('student_id', rec.id)
         .order('created_at', { ascending: false })
-      const visible = (data ?? []).filter(c => (c.is_active ?? true) && (c.student_visible ?? true))
-      setCards(visible as AdmitCardRecord[])
+      const now = Date.now()
+      const visible = (data ?? []).filter(c => {
+        if (!(c.is_active ?? true)) return false
+        if (!(c.student_visible ?? true)) return false
+        if (c.visible_from && new Date(c.visible_from).getTime() > now) return false
+        if (c.visible_until && new Date(c.visible_until).getTime() < now) return false
+        return true
+      })
+      setCards(visible as unknown as AdmitCardRecord[])
       setLoading(false)
     })()
   }, [rec])
@@ -149,6 +168,23 @@ export default function StudentAdmitCardPage() {
                       <span className="text-gray-500 inline-flex items-center gap-1"><Clock size={11} /> {s.exam_time}{s.end_time ? ` – ${s.end_time}` : ''}</span>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {c.paper_set && paperIsActiveNow(c.paper_set) && (
+                <Link
+                  to={`/student/tests/${c.paper_set.id}`}
+                  className="mt-3 flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm hover:bg-emerald-100"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <FileText size={14} /> Online Paper available: <strong>{c.paper_set.paper_name}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-1 font-semibold">Start Paper <ArrowRight size={14} /></span>
+                </Link>
+              )}
+              {c.paper_set && !paperIsActiveNow(c.paper_set) && (
+                <div className="mt-3 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-xs text-gray-600">
+                  Online paper <strong>{c.paper_set.paper_name}</strong> will open at the scheduled time.
                 </div>
               )}
             </div>

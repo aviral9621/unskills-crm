@@ -13,6 +13,8 @@ interface Row {
   semester: number | null
   exam_session: string | null
   status: string
+  form_type: string | null
+  source: string | null
   created_at: string
   details: Record<string, unknown> | null
   subject_ids: string[] | null
@@ -38,7 +40,7 @@ export default function AdminExamFormsPage() {
 
   async function load() {
     let q = supabase.from('uce_exam_forms')
-      .select('id,semester,exam_session,status,created_at,details,subject_ids,review_note,student:uce_students(id,name,registration_no,photo_url),course:uce_courses(name),branch:uce_branches(name,code)')
+      .select('id,semester,exam_session,status,form_type,source,created_at,details,subject_ids,review_note,student:uce_students(id,name,registration_no,photo_url),course:uce_courses(name),branch:uce_branches(name,code)')
       .eq('status', tab).order('created_at', { ascending: false })
     if (isBranch && branchId) q = q.eq('branch_id', branchId)
     const { data } = await q
@@ -99,6 +101,7 @@ export default function AdminExamFormsPage() {
             <tr>
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Student</th>
+              <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Branch</th>
               <th className="px-4 py-3">Course</th>
               <th className="px-4 py-3">Session</th>
@@ -110,7 +113,17 @@ export default function AdminExamFormsPage() {
             {rows.map(r => (
               <tr key={r.id}>
                 <td className="px-4 py-3">{formatDateDDMMYYYY(r.created_at)}</td>
-                <td className="px-4 py-3">{r.student?.name} <span className="text-xs font-mono text-gray-400">{r.student?.registration_no}</span></td>
+                <td className="px-4 py-3">
+                  {r.student?.name} <span className="text-xs font-mono text-gray-400">{r.student?.registration_no}</span>
+                  {r.source === 'website' && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700 font-semibold uppercase">web</span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                    r.form_type === 'carry_forward' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'
+                  }`}>{r.form_type === 'carry_forward' ? 'CF' : 'Regular'}</span>
+                </td>
                 <td className="px-4 py-3">{r.branch?.name}</td>
                 <td className="px-4 py-3">{r.course?.name}</td>
                 <td className="px-4 py-3">{r.exam_session}</td>
@@ -129,7 +142,7 @@ export default function AdminExamFormsPage() {
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Nothing here.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Nothing here.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -154,7 +167,13 @@ export default function AdminExamFormsPage() {
                   <div className="h-20 w-16 bg-gray-100 rounded border flex items-center justify-center text-gray-300 text-xs">No photo</div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold">{viewing.student?.name}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold">{viewing.student?.name}</p>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      viewing.form_type === 'carry_forward' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'
+                    }`}>{viewing.form_type === 'carry_forward' ? 'Carry-Forward' : 'Regular'}</span>
+                    {viewing.source === 'website' && <span className="px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700 font-semibold uppercase">Website</span>}
+                  </div>
                   <p className="text-xs font-mono text-gray-500">{viewing.student?.registration_no}</p>
                   <p className="text-xs text-gray-500 mt-1">{viewing.course?.name} · Sem {viewing.semester} · Session {viewing.exam_session}</p>
                   <p className="text-xs text-gray-500">{viewing.branch?.name}</p>
