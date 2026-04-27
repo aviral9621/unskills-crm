@@ -48,6 +48,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/admin/website/blog/categories': 'Blog Categories',
   '/admin/website/blogs': 'Blogs',
   '/admin/referrals': 'Referrals',
+  '/admin/rewards': 'Monthly Rewards',
   '/admin/settings': 'Settings',
   '/admin/profile': 'My Profile',
 }

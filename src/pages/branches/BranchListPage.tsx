@@ -4,7 +4,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import {
   Building2, Plus, Search, MoreVertical,
   Pencil, Wallet, PlusCircle, Power, X, Trash2, Loader2, AlertTriangle,
-  MapPin, Phone, ChevronRight, FileText, Download, Crown, Star,
+  MapPin, Phone, ChevronRight, FileText, Download, Crown, Star, Coins,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -440,6 +440,8 @@ export default function BranchListPage() {
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"><Wallet size={16} /> View Wallet</button>
               <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet?add=true`) }}
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"><PlusCircle size={16} /> Add Balance</button>
+              <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/points`) }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"><Coins size={16} /> Reward Points</button>
               <div className="border-t border-gray-100 my-1" />
               <button onClick={() => { setMenuOpen(null); handleViewAtc(menuBranch) }} disabled={atcBusyId === menuBranch.id}
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60">
@@ -477,6 +479,8 @@ export default function BranchListPage() {
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Wallet size={14} /> View Wallet</button>
             <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/wallet?add=true`) }}
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><PlusCircle size={14} /> Add Balance</button>
+            <button onClick={() => { setMenuOpen(null); navigate(`/admin/branches/${menuBranch.id}/points`) }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50"><Coins size={14} /> Reward Points</button>
             <div className="border-t border-gray-100 my-1" />
             <button onClick={() => { setMenuOpen(null); handleViewAtc(menuBranch) }} disabled={atcBusyId === menuBranch.id}
               className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60">

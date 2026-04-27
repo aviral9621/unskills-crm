@@ -4,6 +4,7 @@ import { Wallet, Users, IndianRupee, AlertTriangle, Briefcase, ScrollText, Clipb
 import { supabase } from '../../lib/supabase'
 import { useBranch, useBranchId } from '../../lib/franchise'
 import { formatINR } from '../../lib/utils'
+import RewardProgressCard from '../../components/rewards/RewardProgressCard'
 
 interface Stats {
   students: number
@@ -92,6 +93,8 @@ export default function FDashboardPage() {
         <StatCard icon={IndianRupee} label="Collected (this month)" value={formatINR(stats?.collectedThisMonth ?? 0)} color="bg-green-50 text-green-700" />
         <StatCard icon={AlertTriangle} label="Pending Fees" value={formatINR(stats?.pendingFees ?? 0)} color="bg-amber-50 text-amber-700" />
       </div>
+
+      {branchId && <RewardProgressCard branchId={branchId} />}
 
       {(stats?.pendingExamForms ?? 0) > 0 && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 sm:p-4 flex items-start gap-3 flex-wrap sm:flex-nowrap">

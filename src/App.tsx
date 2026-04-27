@@ -83,6 +83,8 @@ const AdminPromotionsPage = lazy(() => import('./pages/admin/AdminPromotionsPage
 const AdminTicketsPage = lazy(() => import('./pages/admin/AdminTicketsPage'))
 const AdminExamFormsPage = lazy(() => import('./pages/admin/AdminExamFormsPage'))
 const AdminReferralsPage = lazy(() => import('./pages/admin/AdminReferralsPage'))
+const AdminRewardsPage = lazy(() => import('./pages/admin/AdminRewardsPage'))
+const BranchPointWalletPage = lazy(() => import('./pages/branches/BranchPointWalletPage'))
 const AdminFeesOverviewPage = lazy(() => import('./pages/admin/fees/AdminFeesOverviewPage'))
 const AdminStudentFeePlanPage = lazy(() => import('./pages/admin/fees/AdminStudentFeePlanPage'))
 const AdminExamFormWindowsPage = lazy(() => import('./pages/admin/AdminExamFormWindowsPage'))
@@ -103,6 +105,7 @@ const FFeeCollectionPage = lazy(() => import('./pages/franchise/fees/FFeeCollect
 const FFeeHistoryPage = lazy(() => import('./pages/franchise/fees/FFeeHistoryPage'))
 const FWalletPage = lazy(() => import('./pages/franchise/wallet/FWalletPage'))
 const FWalletRequestPage = lazy(() => import('./pages/franchise/wallet/FWalletRequestPage'))
+const FPointWalletPage = lazy(() => import('./pages/franchise/wallet/FPointWalletPage'))
 const FMaterialPage = lazy(() => import('./pages/franchise/material/FMaterialPage'))
 const FExamFormPage = lazy(() => import('./pages/franchise/exams/FExamFormPage'))
 const FResultsPage = lazy(() => import('./pages/franchise/results/FResultsPage'))
@@ -247,6 +250,8 @@ function AppRoutes() {
           <Route path="website/blogs/:id/edit" element={<BlogFormPage />} />
 
           <Route path="referrals" element={<AdminReferralsPage />} />
+          <Route path="rewards" element={<AdminRewardsPage />} />
+          <Route path="branches/:id/points" element={<BranchPointWalletPage />} />
           <Route path="promotions" element={<AdminPromotionsPage />} />
           <Route path="jobs" element={<AdminJobsPage />} />
           <Route path="jobs/:jobId/applications" element={<AdminJobApplicationsPage />} />
@@ -277,6 +282,7 @@ function AppRoutes() {
 
           <Route path="wallet" element={<FWalletPage />} />
           <Route path="wallet/request" element={<FWalletRequestPage />} />
+          <Route path="points" element={<FPointWalletPage />} />
 
           <Route path="study-material" element={<FMaterialPage />} />
           <Route path="exam-forms" element={<AdminExamFormsPage />} />

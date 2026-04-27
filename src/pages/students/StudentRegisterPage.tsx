@@ -4,10 +4,11 @@ import { isStudentLocked } from '../../lib/studentLock'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle, Package } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, Check, User, Phone, MapPin, BookOpen, AlertTriangle, Package, Coins } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { uploadPublicFile, deletePublicFile, isBlobUrl, STORAGE_BUCKETS } from '../../lib/uploads'
 import { useAuth } from '../../contexts/AuthContext'
+import { fetchPointBalance, consumePoint } from '../../lib/rewards'
 import { INDIAN_STATES, formatINR, cn } from '../../lib/utils'
 import FormField, { inputClass } from '../../components/FormField'
 import FileUpload from '../../components/FileUpload'
@@ -101,6 +102,10 @@ export default function StudentRegisterPage() {
   const [walletError, setWalletError] = useState(false)
   const [payLaterLoading, setPayLaterLoading] = useState(false)
 
+  // Certificate-point wallet
+  const [pointBalance, setPointBalance] = useState<number>(0)
+  const [usePoint, setUsePoint] = useState<boolean>(false)
+
   // Referral code: lookup state — 'idle' | 'checking' | 'valid' | 'invalid'
   const [refState, setRefState] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
   const [refReferrerName, setRefReferrerName] = useState<string>('')
@@ -167,6 +172,21 @@ export default function StudentRegisterPage() {
     const b = branchesList.find(x => x.id === selectedBranchId) || null
     setBranch(b)
   }, [selectedBranchId, branchesList])
+
+  // Load certificate-point balance for the selected branch (franchise side only)
+  useEffect(() => {
+    if (!selectedBranchId || isSuperAdmin) { setPointBalance(0); return }
+    let cancelled = false
+    fetchPointBalance(selectedBranchId)
+      .then(b => { if (!cancelled) setPointBalance(b.balance ?? 0) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedBranchId, isSuperAdmin])
+
+  // If user toggled "use point" and then switched to a branch with no points, reset.
+  useEffect(() => {
+    if (usePoint && pointBalance < 1) setUsePoint(false)
+  }, [pointBalance, usePoint])
 
   async function generateRegNo() {
     try {
@@ -346,7 +366,19 @@ export default function StudentRegisterPage() {
         if (error) { if (error.message?.includes('duplicate')) toast.error('Registration number already exists'); else throw error; return }
 
         if (branch && totalDeduction > 0 && newStudent && !isSuperAdmin) {
-          if (payLater) {
+          if (usePoint && pointBalance >= 1) {
+            // Burn 1 certificate point in lieu of rupee debit.
+            try {
+              await consumePoint(branch.id, newStudent.id,
+                `${packageType === 'certificate_kit' ? 'Certificate + Kit' : 'Certificate'} fee - ${regNo} (paid with 1 point)`)
+              setPointBalance(p => Math.max(0, p - 1))
+              toast.success('1 Certificate Point used — wallet not charged.')
+            } catch (e) {
+              // Point burn failed — don't break registration; surface a warning.
+              console.warn('consumePoint failed', e)
+              toast.warning('Could not consume point — please contact admin to reconcile.')
+            }
+          } else if (payLater) {
             // Record pending payment — deduction happens within 24 hours
             const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
             await supabase.from('uce_pending_wallet_payments').insert({
@@ -442,7 +474,7 @@ export default function StudentRegisterPage() {
       return
     }
 
-    if (!isEdit && branch && totalDeduction > 0 && !isSuperAdmin) {
+    if (!isEdit && branch && totalDeduction > 0 && !isSuperAdmin && !usePoint) {
       if ((branch.wallet_balance || 0) < totalDeduction) {
         setWalletError(true); return
       }
@@ -767,16 +799,49 @@ export default function StudentRegisterPage() {
               </div>
 
               {!isEdit && totalDeduction > 0 && !isSuperAdmin && (
-                <div className={cn('rounded-lg p-3 border', (branch?.wallet_balance || 0) >= totalDeduction ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200')}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-600">{packageType === 'certificate_kit' ? 'Certificate + Kit Fee:' : 'Certification Fee:'}</span>
-                    <span className="text-sm font-bold text-gray-900">{formatINR(totalDeduction)}</span>
+                <>
+                  <div className={cn('rounded-lg p-3 border', usePoint ? 'bg-purple-50 border-purple-200' : (branch?.wallet_balance || 0) >= totalDeduction ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200')}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-600">{packageType === 'certificate_kit' ? 'Certificate + Kit Fee:' : 'Certification Fee:'}</span>
+                      <span className={cn('text-sm font-bold', usePoint ? 'text-purple-700 line-through' : 'text-gray-900')}>{formatINR(totalDeduction)}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xs text-gray-600">Branch Wallet:</span>
+                      <span className={cn('text-sm font-bold', usePoint ? 'text-gray-500' : (branch?.wallet_balance || 0) >= totalDeduction ? 'text-green-600' : 'text-red-600')}>{formatINR(branch?.wallet_balance || 0)}</span>
+                    </div>
+                    {usePoint && (
+                      <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-purple-200">
+                        <span className="text-xs text-purple-700 font-semibold">Charge to wallet:</span>
+                        <span className="text-sm font-bold text-purple-700">₹0 + 1 Point</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-xs text-gray-600">Branch Wallet:</span>
-                    <span className={cn('text-sm font-bold', (branch?.wallet_balance || 0) >= totalDeduction ? 'text-green-600' : 'text-red-600')}>{formatINR(branch?.wallet_balance || 0)}</span>
-                  </div>
-                </div>
+                  <label className={cn(
+                    'flex items-start gap-2.5 rounded-lg border p-3 cursor-pointer transition-colors',
+                    pointBalance < 1 ? 'bg-gray-50 border-gray-200 cursor-not-allowed opacity-60' :
+                    usePoint ? 'bg-purple-50 border-purple-300' : 'bg-white border-gray-200 hover:bg-purple-50/50 hover:border-purple-200'
+                  )}>
+                    <input
+                      type="checkbox"
+                      checked={usePoint}
+                      disabled={pointBalance < 1}
+                      onChange={e => setUsePoint(e.target.checked)}
+                      className="mt-0.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <Coins size={14} className="text-purple-600" />
+                        <span className="text-sm font-semibold text-gray-900">Use 1 Certificate Point</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold">{pointBalance} available</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {pointBalance >= 1
+                          ? `Skip the ₹${totalDeduction} wallet charge — burn 1 point instead.`
+                          : 'Earn points by hitting 10/20/30 admissions in a month.'}
+                      </p>
+                    </div>
+                  </label>
+                </>
               )}
               {!isEdit && totalDeduction > 0 && isSuperAdmin && (
                 <div className="rounded-lg p-3 border bg-blue-50 border-blue-200 text-xs text-blue-800">

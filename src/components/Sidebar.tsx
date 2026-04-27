@@ -7,7 +7,7 @@ import {
   Briefcase, IndianRupee,
   BarChart3, MonitorPlay, Users2,
   Settings, UserCircle, ChevronDown, LogOut, X,
-  Megaphone, Bell, LifeBuoy,
+  Megaphone, Bell, LifeBuoy, Trophy,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -128,6 +128,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
         ],
       },
       { label: 'Referrals', icon: Users2, path: '/admin/referrals', permission: 'referral' },
+      { label: 'Monthly Rewards', icon: Trophy, path: '/admin/rewards' },
     ],
   },
   {
