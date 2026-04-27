@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Globe, Upload, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { INDIAN_STATES, formatINR } from '../../lib/utils'
+import { uploadPublicFile, STORAGE_BUCKETS } from '../../lib/uploads'
 import FormField, { inputClass, selectClass } from '../../components/FormField'
 import type { Department, Branch } from '../../types'
 
@@ -39,6 +40,9 @@ const schema = z.object({
   bank_name: z.string().optional().or(z.literal('')),
   account_number: z.string().optional().or(z.literal('')),
   ifsc_code: z.string().optional().or(z.literal('')),
+  show_on_website: z.boolean().optional(),
+  website_qualifications: z.string().optional().or(z.literal('')),
+  website_experience: z.string().optional().or(z.literal('')),
 })
 
 type FormData = z.infer<typeof schema>
@@ -54,6 +58,10 @@ export default function EmployeeFormPage() {
   const [saving, setSaving] = useState(false)
   const [departments, setDepartments] = useState<Department[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string>('')
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
     defaultValues: {
@@ -92,11 +100,13 @@ export default function EmployeeFormPage() {
         const { data, error } = await supabase.from('uce_employees').select('*').eq('id', id).single()
         if (error) throw error
         if (data) {
-          const fields: (keyof FormData)[] = ['branch_id', 'name', 'father_name', 'dob', 'gender', 'phone', 'alt_phone', 'email', 'address', 'district', 'state', 'pincode', 'department_id', 'designation', 'joining_date', 'base_salary', 'da', 'hra', 'ta', 'pf', 'esi', 'other_allowance', 'other_deduction', 'bank_name', 'account_number', 'ifsc_code']
+          const fields: (keyof FormData)[] = ['branch_id', 'name', 'father_name', 'dob', 'gender', 'phone', 'alt_phone', 'email', 'address', 'district', 'state', 'pincode', 'department_id', 'designation', 'joining_date', 'base_salary', 'da', 'hra', 'ta', 'pf', 'esi', 'other_allowance', 'other_deduction', 'bank_name', 'account_number', 'ifsc_code', 'show_on_website', 'website_qualifications', 'website_experience']
           fields.forEach(f => {
             const v = (data as Record<string, unknown>)[f]
-            if (v !== null && v !== undefined) setValue(f, v as string | number)
+            if (v !== null && v !== undefined) setValue(f, v as string | number | boolean)
           })
+          const url = (data as Record<string, unknown>).photo_url as string | null
+          if (url) { setPhotoUrl(url); setPhotoPreview(url) }
         }
       }
     } catch { toast.error('Failed to load data') }
@@ -112,6 +122,14 @@ export default function EmployeeFormPage() {
   async function onSubmit(data: FormData) {
     setSaving(true)
     try {
+      let finalPhotoUrl = photoUrl
+      if (photoFile) {
+        const ext = photoFile.name.split('.').pop() || 'jpg'
+        const path = `staff/${Date.now()}.${ext}`
+        finalPhotoUrl = await uploadPublicFile(STORAGE_BUCKETS.employees, path, photoFile)
+        setPhotoUrl(finalPhotoUrl)
+      }
+
       const payload = {
         ...data,
         department_id: data.department_id || null,
@@ -129,6 +147,10 @@ export default function EmployeeFormPage() {
         bank_name: data.bank_name || null,
         account_number: data.account_number || null,
         ifsc_code: data.ifsc_code || null,
+        show_on_website: data.show_on_website ?? false,
+        website_qualifications: data.website_qualifications || null,
+        website_experience: data.website_experience || null,
+        photo_url: finalPhotoUrl || null,
         updated_at: new Date().toISOString(),
       }
 
@@ -338,6 +360,83 @@ export default function EmployeeFormPage() {
             <FormField label="IFSC Code" error={errors.ifsc_code?.message}>
               <input {...register('ifsc_code')} placeholder="e.g. SBIN0001234" className={inputClass} />
             </FormField>
+          </div>
+        </div>
+
+        {/* Section 6: Website Visibility */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Globe size={16} className="text-red-600" />
+            <h2 className="text-base font-semibold text-gray-900">Website Visibility</h2>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">Control whether this staff member appears in the Faculty section on the public website.</p>
+
+          {/* Show on website toggle */}
+          <label className="flex items-center gap-3 cursor-pointer mb-5">
+            <div className="relative">
+              <input
+                type="checkbox"
+                {...register('show_on_website')}
+                className="sr-only peer"
+              />
+              <div className="w-10 h-6 rounded-full bg-gray-200 peer-checked:bg-red-600 transition-colors" />
+              <div className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
+            </div>
+            <span className="text-sm font-medium text-gray-700">Show on Website</span>
+          </label>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField label="Qualifications (for website)" hint="e.g. MCA, BCA, PGDCA, Tally Expert">
+              <input {...register('website_qualifications')} placeholder="e.g. MCA, BCA, O Level" className={inputClass} />
+            </FormField>
+            <FormField label="Experience (for website)" hint="e.g. 10+ Years">
+              <input {...register('website_experience')} placeholder="e.g. 7+ Years" className={inputClass} />
+            </FormField>
+          </div>
+
+          {/* Photo upload */}
+          <div className="mt-4">
+            <p className="text-xs font-semibold text-gray-700 mb-2">Photo (for website & ID card)</p>
+            <div className="flex items-center gap-4">
+              {photoPreview ? (
+                <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 flex-shrink-0">
+                  <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => { setPhotoFile(null); setPhotoPreview(''); setPhotoUrl(null) }}
+                    className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 flex-shrink-0">
+                  <Upload size={20} />
+                </div>
+              )}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="text-xs font-medium text-red-600 hover:text-red-700 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50"
+                >
+                  {photoPreview ? 'Change Photo' : 'Upload Photo'}
+                </button>
+                <p className="text-[11px] text-gray-400 mt-1">JPG or PNG, max 2MB</p>
+              </div>
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0]
+                if (!f) return
+                setPhotoFile(f)
+                setPhotoPreview(URL.createObjectURL(f))
+              }}
+            />
           </div>
         </div>
 

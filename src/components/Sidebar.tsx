@@ -121,6 +121,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
           { label: 'Videos', path: '/admin/website/videos', permission: 'website.video' },
           { label: 'Newsletters', path: '/admin/website/newsletters', permission: 'website.newsletter' },
           { label: 'Download Center', path: '/admin/website/downloads', permission: 'website.downloads' },
+          { label: 'Placements', path: '/admin/website/placements', permission: 'website.placements' },
         ],
       },
       { label: 'Referrals', icon: Users2, path: '/admin/referrals', permission: 'referral' },

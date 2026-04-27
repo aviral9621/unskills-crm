@@ -72,6 +72,7 @@ const BannerManagePage = lazy(() => import('./pages/website/BannerManagePage'))
 const VideoManagePage = lazy(() => import('./pages/website/VideoManagePage'))
 const NewsletterPage = lazy(() => import('./pages/website/NewsletterPage'))
 const DownloadCenterPage = lazy(() => import('./pages/website/DownloadCenterPage'))
+const PlacementsPage = lazy(() => import('./pages/website/PlacementsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const AdminPromotionsPage = lazy(() => import('./pages/admin/AdminPromotionsPage'))
@@ -234,6 +235,7 @@ function AppRoutes() {
           <Route path="website/videos" element={<VideoManagePage />} />
           <Route path="website/newsletters" element={<NewsletterPage />} />
           <Route path="website/downloads" element={<DownloadCenterPage />} />
+          <Route path="website/placements" element={<PlacementsPage />} />
 
           <Route path="referrals" element={<AdminReferralsPage />} />
           <Route path="promotions" element={<AdminPromotionsPage />} />
