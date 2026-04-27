@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Download, Upload, Trash2, Eye, EyeOff, Loader2, Plus, X, FileText, BookOpen,
+  Download, Upload, Trash2, Loader2, Plus, X, FileText, BookOpen,
   ClipboardList, FileCheck, GripVertical, Settings, Pencil, Check, FolderOpen,
   Archive, Star, Tag, Globe, Award, Package, ChevronUp, ChevronDown,
 } from 'lucide-react'
@@ -170,7 +170,7 @@ export default function DownloadCenterPage() {
       const { error } = await supabase.from('uce_download_center').insert({
         title: formTitle.trim(), description: formDesc.trim() || null,
         category: formCatSlug, file_url: fileUrl, file_name: formFile.name,
-        file_size: formFile.size, is_published: false,
+        file_size: formFile.size, is_published: true,
         sort_order: items.length, created_by: user?.id || null,
       })
       if (error) { await deletePublicFile(fileUrl); throw error }
@@ -533,20 +533,35 @@ export default function DownloadCenterPage() {
                       <span className="text-[11px] text-gray-400">{formatBytes(item.file_size)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold',
-                      item.is_published ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')}>
-                      {item.is_published ? 'Published' : 'Draft'}
-                    </span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {/* Published toggle */}
+                    <button
+                      onClick={() => togglePublish(item)}
+                      disabled={toggling === item.id}
+                      className="flex items-center gap-1.5 disabled:opacity-50"
+                      title={item.is_published ? 'Click to unpublish' : 'Click to publish'}
+                    >
+                      {toggling === item.id ? (
+                        <Loader2 size={14} className="animate-spin text-gray-400" />
+                      ) : (
+                        <span className={cn(
+                          'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                          item.is_published ? 'bg-green-500' : 'bg-gray-300'
+                        )}>
+                          <span className={cn(
+                            'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform',
+                            item.is_published ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                          )} />
+                        </span>
+                      )}
+                      <span className={cn('text-[11px] font-semibold', item.is_published ? 'text-green-700' : 'text-gray-400')}>
+                        {item.is_published ? 'Live' : 'Off'}
+                      </span>
+                    </button>
                     <a href={item.file_url} target="_blank" rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="Download">
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="View file">
                       <Download size={15} />
                     </a>
-                    <button onClick={() => togglePublish(item)} disabled={toggling === item.id}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors disabled:opacity-40"
-                      title={item.is_published ? 'Unpublish' : 'Publish'}>
-                      {toggling === item.id ? <Loader2 size={15} className="animate-spin" /> : item.is_published ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
                     <button onClick={() => setDeleteDocId(item.id)}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors" title="Delete">
                       <Trash2 size={15} />
