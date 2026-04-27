@@ -74,6 +74,9 @@ const VideoManagePage = lazy(() => import('./pages/website/VideoManagePage'))
 const NewsletterPage = lazy(() => import('./pages/website/NewsletterPage'))
 const DownloadCenterPage = lazy(() => import('./pages/website/DownloadCenterPage'))
 const PlacementsPage = lazy(() => import('./pages/website/PlacementsPage'))
+const BlogCategoriesPage = lazy(() => import('./pages/website/blog/BlogCategoriesPage'))
+const BlogListPage = lazy(() => import('./pages/website/blog/BlogListPage'))
+const BlogFormPage = lazy(() => import('./pages/website/blog/BlogFormPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const AdminPromotionsPage = lazy(() => import('./pages/admin/AdminPromotionsPage'))
@@ -238,6 +241,10 @@ function AppRoutes() {
           <Route path="website/newsletters" element={<NewsletterPage />} />
           <Route path="website/downloads" element={<DownloadCenterPage />} />
           <Route path="website/placements" element={<PlacementsPage />} />
+          <Route path="website/blog/categories" element={<BlogCategoriesPage />} />
+          <Route path="website/blogs" element={<BlogListPage />} />
+          <Route path="website/blogs/new" element={<BlogFormPage />} />
+          <Route path="website/blogs/:id/edit" element={<BlogFormPage />} />
 
           <Route path="referrals" element={<AdminReferralsPage />} />
           <Route path="promotions" element={<AdminPromotionsPage />} />

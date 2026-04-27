@@ -123,6 +123,8 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
           { label: 'Newsletters', path: '/admin/website/newsletters', permission: 'website.newsletter' },
           { label: 'Download Center', path: '/admin/website/downloads', permission: 'website.downloads' },
           { label: 'Placements', path: '/admin/website/placements', permission: 'website.placements' },
+          { label: 'Blog Categories', path: '/admin/website/blog/categories', permission: 'website.blog' },
+          { label: 'Blogs', path: '/admin/website/blogs', permission: 'website.blog' },
         ],
       },
       { label: 'Referrals', icon: Users2, path: '/admin/referrals', permission: 'referral' },
