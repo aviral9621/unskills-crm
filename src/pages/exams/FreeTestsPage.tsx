@@ -27,7 +27,7 @@ interface Attempt {
   is_submitted: boolean
   started_at: string
   submitted_at: string | null
-  paper_set?: { paper_name: string } | null
+  paper_set?: { paper_name: string }[] | null
 }
 
 export default function FreeTestsPage() {
@@ -261,7 +261,7 @@ export default function FreeTestsPage() {
                         {a.pursuing && <p className="text-xs text-gray-500">{a.pursuing}</p>}
                       </td>
                       <td className="px-5 py-3.5 text-gray-600 hidden sm:table-cell">{a.phone}</td>
-                      <td className="px-5 py-3.5 text-gray-600 hidden lg:table-cell">{a.paper_set?.paper_name || '—'}</td>
+                      <td className="px-5 py-3.5 text-gray-600 hidden lg:table-cell">{a.paper_set?.[0]?.paper_name || '—'}</td>
                       <td className="px-5 py-3.5 text-center">
                         {a.is_submitted ? (
                           <span className="font-semibold text-gray-900">{a.score}/{a.total_marks}</span>

@@ -243,6 +243,7 @@ export default function PlacementsPage() {
       {/* Add/Edit Modal */}
       {showModal && (
         <Modal
+          open={showModal}
           title={editTarget ? 'Edit Placed Student' : 'Add Placed Student'}
           onClose={() => setShowModal(false)}
         >
@@ -318,13 +319,13 @@ export default function PlacementsPage() {
 
       <ConfirmDialog
         open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
         title="Delete Placed Student"
-        description={`Remove "${deleteTarget?.name}" from the placements list? This cannot be undone.`}
-        confirmLabel="Delete"
-        destructive
+        message={`Remove "${deleteTarget?.name}" from the placements list? This cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
         loading={deleting}
         onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   )
