@@ -68,6 +68,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
           { label: 'Form Windows', path: '/admin/exams/form-windows' },
           { label: 'Exam Forms', path: '/admin/exams/forms' },
           { label: 'Results', path: '/admin/exams/results' },
+          { label: 'Free Tests', path: '/admin/exams/free-tests', permission: 'exam' },
         ],
       },
       { label: 'Marksheets', icon: ScrollText, path: '/admin/marksheets', permission: 'marksheet' },
