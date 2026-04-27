@@ -93,7 +93,7 @@ DECLARE
   v_year     int       := extract(year  FROM v_now_ist)::int;
   v_month    int       := extract(month FROM v_now_ist)::int;
   v_reward   uce_branch_monthly_rewards%ROWTYPE;
-  v_inserted boolean;
+  v_row_count bigint;
   v_new_level text;
   v_new_points_total int;
   v_delta int;
@@ -110,8 +110,8 @@ BEGIN
   VALUES (p_branch_id, p_student_id, v_year, v_month)
   ON CONFLICT (branch_id, student_id) DO NOTHING;
 
-  GET DIAGNOSTICS v_inserted = ROW_COUNT;
-  IF v_inserted = 0 THEN
+  GET DIAGNOSTICS v_row_count = ROW_COUNT;
+  IF v_row_count = 0 THEN
     SELECT * INTO v_reward FROM public.uce_branch_monthly_rewards
       WHERE branch_id = p_branch_id AND year = v_year AND month = v_month;
     RETURN jsonb_build_object(
@@ -211,10 +211,21 @@ SET search_path = public
 AS $$
 DECLARE
   v_balance int;
-  v_uid     uuid;
+  v_uid     uuid := auth.uid();
+  v_role    text;
+  v_caller_branch uuid;
 BEGIN
   IF p_branch_id IS NULL THEN
     RAISE EXCEPTION 'branch_id required';
+  END IF;
+
+  -- Authorisation: caller must be super-admin OR belong to this branch.
+  v_role := uce_get_user_role(v_uid);
+  IF v_role IS DISTINCT FROM 'super_admin' THEN
+    v_caller_branch := uce_get_user_branch(v_uid);
+    IF v_caller_branch IS NULL OR v_caller_branch <> p_branch_id THEN
+      RAISE EXCEPTION 'Not authorised to consume points for this branch';
+    END IF;
   END IF;
 
   SELECT balance INTO v_balance
@@ -224,8 +235,6 @@ BEGIN
   IF COALESCE(v_balance, 0) < 1 THEN
     RAISE EXCEPTION 'Insufficient point balance';
   END IF;
-
-  v_uid := auth.uid();
 
   INSERT INTO public.uce_branch_point_transactions
     (branch_id, points, kind, description, student_id, performed_by)
@@ -284,8 +293,15 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  -- Rewards counting must NEVER block a student registration. Swallow any error
+  -- and log a NOTICE so it shows up in postgres logs for super-admin review.
   IF NEW.branch_id IS NOT NULL THEN
-    PERFORM public.record_franchise_admission(NEW.branch_id, NEW.id);
+    BEGIN
+      PERFORM public.record_franchise_admission(NEW.branch_id, NEW.id);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'record_franchise_admission failed for student % (branch %): %',
+        NEW.id, NEW.branch_id, SQLERRM;
+    END;
   END IF;
   RETURN NEW;
 END;
