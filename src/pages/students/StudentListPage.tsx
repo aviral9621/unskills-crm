@@ -76,12 +76,22 @@ export default function StudentListPage() {
       const { data, error } = await q.order('created_at', { ascending: false })
       if (error) throw error
 
-      // Fetch total paid per student
       const ids = (data ?? []).map((s: { id: string }) => s.id)
+      // Chunk .in() lookups — for large datasets (super_admin sees all 1000+ students)
+      // a single .in() with all UUIDs blows past PostgREST/Vercel URL length limits.
+      const CHUNK = 200
+      const idChunks: string[][] = []
+      for (let i = 0; i < ids.length; i += CHUNK) idChunks.push(ids.slice(i, i + CHUNK))
+
+      // Fetch total paid per student
       let paidMap: Record<string, number> = {}
       if (ids.length > 0) {
-        const { data: payments } = await supabase.from('uce_student_fee_payments').select('student_id, amount').in('student_id', ids)
-        payments?.forEach(p => { paidMap[p.student_id] = (paidMap[p.student_id] || 0) + p.amount })
+        const paymentResults = await Promise.all(idChunks.map(c =>
+          supabase.from('uce_student_fee_payments').select('student_id, amount').in('student_id', c)
+        ))
+        paymentResults.forEach(({ data: payments }) => {
+          payments?.forEach(p => { paidMap[p.student_id] = (paidMap[p.student_id] || 0) + p.amount })
+        })
       }
 
       const lockedSet = await lockedStudentIds(ids)
@@ -89,13 +99,17 @@ export default function StudentListPage() {
       // Certificate lookup — a student is "completed" if they have an active certificate.
       let certMap: Record<string, { certificate_number: string; issue_date: string | null }> = {}
       if (ids.length > 0) {
-        const { data: certs } = await supabase
-          .from('uce_certificates')
-          .select('student_id, certificate_number, issue_date, status')
-          .in('student_id', ids)
-          .eq('status', 'active')
-        certs?.forEach((c: { student_id: string; certificate_number: string; issue_date: string | null }) => {
-          if (!certMap[c.student_id]) certMap[c.student_id] = { certificate_number: c.certificate_number, issue_date: c.issue_date }
+        const certResults = await Promise.all(idChunks.map(c =>
+          supabase
+            .from('uce_certificates')
+            .select('student_id, certificate_number, issue_date, status')
+            .in('student_id', c)
+            .eq('status', 'active')
+        ))
+        certResults.forEach(({ data: certs }) => {
+          certs?.forEach((c: { student_id: string; certificate_number: string; issue_date: string | null }) => {
+            if (!certMap[c.student_id]) certMap[c.student_id] = { certificate_number: c.certificate_number, issue_date: c.issue_date }
+          })
         })
       }
 
@@ -111,7 +125,10 @@ export default function StudentListPage() {
           issue_date: cert?.issue_date ?? null,
         }
       }) as StudentRow[])
-    } catch { toast.error('Failed to load students') }
+    } catch (e) {
+      console.error('[StudentListPage] fetchStudents failed:', e)
+      toast.error('Failed to load students')
+    }
     finally { setLoading(false) }
   }
 
