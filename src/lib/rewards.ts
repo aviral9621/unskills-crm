@@ -10,24 +10,83 @@ export interface TierConfig {
   label: string
 }
 
-export const TIERS: TierConfig[] = [
-  { tier: 'silver',   threshold: 10, totalPoints: 1, gift: null,                                   label: 'Silver Achiever' },
-  { tier: 'gold',     threshold: 20, totalPoints: 3, gift: 'Ring Light',                           label: 'Gold Performer' },
-  { tier: 'platinum', threshold: 30, totalPoints: 5, gift: 'Printer / Smartwatch / Speaker',       label: 'Platinum Champion' },
+// Fallback used only if the settings table is unreachable on first paint.
+// The DB is the source of truth — these values match the seeded defaults.
+export const DEFAULT_TIERS: TierConfig[] = [
+  { tier: 'silver',   threshold: 10, totalPoints: 1, gift: null,                                label: 'Silver Achiever' },
+  { tier: 'gold',     threshold: 20, totalPoints: 3, gift: 'Ring Light',                        label: 'Gold Performer' },
+  { tier: 'platinum', threshold: 30, totalPoints: 5, gift: 'Printer / Smartwatch / Speaker',    label: 'Platinum Champion' },
 ]
 
-export function tierFromCount(count: number): RewardTier | null {
-  if (count >= 30) return 'platinum'
-  if (count >= 20) return 'gold'
-  if (count >= 10) return 'silver'
+// Module-level cache so multiple components don't re-hit the table on every mount.
+// Cleared by mutators (saveRewardTiers) and after a soft TTL.
+let cachedTiers: TierConfig[] | null = null
+let cachedAt = 0
+const CACHE_TTL_MS = 5 * 60 * 1000
+
+interface TierRow {
+  tier: RewardTier
+  threshold: number
+  total_points: number
+  gift: string | null
+  label: string
+  display_order: number
+}
+
+export async function fetchRewardTiers(force = false): Promise<TierConfig[]> {
+  if (!force && cachedTiers && Date.now() - cachedAt < CACHE_TTL_MS) return cachedTiers
+  const { data, error } = await supabase
+    .from('uce_franchise_reward_tiers')
+    .select('tier, threshold, total_points, gift, label, display_order')
+    .order('display_order', { ascending: true })
+  if (error || !data || data.length === 0) {
+    // Fall back to defaults; don't cache the failure so a later request can retry.
+    return DEFAULT_TIERS
+  }
+  cachedTiers = (data as TierRow[]).map(r => ({
+    tier: r.tier,
+    threshold: r.threshold,
+    totalPoints: r.total_points,
+    gift: r.gift,
+    label: r.label,
+  }))
+  cachedAt = Date.now()
+  return cachedTiers
+}
+
+export function clearRewardTiersCache() {
+  cachedTiers = null
+  cachedAt = 0
+}
+
+export async function saveRewardTiers(tiers: TierConfig[]): Promise<void> {
+  const rows = tiers.map((t, i) => ({
+    tier: t.tier,
+    threshold: t.threshold,
+    total_points: t.totalPoints,
+    gift: t.gift,
+    label: t.label,
+    display_order: i + 1,
+    updated_at: new Date().toISOString(),
+  }))
+  const { error } = await supabase.from('uce_franchise_reward_tiers').upsert(rows, { onConflict: 'tier' })
+  if (error) throw error
+  clearRewardTiersCache()
+}
+
+export function tierFromCount(count: number, tiers: TierConfig[] = DEFAULT_TIERS): RewardTier | null {
+  // Walk highest threshold first
+  const sorted = [...tiers].sort((a, b) => b.threshold - a.threshold)
+  for (const t of sorted) if (count >= t.threshold) return t.tier
   return null
 }
 
-export function nextTier(current: RewardTier | null): TierConfig | null {
-  if (current === null) return TIERS[0]
-  if (current === 'silver') return TIERS[1]
-  if (current === 'gold') return TIERS[2]
-  return null
+export function nextTier(current: RewardTier | null, tiers: TierConfig[] = DEFAULT_TIERS): TierConfig | null {
+  const sorted = [...tiers].sort((a, b) => a.threshold - b.threshold)
+  if (current === null) return sorted[0] ?? null
+  const idx = sorted.findIndex(t => t.tier === current)
+  if (idx === -1) return null
+  return sorted[idx + 1] ?? null
 }
 
 export interface PointBalance {

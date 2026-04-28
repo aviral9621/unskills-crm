@@ -4,13 +4,15 @@ import { Sparkles, ArrowRight, Coins, TrendingUp } from 'lucide-react'
 import {
   fetchMonthlyReward,
   fetchPointBalance,
+  fetchRewardTiers,
   getIstYearMonth,
   MONTH_NAMES,
   nextTier,
-  TIERS,
+  DEFAULT_TIERS,
   type MonthlyReward,
   type PointBalance,
   type RewardTier,
+  type TierConfig,
 } from '../../lib/rewards'
 import TierBadge, { TIER_LABEL, TIER_COLOR_BG } from './TierBadge'
 import GiftCard from './GiftCard'
@@ -22,6 +24,7 @@ interface Props {
 export default function RewardProgressCard({ branchId }: Props) {
   const [reward, setReward] = useState<MonthlyReward | null>(null)
   const [balance, setBalance] = useState<PointBalance | null>(null)
+  const [tiers, setTiers] = useState<TierConfig[]>(DEFAULT_TIERS)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -31,13 +34,15 @@ export default function RewardProgressCard({ branchId }: Props) {
       setLoading(true)
       const { year, month } = getIstYearMonth()
       try {
-        const [r, b] = await Promise.all([
+        const [r, b, ts] = await Promise.all([
           fetchMonthlyReward(branchId, year, month),
           fetchPointBalance(branchId),
+          fetchRewardTiers(),
         ])
         if (cancelled) return
         setReward(r)
         setBalance(b)
+        setTiers(ts)
       } catch { /* table may not exist yet */ }
       finally { if (!cancelled) setLoading(false) }
     })()
@@ -46,11 +51,14 @@ export default function RewardProgressCard({ branchId }: Props) {
 
   const count = reward?.admission_count ?? 0
   const level: RewardTier | null = (reward?.level as RewardTier | null) ?? null
-  const next = nextTier(level)
+  const next = nextTier(level, tiers)
   const remaining = next ? Math.max(0, next.threshold - count) : 0
 
-  const goalThreshold = next?.threshold ?? TIERS[TIERS.length - 1].threshold
-  const fromThreshold = level === 'silver' ? 10 : level === 'gold' ? 20 : 0
+  const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold)
+  const topThreshold = sortedTiers[sortedTiers.length - 1]?.threshold ?? 30
+  const goalThreshold = next?.threshold ?? topThreshold
+  const currentTierConfig = level ? tiers.find(t => t.tier === level) : null
+  const fromThreshold = currentTierConfig?.threshold ?? 0
   const span = goalThreshold - fromThreshold || 1
   const within = Math.max(0, count - fromThreshold)
   const pct = next ? Math.min(100, Math.round((within / span) * 100)) : 100
@@ -116,9 +124,9 @@ export default function RewardProgressCard({ branchId }: Props) {
               </div>
               <div className="flex justify-between text-[10px] text-gray-400 mt-1.5 px-0.5">
                 <span>0</span>
-                <span>10 Silver</span>
-                <span>20 Gold</span>
-                <span>30 Platinum</span>
+                {sortedTiers.map(t => (
+                  <span key={t.tier}>{t.threshold} {TIER_LABEL[t.tier]}</span>
+                ))}
               </div>
             </div>
           ) : (

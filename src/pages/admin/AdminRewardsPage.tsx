@@ -111,13 +111,20 @@ export default function AdminRewardsPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">Track admission tiers, points credited, and gifts earned by every branch.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <select value={month} onChange={e => setMonth(Number(e.target.value))} className="px-3 py-2 text-sm rounded-lg border bg-white">
             {MONTH_NAMES.map((n, i) => <option key={i} value={i + 1}>{n}</option>)}
           </select>
           <select value={year} onChange={e => setYear(Number(e.target.value))} className="px-3 py-2 text-sm rounded-lg border bg-white">
             {[year - 2, year - 1, year, year + 1].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
+          <Link
+            to="/admin/rewards/settings"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+            title="Configure reward tiers and gifts"
+          >
+            <Settings2 size={14} /> Tier Settings
+          </Link>
         </div>
       </div>
 

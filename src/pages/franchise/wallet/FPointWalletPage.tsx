@@ -6,14 +6,16 @@ import {
   fetchMonthlyReward,
   fetchPointBalance,
   fetchPointTransactions,
+  fetchRewardTiers,
   getIstYearMonth,
   MONTH_NAMES,
   nextTier,
-  TIERS,
+  DEFAULT_TIERS,
   type MonthlyReward,
   type PointBalance,
   type PointTransaction,
   type RewardTier,
+  type TierConfig,
 } from '../../../lib/rewards'
 import TierBadge, { TIER_LABEL, TIER_COLOR_BG } from '../../../components/rewards/TierBadge'
 import GiftCard from '../../../components/rewards/GiftCard'
@@ -30,6 +32,7 @@ export default function FPointWalletPage() {
   const [balance, setBalance] = useState<PointBalance | null>(null)
   const [reward, setReward] = useState<MonthlyReward | null>(null)
   const [txns, setTxns] = useState<PointTransaction[]>([])
+  const [tiers, setTiers] = useState<TierConfig[]>(DEFAULT_TIERS)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -39,15 +42,17 @@ export default function FPointWalletPage() {
       setLoading(true)
       const { year, month } = getIstYearMonth()
       try {
-        const [b, r, t] = await Promise.all([
+        const [b, r, t, ts] = await Promise.all([
           fetchPointBalance(branchId),
           fetchMonthlyReward(branchId, year, month),
           fetchPointTransactions(branchId, 200),
+          fetchRewardTiers(),
         ])
         if (cancelled) return
         setBalance(b)
         setReward(r)
         setTxns(t)
+        setTiers(ts)
       } catch { /* table may not exist yet */ }
       finally { if (!cancelled) setLoading(false) }
     })()
@@ -57,8 +62,10 @@ export default function FPointWalletPage() {
   const { year, month } = getIstYearMonth()
   const count = reward?.admission_count ?? 0
   const level: RewardTier | null = (reward?.level as RewardTier | null) ?? null
-  const next = nextTier(level)
+  const next = nextTier(level, tiers)
   const remaining = next ? Math.max(0, next.threshold - count) : 0
+  const sortedTiers = [...tiers].sort((a, b) => a.threshold - b.threshold)
+  const topThreshold = sortedTiers[sortedTiers.length - 1]?.threshold ?? 30
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -112,19 +119,19 @@ export default function FPointWalletPage() {
                 <p className="text-sm text-purple-700 font-semibold mt-0.5">🏆 Top tier reached this month</p>
               )}
             </div>
-            {/* Progress bar to platinum */}
+            {/* Progress bar to top tier */}
             <div>
               <div className="h-3 rounded-full bg-gray-100 overflow-hidden ring-1 ring-gray-200">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 transition-[width] duration-500"
-                  style={{ width: `${Math.min(100, Math.round((count / 30) * 100))}%` }}
+                  style={{ width: `${Math.min(100, Math.round((count / Math.max(1, topThreshold)) * 100))}%` }}
                 />
               </div>
               <div className="flex justify-between text-[10px] text-gray-400 mt-1.5 px-0.5">
                 <span>0</span>
-                <span>10 Silver</span>
-                <span>20 Gold</span>
-                <span>30 Platinum</span>
+                {sortedTiers.map(t => (
+                  <span key={t.tier}>{t.threshold} {TIER_LABEL[t.tier]}</span>
+                ))}
               </div>
             </div>
           </div>
@@ -136,7 +143,7 @@ export default function FPointWalletPage() {
       <div className="rounded-2xl border bg-white p-4 sm:p-5">
         <h2 className="font-heading text-sm sm:text-base font-bold text-gray-900 mb-3">Reward Tiers</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {TIERS.map(t => {
+          {sortedTiers.map(t => {
             const reached = count >= t.threshold
             return (
               <div

@@ -84,6 +84,7 @@ const AdminTicketsPage = lazy(() => import('./pages/admin/AdminTicketsPage'))
 const AdminExamFormsPage = lazy(() => import('./pages/admin/AdminExamFormsPage'))
 const AdminReferralsPage = lazy(() => import('./pages/admin/AdminReferralsPage'))
 const AdminRewardsPage = lazy(() => import('./pages/admin/AdminRewardsPage'))
+const AdminRewardsSettingsPage = lazy(() => import('./pages/admin/AdminRewardsSettingsPage'))
 const BranchPointWalletPage = lazy(() => import('./pages/branches/BranchPointWalletPage'))
 const AdminFeesOverviewPage = lazy(() => import('./pages/admin/fees/AdminFeesOverviewPage'))
 const AdminStudentFeePlanPage = lazy(() => import('./pages/admin/fees/AdminStudentFeePlanPage'))
@@ -251,6 +252,7 @@ function AppRoutes() {
 
           <Route path="referrals" element={<AdminReferralsPage />} />
           <Route path="rewards" element={<AdminRewardsPage />} />
+          <Route path="rewards/settings" element={<AdminRewardsSettingsPage />} />
           <Route path="branches/:id/points" element={<BranchPointWalletPage />} />
           <Route path="promotions" element={<AdminPromotionsPage />} />
           <Route path="jobs" element={<AdminJobsPage />} />

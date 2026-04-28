@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Plus, Search, X, MessageCircle, MessageSquare, Filter, LayoutList, Kanban } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useLeads } from '../../hooks/useLeads'
@@ -15,7 +16,22 @@ type ViewMode = 'list' | 'pipeline'
 export default function LeadsPage() {
   const { leads, loading } = useLeads()
   const { profile } = useAuth()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('selected'))
+
+  // When opened with ?selected=… (e.g. from "Open Lead" on a free-test
+  // submission), select that lead automatically once data has loaded.
+  useEffect(() => {
+    const fromUrl = searchParams.get('selected')
+    if (!fromUrl) return
+    if (leads.find(l => l.id === fromUrl)) {
+      setSelectedId(fromUrl)
+      // Clear the param so back/forward isn't sticky
+      const next = new URLSearchParams(searchParams)
+      next.delete('selected')
+      setSearchParams(next, { replace: true })
+    }
+  }, [leads, searchParams, setSearchParams])
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all')
   const [modeFilter, setModeFilter] = useState<FilterMode>('all')
   const [search, setSearch] = useState('')
