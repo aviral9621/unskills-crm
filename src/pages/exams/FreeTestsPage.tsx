@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   FlaskConical, Users, Eye, EyeOff, MoreVertical, UserPlus, X,
   Phone, Mail, GraduationCap, Calendar, Trophy, ExternalLink,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
 import { createManualLead } from '../../hooks/useLeads'
 import Modal from '../../components/Modal'
+
+const MENU_WIDTH = 208
 
 interface PaperSet {
   id: string
@@ -38,6 +40,7 @@ interface Attempt {
 }
 
 export default function FreeTestsPage() {
+  const navigate = useNavigate()
   const [papers, setPapers] = useState<PaperSet[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'papers' | 'attempts'>('papers')
@@ -45,15 +48,36 @@ export default function FreeTestsPage() {
   const [loadingAttempts, setLoadingAttempts] = useState(false)
   const [toggling, setToggling] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
+  const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const [detailOpen, setDetailOpen] = useState<Attempt | null>(null)
   const [converting, setConverting] = useState<string | null>(null)
 
   useEffect(() => { loadPapers() }, [])
   useEffect(() => { if (activeTab === 'attempts') loadAttempts() }, [activeTab])
+
+  // Close the popup on any scroll (table or page) so it doesn't get stranded
+  // somewhere disconnected from its trigger button.
   useEffect(() => {
     function close() { setMenuOpen(null) }
-    window.addEventListener('click', close)
-    return () => window.removeEventListener('click', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [])
+
+  const openMenu = useCallback((id: string) => {
+    const btn = menuBtnRefs.current.get(id)
+    if (!btn) return
+    const r = btn.getBoundingClientRect()
+    // Anchor the menu's right edge to the button's right edge, then clamp
+    // so it always stays inside the viewport (handles narrow screens too).
+    const left = Math.max(8, Math.min(r.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8))
+    const top = r.bottom + 4
+    setMenuPos({ top, left })
+    setMenuOpen(id)
   }, [])
 
   async function loadPapers() {
@@ -348,44 +372,19 @@ export default function FreeTestsPage() {
                       <td className="px-5 py-3.5 text-gray-500 text-xs hidden lg:table-cell">
                         {new Date(a.started_at).toLocaleDateString('en-IN')}
                       </td>
-                      <td className="px-3 py-3.5 text-right relative">
+                      <td className="px-3 py-3.5 text-right">
                         <button
-                          onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === a.id ? null : a.id) }}
+                          ref={el => { if (el) menuBtnRefs.current.set(a.id, el) }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (menuOpen === a.id) setMenuOpen(null)
+                            else openMenu(a.id)
+                          }}
                           className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
                           aria-label="Open actions menu"
                         >
                           <MoreVertical size={16} />
                         </button>
-                        {menuOpen === a.id && (
-                          <div
-                            onClick={e => e.stopPropagation()}
-                            className="absolute right-2 top-9 z-30 w-52 bg-white border border-gray-200 rounded-xl shadow-xl py-1"
-                          >
-                            <button
-                              onClick={() => { setDetailOpen(a); setMenuOpen(null) }}
-                              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
-                            >
-                              <Eye size={14} /> View Details
-                            </button>
-                            {a.lead_id ? (
-                              <Link
-                                to={`/admin/leads?selected=${a.lead_id}`}
-                                onClick={() => setMenuOpen(null)}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-emerald-700 hover:bg-emerald-50 text-left"
-                              >
-                                <ExternalLink size={14} /> Open Lead
-                              </Link>
-                            ) : (
-                              <button
-                                onClick={() => convertToLead(a)}
-                                disabled={converting === a.id}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-600 hover:bg-red-50 text-left disabled:opacity-50"
-                              >
-                                <UserPlus size={14} /> {converting === a.id ? 'Converting…' : 'Convert to Lead'}
-                              </button>
-                            )}
-                          </div>
-                        )}
                       </td>
                     </tr>
                   ))}
@@ -395,6 +394,47 @@ export default function FreeTestsPage() {
           )}
         </div>
       )}
+
+      {/* Action menu — rendered as a viewport-fixed overlay so it can never
+          be clipped by the table's overflow container. */}
+      {menuOpen && (() => {
+        const a = attempts.find(x => x.id === menuOpen)
+        if (!a) return null
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(null)} />
+            <div
+              role="menu"
+              onClick={e => e.stopPropagation()}
+              className="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-xl py-1"
+              style={{ top: menuPos.top, left: menuPos.left, width: MENU_WIDTH }}
+            >
+              <button
+                onClick={() => { setDetailOpen(a); setMenuOpen(null) }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
+              >
+                <Eye size={14} /> View Details
+              </button>
+              {a.lead_id ? (
+                <button
+                  onClick={() => { setMenuOpen(null); navigate(`/admin/leads?selected=${a.lead_id}`) }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-emerald-700 hover:bg-emerald-50 text-left"
+                >
+                  <ExternalLink size={14} /> Open Lead
+                </button>
+              ) : (
+                <button
+                  onClick={() => convertToLead(a)}
+                  disabled={converting === a.id}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-600 hover:bg-red-50 text-left disabled:opacity-50"
+                >
+                  <UserPlus size={14} /> {converting === a.id ? 'Converting…' : 'Convert to Lead'}
+                </button>
+              )}
+            </div>
+          </>
+        )
+      })()}
 
       {/* Submission detail modal */}
       <Modal open={!!detailOpen} onClose={() => setDetailOpen(null)} title="Submission Details" size="md">
