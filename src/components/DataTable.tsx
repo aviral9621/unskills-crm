@@ -8,9 +8,18 @@ import {
   flexRender,
   type ColumnDef,
   type SortingState,
+  type OnChangeFn,
 } from '@tanstack/react-table'
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '../lib/utils'
+
+export interface ServerPagination {
+  pageIndex: number
+  pageSize: number
+  totalRows: number
+  onPageChange: (next: number) => void
+  onPageSizeChange?: (size: number) => void
+}
 
 interface DataTableProps<T> {
   data: T[]
@@ -23,6 +32,16 @@ interface DataTableProps<T> {
   emptyMessage?: string
   onRowClick?: (row: T) => void
   showPageSizeSelector?: boolean
+  /**
+   * Optional server-side pagination control. When provided the table uses
+   * the supplied page state instead of paginating the data itself —
+   * required for datasets larger than what we want to ship to the
+   * browser (e.g. thousands of students).
+   */
+  serverPagination?: ServerPagination
+  /** Controlled sorting — emit changes back to parent for server-side ordering. */
+  sorting?: SortingState
+  onSortingChange?: OnChangeFn<SortingState>
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200, 500]
@@ -53,31 +72,68 @@ export default function DataTable<T>({
   emptyMessage = 'No data found',
   onRowClick,
   showPageSizeSelector = true,
+  serverPagination,
+  sorting: controlledSorting,
+  onSortingChange: controlledOnSortingChange,
 }: DataTableProps<T>) {
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [pageSize, setPageSize] = useState<number | 'all'>(initialPageSize)
-  const effectivePageSize = pageSize === 'all' ? Math.max(data.length, 1) : pageSize
+  const isServer = !!serverPagination
+  const [internalSorting, setInternalSorting] = useState<SortingState>([])
+  const sorting = controlledSorting ?? internalSorting
+  const setSorting = controlledOnSortingChange ?? setInternalSorting
+  const [pageSizeLocal, setPageSizeLocal] = useState<number | 'all'>(initialPageSize)
+  const effectivePageSize = isServer
+    ? serverPagination!.pageSize
+    : pageSizeLocal === 'all'
+      ? Math.max(data.length, 1)
+      : pageSizeLocal
 
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter: searchValue },
+    state: {
+      sorting,
+      globalFilter: isServer ? '' : searchValue,
+      ...(isServer ? { pagination: { pageIndex: 0, pageSize: data.length || 1 } } : {}),
+    },
     onSortingChange: setSorting,
+    manualSorting: isServer,
+    manualPagination: isServer,
+    manualFiltering: isServer,
+    pageCount: isServer
+      ? Math.max(1, Math.ceil(serverPagination!.totalRows / Math.max(1, serverPagination!.pageSize)))
+      : undefined,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    initialState: { pagination: { pageSize: effectivePageSize } },
+    getSortedRowModel: isServer ? undefined : getSortedRowModel(),
+    getPaginationRowModel: isServer ? undefined : getPaginationRowModel(),
+    getFilteredRowModel: isServer ? undefined : getFilteredRowModel(),
+    initialState: isServer ? undefined : { pagination: { pageSize: effectivePageSize } },
   })
 
-  // Keep table's pageSize state in sync with local selector
-  if (table.getState().pagination.pageSize !== effectivePageSize) {
+  // Keep client-mode pageSize in sync with the local selector
+  if (!isServer && table.getState().pagination.pageSize !== effectivePageSize) {
     table.setPageSize(effectivePageSize)
   }
 
-  const pageIndex = table.getState().pagination.pageIndex
-  const totalPages = table.getPageCount()
-  const totalRows = table.getFilteredRowModel().rows.length
+  const pageIndex = isServer ? serverPagination!.pageIndex : table.getState().pagination.pageIndex
+  const totalPages = isServer
+    ? Math.max(1, Math.ceil(serverPagination!.totalRows / Math.max(1, serverPagination!.pageSize)))
+    : table.getPageCount()
+  const totalRows = isServer ? serverPagination!.totalRows : table.getFilteredRowModel().rows.length
+
+  function goToPage(next: number) {
+    if (isServer) serverPagination!.onPageChange(Math.max(0, Math.min(next, totalPages - 1)))
+    else table.setPageIndex(next)
+  }
+  function nextPage() {
+    if (isServer) serverPagination!.onPageChange(Math.min(pageIndex + 1, totalPages - 1))
+    else table.nextPage()
+  }
+  function prevPage() {
+    if (isServer) serverPagination!.onPageChange(Math.max(pageIndex - 1, 0))
+    else table.previousPage()
+  }
+  const canPrev = isServer ? pageIndex > 0 : table.getCanPreviousPage()
+  const canNext = isServer ? pageIndex < totalPages - 1 : table.getCanNextPage()
 
   return (
     <div>
@@ -155,30 +211,36 @@ export default function DataTable<T>({
               <div className="flex items-center gap-1.5">
                 <span>Show</span>
                 <select
-                  value={pageSize === 'all' ? 'all' : String(pageSize)}
-                  onChange={(e) => setPageSize(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                  value={isServer ? String(effectivePageSize) : (pageSizeLocal === 'all' ? 'all' : String(pageSizeLocal))}
+                  onChange={(e) => {
+                    if (isServer) {
+                      serverPagination!.onPageSizeChange?.(Number(e.target.value))
+                    } else {
+                      setPageSizeLocal(e.target.value === 'all' ? 'all' : Number(e.target.value))
+                    }
+                  }}
                   className="px-2 py-1 rounded-md border border-gray-300 text-xs text-gray-700 bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none"
                 >
                   {PAGE_SIZE_OPTIONS.map(s => (
                     <option key={s} value={s}>{s}</option>
                   ))}
-                  <option value="all">All</option>
+                  {!isServer && <option value="all">All</option>}
                 </select>
               </div>
             )}
             <span>
-              {pageSize === 'all' ? (
+              {!isServer && pageSizeLocal === 'all' ? (
                 <>Showing all <b>{totalRows}</b></>
               ) : (
                 <>Showing <b>{pageIndex * effectivePageSize + 1}</b>–<b>{Math.min((pageIndex + 1) * effectivePageSize, totalRows)}</b> of <b>{totalRows}</b></>
               )}
             </span>
           </div>
-          {pageSize !== 'all' && totalPages > 1 && (
+          {(isServer || pageSizeLocal !== 'all') && totalPages > 1 && (
             <div className="flex items-center gap-1">
               <button
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
+                onClick={prevPage}
+                disabled={!canPrev}
                 className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft size={16} />
@@ -193,7 +255,7 @@ export default function DataTable<T>({
                 return (
                   <button
                     key={pageNum}
-                    onClick={() => table.setPageIndex(pageNum)}
+                    onClick={() => goToPage(pageNum)}
                     className={cn(
                       'h-8 w-8 rounded-lg text-xs font-medium transition-colors',
                       pageNum === pageIndex ? 'bg-red-600 text-white' : 'text-gray-600 hover:bg-gray-100'
@@ -204,8 +266,8 @@ export default function DataTable<T>({
                 )
               })}
               <button
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
+                onClick={nextPage}
+                disabled={!canNext}
                 className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight size={16} />

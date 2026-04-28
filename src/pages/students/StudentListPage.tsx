@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { createColumnHelper } from '@tanstack/react-table'
+import { createColumnHelper, type SortingState } from '@tanstack/react-table'
 import {
   GraduationCap, Plus, Search, MoreVertical, Pencil,
   X, Phone, BookOpen, CreditCard, ClipboardList, UserMinus, RotateCcw,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -31,6 +32,11 @@ interface ProgramRow { slug: string; name: string }
 
 const colHelper = createColumnHelper<StudentRow>()
 
+// Server-orderable columns. Sorting on derived columns (paid/due/course)
+// is disabled — they're computed client-side per page.
+const SORTABLE_FIELDS = new Set(['registration_no', 'name', 'net_fee', 'is_active', 'created_at'])
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, 500]
+
 export default function StudentListPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -41,7 +47,13 @@ export default function StudentListPage() {
 
   const [students, setStudents] = useState<StudentRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(25)
+
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
   const initialStatus = (() => {
     const p = new URLSearchParams(location.search).get('filter')
     if (p === 'completed') return 'completed'
@@ -52,6 +64,8 @@ export default function StudentListPage() {
   const [programFilter, setProgramFilter] = useState<string>('all')
   const [programs, setPrograms] = useState<ProgramRow[]>([])
 
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'created_at', desc: true }])
+
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
   const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
@@ -61,76 +75,114 @@ export default function StudentListPage() {
   const [dropReason, setDropReason] = useState('')
   const [dropping, setDropping] = useState(false)
 
-  useEffect(() => { fetchStudents() }, [])
+  // Debounce search → reset to page 0 when query stabilises
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(search); setPage(0) }, 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Reset page on any filter/sort change
+  useEffect(() => { setPage(0) }, [statusFilter, programFilter, sorting, pageSize])
+
+  // Programs (small list, fine to load once)
   useEffect(() => {
     supabase.from('uce_programs').select('slug, name').order('display_order')
       .then(({ data }) => setPrograms((data ?? []) as ProgramRow[]))
   }, [])
+
   useEffect(() => { const h = () => setMenuOpen(null); window.addEventListener('scroll', h, true); return () => window.removeEventListener('scroll', h, true) }, [])
 
-  async function fetchStudents() {
+  // Main fetch — server-side filter/sort/page
+  const fetchStudents = useCallback(async () => {
     setLoading(true)
     try {
-      let q = supabase.from('uce_students').select('id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, course:uce_courses(name, program:uce_programs(slug, name)), branch:uce_branches!uce_students_branch_id_fkey(name)')
+      // Build select. Use !inner only when we need to filter on the embed,
+      // so students without (yet) a program/course aren't accidentally hidden.
+      const wantProgramFilter = programFilter !== 'all'
+      const wantCompletedFilter = statusFilter === 'completed'
+
+      const courseSelect = wantProgramFilter
+        ? 'course:uce_courses!inner(name, program:uce_programs!inner(slug, name))'
+        : 'course:uce_courses(name, program:uce_programs(slug, name))'
+      const certSelect = wantCompletedFilter ? ', cert:uce_certificates!inner(status)' : ''
+      const select = `id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, ${courseSelect}, branch:uce_branches!uce_students_branch_id_fkey(name)${certSelect}`
+
+      let q = supabase.from('uce_students').select(select, { count: 'exact' })
       if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
-      const { data, error } = await q.order('created_at', { ascending: false })
+
+      if (statusFilter === 'active') q = q.eq('is_active', true)
+      else if (statusFilter === 'inactive') q = q.eq('is_active', false)
+      else if (wantCompletedFilter) q = q.eq('cert.status', 'active')
+
+      if (wantProgramFilter) q = q.eq('course.program.slug', programFilter)
+
+      const s = debouncedSearch.trim()
+      if (s) {
+        // Strip PostgREST .or() control chars to keep the filter expression safe.
+        const safe = s.replace(/[,()*]/g, '').replace(/'/g, '')
+        if (safe) q = q.or(`name.ilike.%${safe}%,registration_no.ilike.%${safe}%,phone.ilike.%${safe}%`)
+      }
+
+      // Sorting
+      const sortId = sorting[0]?.id
+      const sortField = sortId && SORTABLE_FIELDS.has(sortId) ? sortId : 'created_at'
+      const sortAsc = sorting[0] ? !sorting[0].desc : false
+      q = q.order(sortField, { ascending: sortAsc })
+      // Stable secondary order so same key rows don't shuffle between pages
+      if (sortField !== 'id') q = q.order('id', { ascending: true })
+
+      // Range
+      const from = page * pageSize
+      const to = from + pageSize - 1
+      q = q.range(from, to)
+
+      const { data, error, count } = await q
       if (error) throw error
 
-      const ids = (data ?? []).map((s: { id: string }) => s.id)
-      // Chunk .in() lookups — for large datasets (super_admin sees all 1000+ students)
-      // a single .in() with all UUIDs blows past PostgREST/Vercel URL length limits.
-      const CHUNK = 200
-      const idChunks: string[][] = []
-      for (let i = 0; i < ids.length; i += CHUNK) idChunks.push(ids.slice(i, i + CHUNK))
+      const rows = (data ?? []) as Array<Record<string, unknown>>
+      const ids = rows.map(r => r.id as string)
+      setTotal(count ?? 0)
 
-      // Fetch total paid per student
-      let paidMap: Record<string, number> = {}
-      if (ids.length > 0) {
-        const paymentResults = await Promise.all(idChunks.map(c =>
-          supabase.from('uce_student_fee_payments').select('student_id, amount').in('student_id', c)
-        ))
-        paymentResults.forEach(({ data: payments }) => {
-          payments?.forEach(p => { paidMap[p.student_id] = (paidMap[p.student_id] || 0) + p.amount })
-        })
-      }
+      // Lookups for visible page only — small list (≤500), no chunking needed
+      const [paymentsRes, lockedSet, certsRes] = await Promise.all([
+        ids.length
+          ? supabase.from('uce_student_fee_payments').select('student_id, amount').in('student_id', ids)
+          : Promise.resolve({ data: [] as { student_id: string; amount: number }[] }),
+        lockedStudentIds(ids),
+        ids.length
+          ? supabase.from('uce_certificates').select('student_id, certificate_number, issue_date').in('student_id', ids).eq('status', 'active')
+          : Promise.resolve({ data: [] as { student_id: string; certificate_number: string; issue_date: string | null }[] }),
+      ])
 
-      const lockedSet = await lockedStudentIds(ids)
+      const paidMap: Record<string, number> = {}
+      ;(paymentsRes.data ?? []).forEach(p => { paidMap[p.student_id] = (paidMap[p.student_id] || 0) + Number(p.amount) })
 
-      // Certificate lookup — a student is "completed" if they have an active certificate.
-      let certMap: Record<string, { certificate_number: string; issue_date: string | null }> = {}
-      if (ids.length > 0) {
-        const certResults = await Promise.all(idChunks.map(c =>
-          supabase
-            .from('uce_certificates')
-            .select('student_id, certificate_number, issue_date, status')
-            .in('student_id', c)
-            .eq('status', 'active')
-        ))
-        certResults.forEach(({ data: certs }) => {
-          certs?.forEach((c: { student_id: string; certificate_number: string; issue_date: string | null }) => {
-            if (!certMap[c.student_id]) certMap[c.student_id] = { certificate_number: c.certificate_number, issue_date: c.issue_date }
-          })
-        })
-      }
+      const certMap: Record<string, { certificate_number: string; issue_date: string | null }> = {}
+      ;(certsRes.data ?? []).forEach(c => {
+        if (!certMap[c.student_id]) certMap[c.student_id] = { certificate_number: c.certificate_number, issue_date: c.issue_date }
+      })
 
-      setStudents((data ?? []).map((s: Record<string, unknown>) => {
-        const id = (s as { id: string }).id
+      setStudents(rows.map(r => {
+        const id = r.id as string
         const cert = certMap[id]
         return {
-          ...s,
+          ...(r as unknown as StudentRow),
           paid: paidMap[id] || 0,
           locked: lockedSet.has(id),
           completed: !!cert,
           certificate_number: cert?.certificate_number ?? null,
           issue_date: cert?.issue_date ?? null,
         }
-      }) as StudentRow[])
+      }))
     } catch (e) {
       console.error('[StudentListPage] fetchStudents failed:', e)
       toast.error('Failed to load students')
-    }
-    finally { setLoading(false) }
-  }
+      setStudents([])
+      setTotal(0)
+    } finally { setLoading(false) }
+  }, [isSuperAdmin, branchId, statusFilter, programFilter, debouncedSearch, sorting, page, pageSize])
+
+  useEffect(() => { fetchStudents() }, [fetchStudents])
 
   const openMenu = useCallback((id: string) => {
     const btn = menuBtnRefs.current.get(id); if (!btn) return
@@ -152,7 +204,7 @@ export default function StudentListPage() {
       }).eq('id', reactivateTarget.id)
       if (error) throw error
       toast.success(`${reactivateTarget.name} reactivated`)
-      setStudents(p => p.map(s => s.id === reactivateTarget.id ? { ...s, is_active: true } : s))
+      void fetchStudents()
     } catch { toast.error('Failed') }
     finally { setToggling(false); setReactivateTarget(null) }
   }
@@ -170,21 +222,10 @@ export default function StudentListPage() {
       }).eq('id', dropTarget.id)
       if (error) throw error
       toast.success(`${dropTarget.name} marked as dropped`)
-      // Remove from current list view (user explicitly asked: "should be removed from the student list")
-      setStudents(p => p.filter(s => s.id !== dropTarget.id))
+      void fetchStudents()
     } catch { toast.error('Failed to mark as dropped') }
     finally { setDropping(false); setDropTarget(null); setDropReason('') }
   }
-
-  const filtered = useMemo(() => {
-    let r = students
-    if (statusFilter === 'active') r = r.filter(s => s.is_active)
-    else if (statusFilter === 'inactive') r = r.filter(s => !s.is_active)
-    else if (statusFilter === 'completed') r = r.filter(s => s.completed)
-    if (programFilter !== 'all') r = r.filter(s => s.course?.program?.slug === programFilter)
-    if (search.trim()) { const q = search.toLowerCase(); r = r.filter(s => s.name.toLowerCase().includes(q) || s.registration_no.toLowerCase().includes(q) || s.phone.includes(q)) }
-    return r
-  }, [students, statusFilter, programFilter, search])
 
   const columns = useMemo(() => [
     colHelper.accessor('registration_no', { header: 'Reg No', cell: i => {
@@ -204,10 +245,10 @@ export default function StudentListPage() {
       return <span className="text-xs font-mono font-semibold text-gray-700 bg-gray-100 px-2 py-1 rounded">{regNo}</span>
     } }),
     colHelper.accessor('name', { header: 'Name', cell: i => <span className="text-sm font-medium text-gray-900 min-w-[120px] block">{i.getValue()}</span> }),
-    colHelper.display({ id: 'course', header: 'Course', cell: i => <span className="text-sm text-gray-600">{(i.row.original.course as { name: string } | null)?.name || '—'}</span> }),
+    colHelper.display({ id: 'course', header: 'Course', enableSorting: false, cell: i => <span className="text-sm text-gray-600">{(i.row.original.course as { name: string } | null)?.name || '—'}</span> }),
     colHelper.accessor('net_fee', { header: 'Fee', cell: i => <span className="text-sm text-gray-700">{formatINR(i.getValue())}</span> }),
-    colHelper.display({ id: 'paid', header: 'Paid', cell: i => <span className="text-sm text-green-600 font-medium">{formatINR(i.row.original.paid || 0)}</span> }),
-    colHelper.display({ id: 'due', header: 'Due', cell: i => { const due = (i.row.original.net_fee || 0) - (i.row.original.paid || 0); return <span className={`text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatINR(Math.max(0, due))}</span> } }),
+    colHelper.display({ id: 'paid', header: 'Paid', enableSorting: false, cell: i => <span className="text-sm text-green-600 font-medium">{formatINR(i.row.original.paid || 0)}</span> }),
+    colHelper.display({ id: 'due', header: 'Due', enableSorting: false, cell: i => { const due = (i.row.original.net_fee || 0) - (i.row.original.paid || 0); return <span className={`text-sm font-semibold ${due > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatINR(Math.max(0, due))}</span> } }),
     colHelper.accessor('is_active', { header: 'Status', cell: i => (
       <div className="flex items-center gap-1.5 flex-wrap">
         <StatusBadge label={i.getValue() ? 'Active' : 'Dropped'} variant={i.getValue() ? 'success' : 'error'} />
@@ -269,10 +310,14 @@ export default function StudentListPage() {
     ...(base === '/admin' ? [{ label: 'Admit Card', icon: ClipboardList, onClick: () => navigate(`/admin/students/admit-card?student=${menuStudent.id}`) }] : []),
   ] : []
 
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const fromIdx = total === 0 ? 0 : page * pageSize + 1
+  const toIdx = Math.min((page + 1) * pageSize, total)
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <div><h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Students</h1><p className="text-xs sm:text-sm text-gray-500 mt-0.5">{students.length} total</p></div>
+        <div><h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Students</h1><p className="text-xs sm:text-sm text-gray-500 mt-0.5">{total} total</p></div>
         <button onClick={() => navigate(`${base}/students/register`)} className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm shrink-0"><Plus size={16} /> Register</button>
       </div>
 
@@ -297,7 +342,7 @@ export default function StudentListPage() {
             <option value="all">All (incl. dropped)</option>
           </select>
           {statusFilter === 'completed' && (
-            <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded flex items-center gap-1"><GraduationCap size={12} /> Showing {filtered.length} completed</span>
+            <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded flex items-center gap-1"><GraduationCap size={12} /> Showing {total} completed</span>
           )}
           {(programFilter !== 'all' || statusFilter !== 'active' || search) && (
             <button onClick={() => { setProgramFilter('all'); setStatusFilter('active'); setSearch('') }}
@@ -310,12 +355,50 @@ export default function StudentListPage() {
 
       <div className="md:hidden">
         {loading ? <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="skeleton h-32 rounded-xl" />)}</div>
-          : filtered.length === 0 ? <div className="bg-white rounded-xl border p-12 text-center"><GraduationCap size={36} className="mx-auto text-gray-300 mb-2" /><p className="text-sm text-gray-400">No students found</p></div>
-          : <div className="space-y-3">{filtered.map(s => <StudentCard key={s.id} s={s} />)}</div>}
+          : students.length === 0 ? <div className="bg-white rounded-xl border p-12 text-center"><GraduationCap size={36} className="mx-auto text-gray-300 mb-2" /><p className="text-sm text-gray-400">No students found</p></div>
+          : <>
+              <div className="space-y-3">{students.map(s => <StudentCard key={s.id} s={s} />)}</div>
+              {/* Mobile pager */}
+              {total > pageSize && (
+                <div className="mt-4 flex items-center justify-between gap-2 text-xs text-gray-600">
+                  <span>{fromIdx}–{toIdx} of {total}</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                      className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-40"><ChevronLeft size={16} /></button>
+                    <span className="px-2">{page + 1} / {totalPages}</span>
+                    <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+                      className="p-1.5 rounded-lg border border-gray-200 disabled:opacity-40"><ChevronRight size={16} /></button>
+                  </div>
+                </div>
+              )}
+              {/* Mobile page-size selector */}
+              <div className="mt-3 flex items-center justify-end gap-2 text-xs text-gray-500">
+                <span>Per page</span>
+                <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))}
+                  className="px-2 py-1 rounded-md border border-gray-300 text-xs bg-white">
+                  {PAGE_SIZE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </>}
       </div>
 
       <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm p-4 lg:p-5">
-        <DataTable data={filtered} columns={columns} loading={loading} searchValue="" emptyIcon={<GraduationCap size={36} className="text-gray-300" />} emptyMessage="No students found" />
+        <DataTable
+          data={students}
+          columns={columns}
+          loading={loading}
+          emptyIcon={<GraduationCap size={36} className="text-gray-300" />}
+          emptyMessage="No students found"
+          sorting={sorting}
+          onSortingChange={setSorting}
+          serverPagination={{
+            pageIndex: page,
+            pageSize,
+            totalRows: total,
+            onPageChange: setPage,
+            onPageSizeChange: setPageSize,
+          }}
+        />
       </div>
 
       {menuOpen && menuStudent && (<>
