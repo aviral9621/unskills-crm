@@ -139,7 +139,7 @@ export default function StudentListPage() {
       const { data, error, count } = await q
       if (error) throw error
 
-      const rows = (data ?? []) as Array<Record<string, unknown>>
+      const rows = (data ?? []) as unknown as Array<Record<string, unknown>>
       const ids = rows.map(r => r.id as string)
       setTotal(count ?? 0)
 
