@@ -39,7 +39,7 @@ export default function DueFeesPage() {
       ])
       setBranches(br.data ?? []); setCourses(cr.data ?? [])
 
-      let sq = supabase.from('uce_students').select(`id, registration_no, name, phone, net_fee, enrollment_date, branch_id, course_id, course:uce_courses(name, duration_months), branch:uce_branches(name)`).eq('is_active', true)
+      let sq = supabase.from('uce_students').select(`id, registration_no, name, phone, net_fee, enrollment_date, branch_id, course_id, course:uce_courses(name, duration_months), branch:uce_branches!uce_students_branch_id_fkey(name)`).eq('is_active', true)
       if (!isSuperAdmin && profile?.branch_id) sq = sq.eq('branch_id', profile.branch_id)
       const { data: students, error } = await sq
       if (error) throw error

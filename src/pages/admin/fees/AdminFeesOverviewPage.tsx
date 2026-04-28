@@ -38,7 +38,7 @@ export default function AdminFeesOverviewPage() {
     setLoading(true)
     const [stRes, brRes] = await Promise.all([
       supabase.from('uce_students')
-        .select('id,name,registration_no,net_fee,fee_start_month,installment_count,monthly_fee,branch:uce_branches(id,name,code),course:uce_courses(id,name)')
+        .select('id,name,registration_no,net_fee,fee_start_month,installment_count,monthly_fee,branch:uce_branches!uce_students_branch_id_fkey(id,name,code),course:uce_courses(id,name)')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(500),

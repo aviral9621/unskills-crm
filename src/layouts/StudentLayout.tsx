@@ -35,7 +35,7 @@ export default function StudentLayout() {
 
   useEffect(() => {
     if (!user) return
-    supabase.from('uce_students').select('registration_no, branch:uce_branches(director_phone)').eq('auth_user_id', user.id).maybeSingle()
+    supabase.from('uce_students').select('registration_no, branch:uce_branches!uce_students_branch_id_fkey(director_phone)').eq('auth_user_id', user.id).maybeSingle()
       .then(({ data }) => {
         if (!data) return
         setRegNo(data.registration_no ?? null)

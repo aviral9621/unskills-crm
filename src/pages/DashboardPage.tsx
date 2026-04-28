@@ -600,7 +600,7 @@ export default function DashboardPage() {
     const bf = !isSuperAdmin && branchId ? branchId : null
     const q = bf
       ? supabase.from('uce_students').select('id, name, registration_no, created_at, course:uce_courses(name)').eq('branch_id', bf).order('created_at', { ascending: false }).limit(5)
-      : supabase.from('uce_students').select('id, name, registration_no, created_at, course:uce_courses(name), branch:uce_branches(name)').order('created_at', { ascending: false }).limit(5)
+      : supabase.from('uce_students').select('id, name, registration_no, created_at, course:uce_courses(name), branch:uce_branches!uce_students_branch_id_fkey(name)').order('created_at', { ascending: false }).limit(5)
     const { data } = await q
     setRecentStudents((data as unknown as RecentStudent[]) ?? [])
   }

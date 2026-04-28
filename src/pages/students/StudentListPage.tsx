@@ -71,7 +71,7 @@ export default function StudentListPage() {
   async function fetchStudents() {
     setLoading(true)
     try {
-      let q = supabase.from('uce_students').select('id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, course:uce_courses(name, program:uce_programs(slug, name)), branch:uce_branches(name)')
+      let q = supabase.from('uce_students').select('id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, course:uce_courses(name, program:uce_programs(slug, name)), branch:uce_branches!uce_students_branch_id_fkey(name)')
       if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
       const { data, error } = await q.order('created_at', { ascending: false })
       if (error) throw error

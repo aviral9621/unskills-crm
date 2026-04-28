@@ -96,7 +96,7 @@ export async function autoIssueCertificateForMarksheet(
       .select(
         'id, registration_no, name, father_name, photo_url, course_id, branch_id, ' +
         'course:uce_courses(id, code, name), ' +
-        'branch:uce_branches(id, name, b_code, code)',
+        'branch:uce_branches!uce_students_branch_id_fkey(id, name, b_code, code)',
       )
       .eq('id', studentId)
       .single()

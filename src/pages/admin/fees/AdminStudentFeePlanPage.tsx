@@ -36,7 +36,7 @@ export default function AdminStudentFeePlanPage() {
   const load = useCallback(async () => {
     if (!studentId) return
     const { data: st } = await supabase.from('uce_students')
-      .select('id,name,registration_no,father_name,net_fee,fee_start_month,installment_count,monthly_fee,branch_id,course:uce_courses(name),branch:uce_branches(name,code,director_phone,society_name,registration_number,center_logo_url,address_line1,village,district,state,pincode)')
+      .select('id,name,registration_no,father_name,net_fee,fee_start_month,installment_count,monthly_fee,branch_id,course:uce_courses(name),branch:uce_branches!uce_students_branch_id_fkey(name,code,director_phone,society_name,registration_number,center_logo_url,address_line1,village,district,state,pincode)')
       .eq('id', studentId).maybeSingle()
     setRec(st as unknown as StudentDetail | null)
     if (st) {

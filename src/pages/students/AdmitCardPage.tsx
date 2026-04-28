@@ -87,7 +87,7 @@ export default function AdmitCardPage() {
     setLoading(true); setStudent(null); setSubjects([]); setAllSubjects([])
     setEntries([]); setSelectedSemester(''); setAvailableSemesters([])
     try {
-      const sel = 'id, registration_no, name, father_name, dob, gender, photo_url, address, district, state, course_id, session, enrollment_date, course:uce_courses(name, code, total_semesters), branch:uce_branches(name, address_line1, district, state, pincode, director_phone)'
+      const sel = 'id, registration_no, name, father_name, dob, gender, photo_url, address, district, state, course_id, session, enrollment_date, course:uce_courses(name, code, total_semesters), branch:uce_branches!uce_students_branch_id_fkey(name, address_line1, district, state, pincode, director_phone)'
       const trimmed = query.trim()
       let data: Record<string, unknown> | null = null
 

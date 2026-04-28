@@ -113,7 +113,7 @@ export default function StudentIdCardPage() {
       const [studentsRes, settingsRes, mainBranchRes] = await Promise.all([
         (async () => {
           let q = supabase.from('uce_students')
-            .select(`id, registration_no, name, father_name, dob, photo_url, is_active, course:uce_courses(name), branch:uce_branches(${branchCols})`)
+            .select(`id, registration_no, name, father_name, dob, photo_url, is_active, course:uce_courses(name), branch:uce_branches!uce_students_branch_id_fkey(${branchCols})`)
             .eq('is_active', true)
           if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
           return q.order('name')

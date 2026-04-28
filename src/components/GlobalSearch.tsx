@@ -49,7 +49,7 @@ export default function GlobalSearch({ open, onClose }: { open: boolean; onClose
     if (q.length < 2) { setEntities([]); return }
     const t = setTimeout(async () => {
       const [sRes, bRes, lRes] = await Promise.all([
-        supabase.from('uce_students').select('id, name, registration_no, phone, branch:uce_branches(name), course:uce_courses(name)')
+        supabase.from('uce_students').select('id, name, registration_no, phone, branch:uce_branches!uce_students_branch_id_fkey(name), course:uce_courses(name)')
           .or(`name.ilike.%${q}%,registration_no.ilike.%${q}%,phone.ilike.%${q}%`)
           .limit(5),
         supabase.from('uce_branches').select('id, name, code, district').or(`name.ilike.%${q}%,code.ilike.%${q}%`).limit(3),

@@ -150,7 +150,7 @@ export default function MarksheetPage() {
     try {
       const { data: sd, error } = await supabase
         .from('uce_students')
-        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode, category)')
+        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches!uce_students_branch_id_fkey(name, b_code, code, address_line1, district, state, pincode, category)')
         .eq('id', rec.student_id).single()
 
       if (error || !sd) { toast.error('Could not load student for edit'); return }
@@ -187,7 +187,7 @@ export default function MarksheetPage() {
     if (!query.trim()) return
     setLoading(true); resetStudentState()
     try {
-      const sel = 'id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode, category)'
+      const sel = 'id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches!uce_students_branch_id_fkey(name, b_code, code, address_line1, district, state, pincode, category)'
       const trimmed = query.trim()
       let data: Record<string, unknown> | null = null
 
@@ -508,7 +508,7 @@ export default function MarksheetPage() {
     try {
       const { data: sd } = await supabase
         .from('uce_students')
-        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months), branch:uce_branches(name, b_code, code, address_line1, district, state, pincode, category)')
+        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months), branch:uce_branches!uce_students_branch_id_fkey(name, b_code, code, address_line1, district, state, pincode, category)')
         .eq('id', rec.student_id).single()
       if (!sd) { toast.error('Student not found'); return }
 

@@ -117,7 +117,7 @@ export default function IssueCertificatePage() {
     setSearching(true)
     try {
       const sel =
-        'id, registration_no, name, father_name, photo_url, course_id, branch_id, enrollment_date, course:uce_courses(id, code, name), branch:uce_branches(id, name, b_code, code, center_logo_url)'
+        'id, registration_no, name, father_name, photo_url, course_id, branch_id, enrollment_date, course:uce_courses(id, code, name), branch:uce_branches!uce_students_branch_id_fkey(id, name, b_code, code, center_logo_url)'
       const q = query.trim()
       const rows: StudentRow[] = []
       const { data: byReg } = await supabase

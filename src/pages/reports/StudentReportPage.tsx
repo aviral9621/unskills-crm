@@ -43,7 +43,7 @@ export default function StudentReportPage() {
       ])
       setBranches(br.data ?? []); setCourses(cr.data ?? [])
 
-      let q = supabase.from('uce_students').select(`id, registration_no, name, phone, total_fee, net_fee, discount, is_active, enrollment_date, branch_id, course_id, course:uce_courses(name), branch:uce_branches(name)`)
+      let q = supabase.from('uce_students').select(`id, registration_no, name, phone, total_fee, net_fee, discount, is_active, enrollment_date, branch_id, course_id, course:uce_courses(name), branch:uce_branches!uce_students_branch_id_fkey(name)`)
       if (!isSuperAdmin && profile?.branch_id) q = q.eq('branch_id', profile.branch_id)
       const { data, error } = await q.order('created_at', { ascending: false })
       if (error) throw error

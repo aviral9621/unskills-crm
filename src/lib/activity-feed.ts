@@ -38,7 +38,7 @@ export async function fetchActivityFeed(): Promise<Activity[]> {
 
   const [stuRes, brRes, clsRes, leadRes, inqRes, walRes, tktRes] = await Promise.all([
     supabase.from('uce_students')
-      .select('id, name, registration_no, created_at, branch:uce_branches(name)')
+      .select('id, name, registration_no, created_at, branch:uce_branches!uce_students_branch_id_fkey(name)')
       .gte('created_at', since).order('created_at', { ascending: false }).limit(15),
     supabase.from('uce_branches')
       .select('id, name, code, wallet_balance, is_active')
