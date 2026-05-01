@@ -13,7 +13,7 @@ interface Row {
   description: string | null; apply_url: string | null; contact_info: string | null
   deadline: string | null; salary_text: string | null; experience_text: string | null
   qualification: string | null; openings: number | null; is_featured: boolean
-  branch_id: string | null; created_at: string; applications_count: number
+  branch_id: string | null; branch_ids: string[] | null; created_at: string; applications_count: number
   skills_required: string[] | null
   branch?: { name: string } | null
 }
@@ -31,6 +31,7 @@ export default function StudentJobsPage() {
   const [myApps, setMyApps] = useState<MyApp[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'browse' | 'mine'>('browse')
+  const [studentBranchId, setStudentBranchId] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
   const [filterMode, setFilterMode] = useState('')
@@ -66,9 +67,15 @@ export default function StudentJobsPage() {
 
     if (user?.id) {
       const { data: sd } = await supabase.from('uce_students')
-        .select('name, phone, email, village, district')
+        .select('name, phone, email, village, district, branch_id')
         .eq('auth_user_id', user.id).maybeSingle()
-      if (sd) setStudentInfo(sd as typeof studentInfo)
+      if (sd) {
+        setStudentInfo({
+          name: sd.name, phone: sd.phone, email: sd.email,
+          village: sd.village, district: sd.district,
+        })
+        setStudentBranchId((sd as { branch_id: string | null }).branch_id || null)
+      }
     }
 
     setLoading(false)
@@ -80,6 +87,11 @@ export default function StudentJobsPage() {
 
   const filtered = useMemo(() => {
     return rows.filter(r => {
+      // Branch visibility: empty branch_ids = org-wide; otherwise must include this student's branch.
+      const targets = r.branch_ids && r.branch_ids.length > 0
+        ? r.branch_ids
+        : (r.branch_id ? [r.branch_id] : [])
+      if (targets.length > 0 && (!studentBranchId || !targets.includes(studentBranchId))) return false
       if (filterMode && r.work_mode !== filterMode) return false
       if (search) {
         const s = search.toLowerCase()
@@ -89,7 +101,7 @@ export default function StudentJobsPage() {
       }
       return true
     })
-  }, [rows, filterMode, search])
+  }, [rows, filterMode, search, studentBranchId])
 
   function openApply(j: Row) {
     setApplyJob(j)

@@ -136,6 +136,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
     title: 'OPPORTUNITIES',
     items: [
       { label: 'Job Posting', icon: Briefcase, path: '/admin/jobs' },
+      { label: 'Job Applications', icon: Users, path: '/admin/job-applications' },
       { label: 'Promotion Material', icon: Megaphone, path: '/admin/promotions' },
       { label: 'Announcements', icon: Bell, path: '/admin/announcements' },
       { label: 'Support Tickets', icon: LifeBuoy, path: '/admin/support/tickets' },

@@ -28,6 +28,7 @@ interface JobRow {
   deadline: string | null
   is_active: boolean
   branch_id: string | null
+  branch_ids: string[] | null
   posted_by: string | null
   created_at: string
   salary_min: number | null
@@ -62,7 +63,9 @@ const EMPTY_FORM = {
   openings: '',
   status: 'open',
   is_featured: false,
-  branch_id: '' as string,
+  // Empty array = visible to ALL branches (org-wide).
+  // Non-empty = visible only to applicants from those branches.
+  branch_ids: [] as string[],
 }
 
 export default function AdminJobsPage() {
@@ -107,7 +110,11 @@ export default function AdminJobsPage() {
   const filtered = useMemo(() => {
     return rows.filter(r => {
       if (filterStatus && r.status !== filterStatus) return false
-      if (filterBranch && r.branch_id !== filterBranch) return false
+      if (filterBranch) {
+        const list = r.branch_ids && r.branch_ids.length > 0 ? r.branch_ids : (r.branch_id ? [r.branch_id] : [])
+        // Empty list = org-wide (always matches), otherwise must include the filter branch
+        if (list.length > 0 && !list.includes(filterBranch)) return false
+      }
       if (filterMode && r.work_mode !== filterMode) return false
       if (filterFeatured && !r.is_featured) return false
       if (search) {
@@ -128,6 +135,9 @@ export default function AdminJobsPage() {
 
   function openEdit(r: JobRow) {
     setEditing(r)
+    const initialBranchIds = r.branch_ids && r.branch_ids.length > 0
+      ? r.branch_ids
+      : (r.branch_id ? [r.branch_id] : [])
     setForm({
       title: r.title || '', company: r.company || '', location: r.location || '',
       job_type: r.job_type || 'full_time', work_mode: r.work_mode || 'onsite',
@@ -143,7 +153,7 @@ export default function AdminJobsPage() {
       openings: r.openings?.toString() || '',
       status: r.status || 'open',
       is_featured: r.is_featured,
-      branch_id: r.branch_id || '',
+      branch_ids: initialBranchIds,
     })
     setModalOpen(true)
   }
@@ -175,7 +185,9 @@ export default function AdminJobsPage() {
       openings: form.openings ? Number(form.openings) : null,
       status: form.status,
       is_featured: form.is_featured,
-      branch_id: form.branch_id || null,
+      branch_ids: form.branch_ids,
+      // Keep legacy branch_id in sync for any older path that still reads it.
+      branch_id: form.branch_ids.length === 1 ? form.branch_ids[0] : null,
       // Super admin posts auto-approved; branch posts go pending
       approval_status: isSuper ? 'approved' : 'pending',
       is_active: form.status === 'open',
@@ -203,7 +215,7 @@ export default function AdminJobsPage() {
 
     // Notify matching students (best-effort, non-blocking)
     if (!editing && newJobId && form.related_course_ids.length > 0 && form.status === 'open') {
-      void notifyMatchingStudents(newJobId, form.related_course_ids, form.title.trim(), form.branch_id || null)
+      void notifyMatchingStudents(newJobId, form.related_course_ids, form.title.trim(), form.branch_ids)
     }
 
     setSaving(false)
@@ -216,9 +228,10 @@ export default function AdminJobsPage() {
     jobId: string,
     courseIds: string[],
     title: string,
-    branchId: string | null,
+    branchIds: string[],
   ) {
-    const q = supabase.from('uce_students').select('auth_user_id, branch_id').in('course_id', courseIds)
+    let q = supabase.from('uce_students').select('auth_user_id, branch_id').in('course_id', courseIds)
+    if (branchIds.length > 0) q = q.in('branch_id', branchIds)
     const { data } = await q
     if (!data?.length) return
     const rows = data
@@ -234,8 +247,6 @@ export default function AdminJobsPage() {
     if (rows.length) {
       await supabase.from('uce_notifications_log').insert(rows)
     }
-    // job-id-binding & branchId are useful for filtering later
-    void branchId
   }
 
   async function toggleFeatured(r: JobRow) {
@@ -274,12 +285,20 @@ export default function AdminJobsPage() {
             Manage all jobs across branches. Public jobs appear on the website careers page and student panel.
           </p>
         </div>
-        <button
-          onClick={openNew}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700"
-        >
-          <Plus size={16} /> Post Job
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/admin/job-applications"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50"
+          >
+            <UsersIcon size={16} /> All Applications
+          </Link>
+          <button
+            onClick={openNew}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700"
+          >
+            <Plus size={16} /> Post Job
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -333,8 +352,26 @@ export default function AdminJobsPage() {
                   <p className="text-xs text-gray-500 truncate">
                     {r.company || '—'}
                     {r.location && (<> · <MapPin size={11} className="inline" /> {r.location}</>)}
-                    {r.branch?.name && (<> · {r.branch.name}</>)}
                   </p>
+                  <div className="mt-1 flex items-center gap-1 flex-wrap">
+                    {(() => {
+                      const ids = r.branch_ids && r.branch_ids.length > 0 ? r.branch_ids : (r.branch_id ? [r.branch_id] : [])
+                      if (ids.length === 0) {
+                        return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-medium">All branches</span>
+                      }
+                      const names = ids.map(id => branches.find(b => b.id === id)?.name).filter(Boolean) as string[]
+                      const visible = names.slice(0, 3)
+                      const extra = names.length - visible.length
+                      return (
+                        <>
+                          {visible.map(n => (
+                            <span key={n} className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium">{n}</span>
+                          ))}
+                          {extra > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">+{extra} more</span>}
+                        </>
+                      )
+                    })()}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -445,11 +482,66 @@ export default function AdminJobsPage() {
             </FormField>
           </div>
 
-          <FormField label="Branch (visible only to applicants of this branch)" hint="Leave empty for org-wide">
-            <select className={selectClass} value={form.branch_id} onChange={e => setForm({ ...form, branch_id: e.target.value })}>
-              <option value="">All branches</option>
-              {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+          <FormField
+            label="Visible to branches"
+            hint={form.branch_ids.length === 0
+              ? 'No branches selected — visible to applicants of ALL branches (org-wide).'
+              : `Visible only to applicants of ${form.branch_ids.length} selected branch${form.branch_ids.length === 1 ? '' : 'es'}.`}
+          >
+            <div className="rounded-lg border border-gray-300 bg-white p-2 space-y-2">
+              {form.branch_ids.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {form.branch_ids.map(id => {
+                    const b = branches.find(x => x.id === id)
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 text-red-700 text-xs font-medium border border-red-200">
+                        {b?.name || id.slice(0, 6)}
+                        <button
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, branch_ids: f.branch_ids.filter(x => x !== id) }))}
+                          className="hover:text-red-900"
+                          aria-label="Remove branch"
+                        >×</button>
+                      </span>
+                    )
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, branch_ids: [] }))}
+                    className="text-xs text-gray-500 hover:text-gray-800 underline"
+                  >Clear all</button>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, branch_ids: branches.map(b => b.id) }))}
+                  className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+                >Select all branches</button>
+                <span className="text-gray-400">{form.branch_ids.length}/{branches.length} selected</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto border-t border-gray-100 pt-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                {branches.map(b => {
+                  const checked = form.branch_ids.includes(b.id)
+                  return (
+                    <label key={b.id} className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm cursor-pointer ${checked ? 'bg-red-50 text-red-800' : 'hover:bg-gray-50 text-gray-700'}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={e => setForm(f => ({
+                          ...f,
+                          branch_ids: e.target.checked
+                            ? [...f.branch_ids, b.id]
+                            : f.branch_ids.filter(x => x !== b.id),
+                        }))}
+                        className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                      />
+                      <span className="truncate">{b.name}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
           </FormField>
 
           <FormField label="Salary (text, e.g. '₹15K–25K / month')">

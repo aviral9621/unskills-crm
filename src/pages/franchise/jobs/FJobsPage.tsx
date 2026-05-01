@@ -20,7 +20,7 @@ interface Row {
   job_type: string | null; work_mode: string | null
   description: string | null; apply_url: string | null; contact_info: string | null
   deadline: string | null
-  is_active: boolean; branch_id: string | null; created_at: string
+  is_active: boolean; branch_id: string | null; branch_ids: string[] | null; created_at: string
   salary_text: string | null; experience_text: string | null
   qualification: string | null; openings: number | null
   status: string; approval_status: string; is_featured: boolean
@@ -117,7 +117,10 @@ export default function FJobsPage() {
       err = error
     } else {
       const { error } = await supabase.from('uce_jobs').insert({
-        ...payload, branch_id: branchId, posted_by: user?.id || null,
+        ...payload,
+        branch_id: branchId,
+        branch_ids: branchId ? [branchId] : [],
+        posted_by: user?.id || null,
         approval_status: 'pending', // Branch posts go pending until super-admin approves
       })
       err = error
@@ -137,8 +140,23 @@ export default function FJobsPage() {
     load()
   }
 
-  const myJobs = useMemo(() => rows.filter(r => r.branch_id === branchId), [rows, branchId])
-  const otherJobs = useMemo(() => rows.filter(r => r.branch_id !== branchId), [rows, branchId])
+  // Helper: list of branches a job is targeted at (legacy single + new multi).
+  const targetBranches = (r: Row) =>
+    r.branch_ids && r.branch_ids.length > 0 ? r.branch_ids : (r.branch_id ? [r.branch_id] : [])
+
+  // "My branch's jobs": this branch is among the targets, OR they posted it.
+  const myJobs = useMemo(
+    () => rows.filter(r => branchId && targetBranches(r).includes(branchId)),
+    [rows, branchId],
+  )
+  // "Other relevant jobs": org-wide (no targets) or targeted at other branches we can still see.
+  const otherJobs = useMemo(
+    () => rows.filter(r => {
+      const t = targetBranches(r)
+      return t.length === 0 || (branchId != null && !t.includes(branchId))
+    }),
+    [rows, branchId],
+  )
 
   return (
     <div className="space-y-4">

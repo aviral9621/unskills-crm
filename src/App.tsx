@@ -94,6 +94,7 @@ const AdminAdmitCardFormPage = lazy(() => import('./pages/admin/AdminAdmitCardFo
 const ViewAsStudentLayout = lazy(() => import('./pages/admin/ViewAsStudentLayout'))
 const AdminJobsPage = lazy(() => import('./pages/admin/AdminJobsPage'))
 const AdminJobApplicationsPage = lazy(() => import('./pages/admin/AdminJobApplicationsPage'))
+const AdminJobApplicationsAllPage = lazy(() => import('./pages/admin/AdminJobApplicationsAllPage'))
 const PendingPaymentsPage = lazy(() => import('./pages/fees/PendingPaymentsPage'))
 
 // Franchise pages — lazy
@@ -258,6 +259,7 @@ function AppRoutes() {
           <Route path="branches/:id/points" element={<BranchPointWalletPage />} />
           <Route path="promotions" element={<AdminPromotionsPage />} />
           <Route path="jobs" element={<AdminJobsPage />} />
+          <Route path="job-applications" element={<AdminJobApplicationsAllPage />} />
           <Route path="jobs/:jobId/applications" element={<AdminJobApplicationsPage />} />
           <Route path="support/tickets" element={<AdminTicketsPage />} />
           <Route path="support/tickets/:id" element={<FTicketDetailPage />} />

@@ -35,6 +35,7 @@ export const SEARCH_CATALOG: SearchEntry[] = [
   { title: 'Exam Forms', path: '/admin/exams/forms', category: 'Academics' },
   { title: 'Free Tests', path: '/admin/exams/free-tests', category: 'Academics', keywords: 'free online test public website' },
   { title: 'Free Test — Pending Grading', path: '/admin/exams/free-test-grading', category: 'Academics', keywords: 'manual grading written answers review' },
+  { title: 'Job Applications', path: '/admin/job-applications', category: 'Management', keywords: 'apply candidate applicant resume careers website submissions hiring' },
   { title: 'Marksheets', path: '/admin/marksheets', category: 'Academics', keywords: 'mark sheet grade' },
   { title: 'Certificates', path: '/admin/certificates', category: 'Academics', keywords: 'certificate' },
   { title: 'Issue Certificate', path: '/admin/certificates/issue', category: 'Academics' },
