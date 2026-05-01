@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, Plus, Pencil, Trash2, HelpCircle, Loader2,
-  CheckCircle2, XCircle, ChevronDown, ChevronUp, Languages,
+  CheckCircle2, XCircle, ChevronDown, ChevronUp, Languages, AlertTriangle, Search,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -22,6 +22,10 @@ interface Question {
   option_c: string | null
   option_d: string | null
   correct_answer: string | null
+  expected_answer: string | null
+  keywords: string[] | null
+  topic: string | null
+  explanation: string | null
   marks: number
   image_url: string | null
   difficulty: string | null
@@ -35,22 +39,41 @@ interface PaperInfo {
 }
 
 type QuestionType = 'mcq' | 'true_false' | 'short_answer' | 'long_answer'
-const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
-  { value: 'mcq', label: 'Multiple Choice (MCQ)' },
-  { value: 'true_false', label: 'True / False' },
-  { value: 'short_answer', label: 'Short Answer' },
-  { value: 'long_answer', label: 'Long Answer' },
+const QUESTION_TYPES: { value: QuestionType; label: string; short: string }[] = [
+  { value: 'mcq',          label: 'Multiple Choice (MCQ)', short: 'MCQ' },
+  { value: 'true_false',   label: 'True / False',          short: 'T/F' },
+  { value: 'short_answer', label: 'Short Answer',          short: 'Short' },
+  { value: 'long_answer',  label: 'Long Answer',           short: 'Long' },
 ]
 const DIFFICULTIES = [
-  { value: 'easy', label: 'Easy' },
+  { value: 'easy',   label: 'Easy' },
   { value: 'medium', label: 'Medium' },
-  { value: 'hard', label: 'Hard' },
+  { value: 'hard',   label: 'Hard' },
 ]
+
+const typeBadgeClass: Record<QuestionType, string> = {
+  mcq:          'bg-blue-50 text-blue-600',
+  true_false:   'bg-purple-50 text-purple-600',
+  short_answer: 'bg-amber-50 text-amber-600',
+  long_answer:  'bg-rose-50 text-rose-600',
+}
 
 const emptyForm = {
   question_text_en: '', question_text_hi: '', question_type: 'mcq' as QuestionType,
   option_a: '', option_b: '', option_c: '', option_d: '',
-  correct_answer: '', marks: '1', difficulty: 'medium', image_url: '',
+  correct_answer: '', expected_answer: '', keywords: '',
+  marks: '1', difficulty: 'medium', image_url: '',
+  topic: '', explanation: '',
+}
+
+function isIncomplete(q: Question): { incomplete: boolean; reason: string } {
+  if (q.question_type === 'mcq' || q.question_type === 'true_false') {
+    if (!q.correct_answer) return { incomplete: true, reason: 'Missing correct answer' }
+  }
+  if (q.question_type === 'short_answer' || q.question_type === 'long_answer') {
+    if (!q.expected_answer || !q.expected_answer.trim()) return { incomplete: true, reason: 'Missing expected answer' }
+  }
+  return { incomplete: false, reason: '' }
 }
 
 export default function QuestionsPage() {
@@ -61,6 +84,13 @@ export default function QuestionsPage() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>(null)
+
+  // Filters
+  const [search, setSearch] = useState('')
+  const [filterType, setFilterType] = useState<'' | QuestionType>('')
+  const [filterTopic, setFilterTopic] = useState('')
+  const [filterDifficulty, setFilterDifficulty] = useState('')
+  const [showIncompleteOnly, setShowIncompleteOnly] = useState(false)
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false)
@@ -90,7 +120,7 @@ export default function QuestionsPage() {
 
   function openAdd() {
     setEditing(null)
-    setForm({ ...emptyForm, marks: '1' })
+    setForm({ ...emptyForm })
     setModalOpen(true)
   }
 
@@ -105,9 +135,13 @@ export default function QuestionsPage() {
       option_c: q.option_c || '',
       option_d: q.option_d || '',
       correct_answer: q.correct_answer || '',
+      expected_answer: q.expected_answer || '',
+      keywords: (q.keywords || []).join(', '),
       marks: String(q.marks),
       difficulty: (q.difficulty || 'medium').toLowerCase(),
       image_url: q.image_url || '',
+      topic: q.topic || '',
+      explanation: q.explanation || '',
     })
     setModalOpen(true)
   }
@@ -116,7 +150,6 @@ export default function QuestionsPage() {
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
-  // Auto-translate question text between English and Hindi
   const { translating, notifyTyping } = useBidirectionalAutoTranslate({
     enText: form.question_text_en,
     hiText: form.question_text_hi,
@@ -127,28 +160,48 @@ export default function QuestionsPage() {
 
   async function handleSave() {
     if (!form.question_text_en.trim()) { toast.error('Question text is required'); return }
-    if ((form.question_type === 'mcq') && (!form.option_a || !form.option_b)) {
-      toast.error('MCQ requires at least options A and B'); return
+
+    if (form.question_type === 'mcq') {
+      if (!form.option_a.trim() || !form.option_b.trim() || !form.option_c.trim() || !form.option_d.trim()) {
+        toast.error('All four MCQ options are required'); return
+      }
+      if (!form.correct_answer) { toast.error('Correct answer is required'); return }
     }
-    if ((form.question_type === 'mcq' || form.question_type === 'true_false') && !form.correct_answer) {
+    if (form.question_type === 'true_false' && !form.correct_answer) {
       toast.error('Correct answer is required'); return
+    }
+    if ((form.question_type === 'short_answer' || form.question_type === 'long_answer') && !form.expected_answer.trim()) {
+      toast.error('Expected / model answer is required'); return
     }
 
     setSaving(true)
     try {
+      const isMcq = form.question_type === 'mcq'
+      const isTF  = form.question_type === 'true_false'
+      const isWritten = form.question_type === 'short_answer' || form.question_type === 'long_answer'
+
+      const keywordsArr = form.keywords
+        .split(',')
+        .map(k => k.trim())
+        .filter(Boolean)
+
       const payload = {
         paper_set_id: paperId!,
         question_text_en: form.question_text_en.trim(),
         question_text_hi: form.question_text_hi.trim() || null,
         question_type: form.question_type,
-        option_a: form.question_type === 'mcq' ? form.option_a : (form.question_type === 'true_false' ? 'True' : null),
-        option_b: form.question_type === 'mcq' ? form.option_b : (form.question_type === 'true_false' ? 'False' : null),
-        option_c: form.question_type === 'mcq' ? (form.option_c || null) : null,
-        option_d: form.question_type === 'mcq' ? (form.option_d || null) : null,
-        correct_answer: form.correct_answer || null,
+        option_a: isMcq ? form.option_a.trim() : (isTF ? 'True'  : null),
+        option_b: isMcq ? form.option_b.trim() : (isTF ? 'False' : null),
+        option_c: isMcq ? form.option_c.trim() : null,
+        option_d: isMcq ? form.option_d.trim() : null,
+        correct_answer: (isMcq || isTF) ? form.correct_answer : null,
+        expected_answer: isWritten ? form.expected_answer.trim() : null,
+        keywords: isWritten ? keywordsArr : [],
         marks: parseFloat(form.marks) || 1,
         difficulty: form.difficulty ? form.difficulty.toLowerCase() : null,
         image_url: form.image_url || null,
+        topic: form.topic.trim() || null,
+        explanation: form.explanation.trim() || null,
         display_order: editing ? editing.display_order : questions.length,
       }
 
@@ -163,8 +216,10 @@ export default function QuestionsPage() {
       }
       setModalOpen(false)
       fetchData()
-    } catch { toast.error('Failed to save question') }
-    finally { setSaving(false) }
+    } catch (e) {
+      console.error(e)
+      toast.error('Failed to save question')
+    } finally { setSaving(false) }
   }
 
   async function handleDelete() {
@@ -179,7 +234,31 @@ export default function QuestionsPage() {
     finally { setDeleting(false); setDelTarget(null) }
   }
 
-  const totalMarksAdded = questions.reduce((s, q) => s + q.marks, 0)
+  // Derived
+  const allTopics = useMemo(() => {
+    const s = new Set<string>()
+    questions.forEach(q => { if (q.topic) s.add(q.topic) })
+    return Array.from(s).sort()
+  }, [questions])
+
+  const filteredQuestions = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    return questions.filter(q => {
+      if (filterType && q.question_type !== filterType) return false
+      if (filterTopic && (q.topic || '') !== filterTopic) return false
+      if (filterDifficulty && (q.difficulty || '') !== filterDifficulty) return false
+      if (showIncompleteOnly && !isIncomplete(q).incomplete) return false
+      if (term) {
+        const hay = [q.question_text_en, q.question_text_hi, q.topic, q.option_a, q.option_b, q.option_c, q.option_d, q.expected_answer]
+          .filter(Boolean).join(' ').toLowerCase()
+        if (!hay.includes(term)) return false
+      }
+      return true
+    })
+  }, [questions, filterType, filterTopic, filterDifficulty, showIncompleteOnly, search])
+
+  const totalMarksAdded = questions.reduce((s, q) => s + Number(q.marks || 0), 0)
+  const incompleteCount = questions.filter(q => isIncomplete(q).incomplete).length
   const course = paper?.course as { name: string; code: string } | null
 
   if (loading) return (
@@ -206,7 +285,7 @@ export default function QuestionsPage() {
         </button>
       </div>
 
-      {/* Stats bar */}
+      {/* Stats */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
@@ -218,8 +297,8 @@ export default function QuestionsPage() {
             <p className="text-lg font-bold text-gray-900">{totalMarksAdded}<span className="text-sm text-gray-400 font-normal"> / {paper?.total_marks || '—'}</span></p>
           </div>
           <div>
-            <p className="text-xs text-gray-400">Completion</p>
-            <p className="text-lg font-bold text-gray-900">{paper?.total_questions ? Math.round((questions.length / paper.total_questions) * 100) : 0}%</p>
+            <p className="text-xs text-gray-400">Needs review</p>
+            <p className={`text-lg font-bold ${incompleteCount ? 'text-amber-600' : 'text-gray-900'}`}>{incompleteCount}</p>
           </div>
         </div>
         {paper?.total_questions && questions.length < paper.total_questions && (
@@ -229,22 +308,59 @@ export default function QuestionsPage() {
         )}
       </div>
 
-      {/* Questions list */}
-      {questions.length === 0 ? (
+      {/* Filters */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-4 space-y-3">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search question text, options, topic…"
+            className={`${inputClass} pl-9`}
+          />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <select value={filterType} onChange={e => setFilterType(e.target.value as QuestionType | '')} className={selectClass}>
+            <option value="">All types</option>
+            {QUESTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)} className={selectClass}>
+            <option value="">All topics</option>
+            {allTopics.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={filterDifficulty} onChange={e => setFilterDifficulty(e.target.value)} className={selectClass}>
+            <option value="">All levels</option>
+            {DIFFICULTIES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </select>
+          <label className="flex items-center gap-2 px-3 rounded-lg border border-gray-200 bg-gray-50 cursor-pointer text-xs text-gray-700">
+            <input type="checkbox" checked={showIncompleteOnly} onChange={e => setShowIncompleteOnly(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+            <span>Needs review only</span>
+          </label>
+        </div>
+      </div>
+
+      {/* List */}
+      {filteredQuestions.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <HelpCircle size={40} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-sm text-gray-400">No questions added yet</p>
-          <button onClick={openAdd} className="mt-3 text-sm text-red-600 font-medium hover:text-red-700">+ Add first question</button>
+          <p className="text-sm text-gray-400">{questions.length === 0 ? 'No questions added yet' : 'No questions match the filters'}</p>
+          {questions.length === 0 && (
+            <button onClick={openAdd} className="mt-3 text-sm text-red-600 font-medium hover:text-red-700">+ Add first question</button>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
-          {questions.map((q, idx) => {
+          {filteredQuestions.map((q, idx) => {
             const isExpanded = expanded === q.id
             const isMCQ = q.question_type === 'mcq'
             const isTF = q.question_type === 'true_false'
+            const isWritten = q.question_type === 'short_answer' || q.question_type === 'long_answer'
+            const incomplete = isIncomplete(q)
+            const typeMeta = QUESTION_TYPES.find(t => t.value === q.question_type)
 
             return (
-              <div key={q.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div key={q.id} className={`bg-white rounded-xl border shadow-sm overflow-hidden ${incomplete.incomplete ? 'border-amber-300' : 'border-gray-200'}`}>
                 <button
                   onClick={() => setExpanded(isExpanded ? null : q.id)}
                   className="w-full flex items-start gap-3 p-4 text-left hover:bg-gray-50 transition-colors"
@@ -255,9 +371,17 @@ export default function QuestionsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-900 line-clamp-2">{q.question_text_en}</p>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">{q.question_type.replace('_', ' ').toUpperCase()}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${typeBadgeClass[q.question_type as QuestionType] || 'bg-gray-100 text-gray-600'}`}>
+                        {typeMeta?.short || q.question_type.toUpperCase()}
+                      </span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-600 font-medium">{q.marks} marks</span>
                       {q.difficulty && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium capitalize">{q.difficulty}</span>}
+                      {q.topic && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium">{q.topic}</span>}
+                      {incomplete.incomplete && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-medium inline-flex items-center gap-1">
+                          <AlertTriangle size={10} /> {incomplete.reason}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -268,13 +392,13 @@ export default function QuestionsPage() {
                 </button>
 
                 {isExpanded && (
-                  <div className="px-4 pb-4 pt-0 border-t border-gray-100">
+                  <div className="px-4 pb-4 pt-0 border-t border-gray-100 space-y-3">
                     {q.question_text_hi && (
-                      <p className="text-sm text-gray-500 italic mb-3">{q.question_text_hi}</p>
+                      <p className="text-sm text-gray-500 italic">{q.question_text_hi}</p>
                     )}
 
                     {(isMCQ || isTF) && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {[
                           { key: 'A', val: q.option_a },
                           { key: 'B', val: q.option_b },
@@ -293,10 +417,26 @@ export default function QuestionsPage() {
                       </div>
                     )}
 
-                    {q.correct_answer && !isMCQ && !isTF && (
-                      <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200">
-                        <p className="text-xs text-green-600 font-medium mb-1">Correct Answer:</p>
-                        <p className="text-sm text-green-800">{q.correct_answer}</p>
+                    {isWritten && q.expected_answer && (
+                      <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                        <p className="text-xs text-green-700 font-medium mb-1">Expected / Model Answer</p>
+                        <p className="text-sm text-green-900 whitespace-pre-wrap">{q.expected_answer}</p>
+                      </div>
+                    )}
+
+                    {isWritten && q.keywords && q.keywords.length > 0 && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-gray-500">Keywords:</span>
+                        {q.keywords.map(k => (
+                          <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{k}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    {q.explanation && (
+                      <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <p className="text-xs text-blue-700 font-medium mb-1">Explanation (shown in post-test review)</p>
+                        <p className="text-sm text-blue-900 whitespace-pre-wrap">{q.explanation}</p>
                       </div>
                     )}
                   </div>
@@ -348,7 +488,7 @@ export default function QuestionsPage() {
             </div>
           </FormField>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <FormField label="Question Type" required>
               <select value={form.question_type} onChange={e => updateForm('question_type', e.target.value)} className={selectClass}>
                 {QUESTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -361,6 +501,12 @@ export default function QuestionsPage() {
               <select value={form.difficulty} onChange={e => updateForm('difficulty', e.target.value)} className={selectClass}>
                 {DIFFICULTIES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
+            </FormField>
+            <FormField label="Topic" hint="e.g. MS Word, Networking">
+              <input value={form.topic} onChange={e => updateForm('topic', e.target.value)} className={inputClass} placeholder="Topic label" list="topic-suggestions" />
+              <datalist id="topic-suggestions">
+                {allTopics.map(t => <option key={t} value={t} />)}
+              </datalist>
             </FormField>
           </div>
 
@@ -375,19 +521,20 @@ export default function QuestionsPage() {
                 <FormField label="Option B" required>
                   <input value={form.option_b} onChange={e => updateForm('option_b', e.target.value)} className={inputClass} placeholder="Option B" />
                 </FormField>
-                <FormField label="Option C">
-                  <input value={form.option_c} onChange={e => updateForm('option_c', e.target.value)} className={inputClass} placeholder="Option C (optional)" />
+                <FormField label="Option C" required>
+                  <input value={form.option_c} onChange={e => updateForm('option_c', e.target.value)} className={inputClass} placeholder="Option C" />
                 </FormField>
-                <FormField label="Option D">
-                  <input value={form.option_d} onChange={e => updateForm('option_d', e.target.value)} className={inputClass} placeholder="Option D (optional)" />
+                <FormField label="Option D" required>
+                  <input value={form.option_d} onChange={e => updateForm('option_d', e.target.value)} className={inputClass} placeholder="Option D" />
                 </FormField>
               </div>
               <FormField label="Correct Answer" required>
                 <select value={form.correct_answer} onChange={e => updateForm('correct_answer', e.target.value)} className={selectClass}>
                   <option value="">Select correct option</option>
-                  <option value="A">A</option><option value="B">B</option>
-                  {form.option_c && <option value="C">C</option>}
-                  {form.option_d && <option value="D">D</option>}
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                  <option value="D">D</option>
                 </select>
               </FormField>
             </div>
@@ -395,26 +542,54 @@ export default function QuestionsPage() {
 
           {/* True/False */}
           {form.question_type === 'true_false' && (
-            <div className="bg-gray-50 rounded-xl p-4">
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+              <p className="text-xs text-gray-500">Options are auto-set: A = True, B = False</p>
               <FormField label="Correct Answer" required>
                 <select value={form.correct_answer} onChange={e => updateForm('correct_answer', e.target.value)} className={selectClass}>
                   <option value="">Select</option>
-                  <option value="A">True</option>
-                  <option value="B">False</option>
+                  <option value="A">A — True</option>
+                  <option value="B">B — False</option>
                 </select>
               </FormField>
             </div>
           )}
 
-          {/* Short/Long answer */}
+          {/* Short / Long answer */}
           {(form.question_type === 'short_answer' || form.question_type === 'long_answer') && (
-            <div className="bg-gray-50 rounded-xl p-4">
-              <FormField label="Model Answer" hint="Optional — for reference during grading">
-                <textarea value={form.correct_answer} onChange={e => updateForm('correct_answer', e.target.value)} rows={3}
-                  className={`${inputClass} resize-none`} placeholder="Enter model answer..." />
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+              <FormField
+                label="Expected / Model Answer"
+                required
+                hint={form.question_type === 'short_answer' ? '1–2 lines, used as reference during manual grading' : 'Multi-line model answer for grading reference'}
+              >
+                <textarea
+                  value={form.expected_answer}
+                  onChange={e => updateForm('expected_answer', e.target.value)}
+                  rows={form.question_type === 'long_answer' ? 6 : 3}
+                  className={`${inputClass} resize-none`}
+                  placeholder="Enter the expected answer..."
+                />
+              </FormField>
+              <FormField label="Keywords" hint="Comma-separated; helps faculty grade quickly">
+                <input
+                  value={form.keywords}
+                  onChange={e => updateForm('keywords', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. CPU, RAM, motherboard"
+                />
               </FormField>
             </div>
           )}
+
+          <FormField label="Explanation" hint="Optional — shown to the student in the post-test review">
+            <textarea
+              value={form.explanation}
+              onChange={e => updateForm('explanation', e.target.value)}
+              rows={2}
+              className={`${inputClass} resize-none`}
+              placeholder="Why is this the correct answer? (optional)"
+            />
+          </FormField>
         </div>
 
         <div className="flex gap-3 pt-4 border-t border-gray-100 mt-4">

@@ -33,6 +33,8 @@ export const SEARCH_CATALOG: SearchEntry[] = [
   { title: 'Exam Paper Sets', path: '/admin/exams/paper-sets', category: 'Academics', keywords: 'tests question paper' },
   { title: 'Exam Results', path: '/admin/exams/results', category: 'Academics' },
   { title: 'Exam Forms', path: '/admin/exams/forms', category: 'Academics' },
+  { title: 'Free Tests', path: '/admin/exams/free-tests', category: 'Academics', keywords: 'free online test public website' },
+  { title: 'Free Test — Pending Grading', path: '/admin/exams/free-test-grading', category: 'Academics', keywords: 'manual grading written answers review' },
   { title: 'Marksheets', path: '/admin/marksheets', category: 'Academics', keywords: 'mark sheet grade' },
   { title: 'Certificates', path: '/admin/certificates', category: 'Academics', keywords: 'certificate' },
   { title: 'Issue Certificate', path: '/admin/certificates/issue', category: 'Academics' },

@@ -44,6 +44,7 @@ const PaperSetFormPage = lazy(() => import('./pages/exams/PaperSetFormPage'))
 const QuestionsPage = lazy(() => import('./pages/exams/QuestionsPage'))
 const ResultsPage = lazy(() => import('./pages/exams/ResultsPage'))
 const FreeTestsPage = lazy(() => import('./pages/exams/FreeTestsPage'))
+const FreeTestGradingPage = lazy(() => import('./pages/exams/FreeTestGradingPage'))
 const MarksheetPage = lazy(() => import('./pages/marksheet/MarksheetPage'))
 const MarksheetSettingsPage = lazy(() => import('./pages/marksheet/MarksheetSettingsPage'))
 const CertificateListPage = lazy(() => import('./pages/certificate/CertificateListPage'))
@@ -205,6 +206,7 @@ function AppRoutes() {
           <Route path="exams/forms" element={<AdminExamFormsPage />} />
           <Route path="exams/form-windows" element={<AdminExamFormWindowsPage />} />
           <Route path="exams/free-tests" element={<FreeTestsPage />} />
+          <Route path="exams/free-test-grading" element={<FreeTestGradingPage />} />
           <Route path="exams/admit-cards/new" element={<AdminAdmitCardFormPage />} />
 
           <Route path="marksheets" element={<MarksheetPage />} />

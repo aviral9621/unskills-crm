@@ -36,6 +36,7 @@ interface Attempt {
   started_at: string
   submitted_at: string | null
   lead_id: string | null
+  grading_status: string | null
   paper_set?: { paper_name: string }[] | null
 }
 
@@ -52,6 +53,27 @@ export default function FreeTestsPage() {
   const menuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const [detailOpen, setDetailOpen] = useState<Attempt | null>(null)
   const [converting, setConverting] = useState<string | null>(null)
+  const [pendingGradingCount, setPendingGradingCount] = useState(0)
+  const [audit, setAudit] = useState<{ autoMissing: number; writtenMissing: number; missingTopic: number } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [{ count: pendingCount }, { data: auditRow }] = await Promise.all([
+        supabase
+          .from('uce_free_test_attempts')
+          .select('id', { count: 'exact', head: true })
+          .eq('grading_status', 'pending_manual_review')
+          .eq('is_submitted', true),
+        supabase.rpc('get_free_test_question_audit'),
+      ])
+      if (cancelled) return
+      setPendingGradingCount(pendingCount ?? 0)
+      const a = (auditRow as unknown as { auto_missing_correct: number; written_missing_expected: number; missing_topic: number }[] | null)?.[0]
+      if (a) setAudit({ autoMissing: a.auto_missing_correct, writtenMissing: a.written_missing_expected, missingTopic: a.missing_topic })
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => { loadPapers() }, [])
   useEffect(() => { if (activeTab === 'attempts') loadAttempts() }, [activeTab])
@@ -115,7 +137,7 @@ export default function FreeTestsPage() {
     try {
       const { data, error } = await supabase
         .from('uce_free_test_attempts')
-        .select('id, name, phone, email, pursuing, score, total_marks, is_submitted, started_at, submitted_at, lead_id, paper_set:uce_paper_sets(paper_name)')
+        .select('id, name, phone, email, pursuing, score, total_marks, is_submitted, started_at, submitted_at, lead_id, grading_status, paper_set:uce_paper_sets(paper_name)')
         .order('created_at', { ascending: false })
         .limit(200)
       if (error) throw error
@@ -217,8 +239,32 @@ export default function FreeTestsPage() {
           >
             Submissions
           </button>
+          {pendingGradingCount > 0 && (
+            <button
+              onClick={() => navigate('/admin/exams/free-test-grading')}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 inline-flex items-center gap-1.5"
+            >
+              {pendingGradingCount} pending grading
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Data hygiene banner */}
+      {audit && (audit.autoMissing + audit.writtenMissing + audit.missingTopic > 0) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4 flex items-start gap-3">
+          <span className="mt-0.5 text-amber-600">⚠️</span>
+          <div className="text-xs sm:text-sm text-amber-800 flex-1">
+            <p className="font-semibold">Free-test question bank needs attention:</p>
+            <ul className="mt-1 list-disc list-inside space-y-0.5">
+              {audit.autoMissing > 0 && <li>{audit.autoMissing} MCQ / True-False questions are missing a correct answer.</li>}
+              {audit.writtenMissing > 0 && <li>{audit.writtenMissing} short / long answer questions are missing an expected answer (faculty needs this for grading).</li>}
+              {audit.missingTopic > 0 && <li>{audit.missingTopic} questions have no topic — the website&rsquo;s weak-topic chart depends on this.</li>}
+            </ul>
+            <p className="mt-1 text-[11px] text-amber-700">Open the question bank for any free-test paper, then use the &ldquo;Needs review only&rdquo; filter to fix these.</p>
+          </div>
+        </div>
+      )}
 
       {activeTab === 'papers' && (
         <>
@@ -365,9 +411,17 @@ export default function FreeTestsPage() {
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-center hidden md:table-cell">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${a.is_submitted ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                          {a.is_submitted ? 'Submitted' : 'Ongoing'}
-                        </span>
+                        {a.is_submitted ? (
+                          a.grading_status === 'pending_manual_review' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Pending grading</span>
+                          ) : a.grading_status === 'fully_graded' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Fully graded</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Submitted</span>
+                          )
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">Ongoing</span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 text-gray-500 text-xs hidden lg:table-cell">
                         {new Date(a.started_at).toLocaleDateString('en-IN')}
