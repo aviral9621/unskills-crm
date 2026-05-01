@@ -51,16 +51,28 @@ export interface BuildMarksheetInput {
   branch_category?: string
 }
 
-export async function toDataUrl(url: string): Promise<string> {
-  const res = await fetch(url, { mode: 'cors' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const blob = await res.blob()
+async function blobToDataUrl(blob: Blob): Promise<string> {
   return await new Promise((resolve, reject) => {
     const r = new FileReader()
     r.onloadend = () => resolve(r.result as string)
     r.onerror = reject
     r.readAsDataURL(blob)
   })
+}
+
+export async function toDataUrl(url: string): Promise<string> {
+  if (url.startsWith('data:')) return url
+  try {
+    const res = await fetch(url, { mode: 'cors' })
+    if (res.ok) return await blobToDataUrl(await res.blob())
+  } catch { /* fall through to proxy */ }
+  const supaUrl = (import.meta as { env?: { VITE_SUPABASE_URL?: string } }).env?.VITE_SUPABASE_URL
+  if (supaUrl) {
+    const proxied = `${supaUrl}/functions/v1/image-proxy?url=${encodeURIComponent(url)}`
+    const res = await fetch(proxied)
+    if (res.ok) return await blobToDataUrl(await res.blob())
+  }
+  throw new Error(`could not fetch image: ${url}`)
 }
 
 function fmtDate(iso: string | null): string {
