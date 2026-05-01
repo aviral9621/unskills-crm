@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase'
 import { formatDate, cn } from '../../lib/utils'
 import { useAuth } from '../../contexts/AuthContext'
 import { getCardSettings, idCardVerifyUrl, type CardSettings } from '../../lib/cardSettings'
+import { toDataUrl } from '../../lib/pdf/admit-card'
 
 interface BranchInfo {
   name: string | null
@@ -569,15 +570,3 @@ function CardRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** Convert a URL (same-origin public or supabase public) to a data URL for @react-pdf. */
-async function toDataUrl(url: string): Promise<string> {
-  const res = await fetch(url, { mode: 'cors' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const blob = await res.blob()
-  return await new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onloadend = () => resolve(r.result as string)
-    r.onerror = reject
-    r.readAsDataURL(blob)
-  })
-}

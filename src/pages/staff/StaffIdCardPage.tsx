@@ -8,6 +8,7 @@ import { formatDate, cn } from '../../lib/utils'
 import { useAuth } from '../../contexts/AuthContext'
 import { getCardSettings, type CardSettings } from '../../lib/cardSettings'
 import { getStaffCardSettings, staffIdCardVerifyUrl, type StaffCardSettings } from '../../lib/staffCardSettings'
+import { toDataUrl } from '../../lib/pdf/admit-card'
 
 interface BranchInfo {
   name: string | null
@@ -536,16 +537,4 @@ function pickInitialColor(seed: string): string {
   let h = 0
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0
   return palette[Math.abs(h) % palette.length]
-}
-
-async function toDataUrl(url: string): Promise<string> {
-  const res = await fetch(url, { mode: 'cors' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const blob = await res.blob()
-  return await new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onloadend = () => resolve(r.result as string)
-    r.onerror = reject
-    r.readAsDataURL(blob)
-  })
 }

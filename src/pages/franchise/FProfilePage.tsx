@@ -13,6 +13,7 @@ import { uploadPublicFile, STORAGE_BUCKETS } from '../../lib/uploads'
 import { downloadAtcCertificate } from '../../lib/atcCertificate'
 import { getMarksheetSettings } from '../../lib/marksheetSettings'
 import { getCardSettings } from '../../lib/cardSettings'
+import { toDataUrl } from '../../lib/pdf/admit-card'
 
 // ── Shared image-upload widget ────────────────────────────────────────────────
 
@@ -70,18 +71,6 @@ function ImgUpload({
 }
 
 // ── Utility helpers ───────────────────────────────────────────────────────────
-
-async function toDataUrl(url: string): Promise<string> {
-  const res = await fetch(url, { mode: 'cors' })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const blob = await res.blob()
-  return new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onloadend = () => resolve(r.result as string)
-    r.onerror = reject
-    r.readAsDataURL(blob)
-  })
-}
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
