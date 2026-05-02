@@ -73,7 +73,6 @@ export default function BranchFormPage() {
 
   const {
     register,
-    handleSubmit,
     watch,
     reset,
     trigger,
@@ -193,12 +192,20 @@ export default function BranchFormPage() {
     return uploadPublicFile(bucket, path, file)
   }
 
-  /* ─── Submit (final step) ─── */
-  async function onSubmit(formData: BranchFormData) {
-    // Guard: never submit unless the user is on the final step.
-    // Prevents accidental saves from Enter-key, keyboard focus, or
-    // any stray form submission while stepping through the wizard.
+  /* ─── Submit (final step, explicit click only) ───────────────────────────
+   *
+   * IMPORTANT: this function must only be called by an explicit click on the
+   * Update/Create button. It must NEVER run implicitly because the form was
+   * "submitted" — pressing Enter inside an input, browser autofill, focus
+   * returning from a file picker, or any other native submit pathway must be
+   * fully ignored. To enforce that we (a) intercept <form>'s onSubmit and
+   * preventDefault unconditionally, and (b) require explicitlyTriggered to
+   * be true here.
+   * --------------------------------------------------------------------- */
+  async function onSubmit(formData: BranchFormData, explicitlyTriggered: boolean) {
+    if (!explicitlyTriggered) return
     if (step !== 4) return
+    if (saving) return
 
     const parsed = fullSchema.safeParse(formData)
     if (!parsed.success) {
@@ -384,8 +391,28 @@ export default function BranchFormPage() {
         </div>
       </div>
 
-      {/* ═══ Form Card ═══ */}
-      <form onSubmit={handleSubmit(onSubmit)}>
+      {/* ═══ Form Card ═══
+       *
+       * onSubmit is intentionally a no-op (preventDefault). Saving must come
+       * ONLY from an explicit click on the Update/Create button below — this
+       * prevents accidental saves from Enter-key submits, browser autofill,
+       * or focus quirks after the file-picker dialog closes on step 4.
+       * --------------------------------------------------------------------- */}
+      <form
+        noValidate
+        onSubmit={e => { e.preventDefault() }}
+        onKeyDown={e => {
+          // Don't let Enter inside any input implicitly submit. Let multi-line
+          // textareas and the file-picker still receive Enter.
+          if (e.key === 'Enter') {
+            const target = e.target as HTMLElement
+            const tag = target.tagName
+            if (tag !== 'TEXTAREA' && (target as HTMLInputElement).type !== 'file') {
+              e.preventDefault()
+            }
+          }
+        }}
+      >
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-5 min-h-[280px]">
           {/* ─── Step 1: Center Information ─── */}
           {step === 1 && (
@@ -572,8 +599,22 @@ export default function BranchFormPage() {
               Next <ArrowRight size={16} />
             </button>
           ) : (
-            <button type="submit" disabled={saving}
-              className="px-4 sm:px-6 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 sm:gap-2 shadow-sm">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={async () => {
+                // Re-validate every step's fields before saving so the user
+                // sees the right error if they jumped backwards and broke a
+                // previous step.
+                const ok = await trigger(undefined, { shouldFocus: true })
+                if (!ok) {
+                  toast.error('Please fix the highlighted fields')
+                  return
+                }
+                await onSubmit(getValues(), /* explicitlyTriggered */ true)
+              }}
+              className="px-4 sm:px-6 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 sm:gap-2 shadow-sm"
+            >
               {saving && <Loader2 size={16} className="animate-spin" />}
               {saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}
             </button>
