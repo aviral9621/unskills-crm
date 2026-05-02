@@ -277,26 +277,26 @@ export default function AdminJobsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="space-y-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:space-y-0">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-heading">Job Posting</h1>
-          <p className="text-sm text-gray-500">
-            Manage all jobs across branches. Public jobs appear on the website careers page and student panel.
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Job Posting</h1>
+          <p className="text-xs sm:text-sm text-gray-500">
+            Manage all jobs across branches. Public jobs appear on the website and student panel.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <Link
             to="/admin/job-applications"
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-xs sm:text-sm font-semibold hover:bg-gray-50"
           >
-            <UsersIcon size={16} /> All Applications
+            <UsersIcon size={14} /> <span>Applications</span>
           </Link>
           <button
             onClick={openNew}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-semibold hover:bg-red-700"
           >
-            <Plus size={16} /> Post Job
+            <Plus size={14} /> <span>Post Job</span>
           </button>
         </div>
       </div>
@@ -399,16 +399,17 @@ export default function AdminJobsPage() {
 
               {r.description && <p className="mt-2 text-sm text-gray-600 line-clamp-2">{r.description}</p>}
 
-              <div className="mt-3 flex items-center justify-between">
-                <div className="text-[11px] text-gray-500 flex items-center gap-3">
-                  <span className="flex items-center gap-1"><Clock size={11} /> {formatDateDDMMYYYY(r.created_at)}</span>
-                  {r.deadline && <span>By {formatDateDDMMYYYY(r.deadline)}</span>}
-                  <span className="flex items-center gap-1"><Eye size={11} />{r.views_count}</span>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[11px] text-gray-500 flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
+                  <span className="inline-flex items-center gap-1"><Clock size={11} /> {formatDateDDMMYYYY(r.created_at)}</span>
+                  {r.deadline && <span className="hidden sm:inline">By {formatDateDDMMYYYY(r.deadline)}</span>}
+                  <span className="inline-flex items-center gap-1"><Eye size={11} />{r.views_count}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 ml-auto">
                   <Link
                     to={`/admin/jobs/${r.id}/applications`}
                     className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 font-medium"
+                    title="View applications for this job"
                   >
                     <UsersIcon size={12} /> {r.applications_count}
                   </Link>

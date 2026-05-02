@@ -215,38 +215,42 @@ export default function FreeTestsPage() {
   const otherPapers = papers.filter(p => !p.is_free_test)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="space-y-3 sm:flex sm:items-center sm:justify-between sm:gap-3 sm:space-y-0">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 font-heading flex items-center gap-2">
-            <FlaskConical size={20} className="text-red-600" /> Free Online Tests
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900 font-heading flex items-center gap-2">
+            <FlaskConical size={18} className="text-red-600" /> Free Online Tests
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
             Enable any paper set as a public free test — anyone can take it without logging in.
           </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setActiveTab('papers')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'papers' ? 'bg-red-600 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-          >
-            Paper Sets
-          </button>
-          <button
-            onClick={() => setActiveTab('attempts')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'attempts' ? 'bg-red-600 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-          >
-            Submissions
-          </button>
-          {pendingGradingCount > 0 && (
+        {/* Tab pills: scrollable on mobile so 3 buttons never wrap */}
+        <div className="-mx-1 px-1 overflow-x-auto sm:overflow-visible">
+          <div className="flex gap-2 w-max sm:w-auto">
             <button
-              onClick={() => navigate('/admin/exams/free-test-grading')}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 inline-flex items-center gap-1.5"
+              onClick={() => setActiveTab('papers')}
+              className={`shrink-0 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${activeTab === 'papers' ? 'bg-red-600 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
             >
-              {pendingGradingCount} pending grading
+              Paper Sets
             </button>
-          )}
+            <button
+              onClick={() => setActiveTab('attempts')}
+              className={`shrink-0 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${activeTab === 'attempts' ? 'bg-red-600 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            >
+              Submissions
+            </button>
+            {pendingGradingCount > 0 && (
+              <button
+                onClick={() => navigate('/admin/exams/free-test-grading')}
+                className="shrink-0 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200 inline-flex items-center gap-1"
+              >
+                <span className="font-bold">{pendingGradingCount}</span>
+                <span>pending</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

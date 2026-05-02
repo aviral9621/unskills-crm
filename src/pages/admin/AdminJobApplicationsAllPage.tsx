@@ -166,36 +166,38 @@ export default function AdminJobApplicationsAllPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="space-y-2 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:space-y-0">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 font-heading">Job Applications</h1>
-          <p className="text-sm text-gray-500">All applications submitted from the website, student panel, and walk-ins.</p>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Job Applications</h1>
+          <p className="text-xs sm:text-sm text-gray-500">All applications from the website, student panel, and walk-ins.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link to="/admin/jobs" className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50">
-            <Briefcase size={16} /> Job Postings
+        <div className="flex items-center gap-2">
+          <Link to="/admin/jobs" className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-gray-50">
+            <Briefcase size={14} /> <span className="sm:inline">Job Postings</span>
           </Link>
           {filtered.length > 0 && (
-            <button onClick={exportCSV} className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm">
-              <Download size={16} /> Export CSV
+            <button onClick={exportCSV} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm">
+              <Download size={14} /> <span>Export CSV</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Stats strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-        {(['new', 'shortlisted', 'interviewed', 'hired', 'rejected'] as const).map(k => (
-          <button
-            key={k}
-            onClick={() => setFilterStatus(filterStatus === k ? '' : k)}
-            className={`rounded-xl border bg-white p-3 text-left transition-colors ${filterStatus === k ? 'ring-2 ring-red-300 border-red-300' : 'hover:bg-gray-50'}`}
-          >
-            <p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">{k}</p>
-            <p className="text-lg font-bold text-gray-900 mt-0.5">{stats[k] || 0}</p>
-          </button>
-        ))}
+      {/* Stats strip — horizontal scroll on mobile so all 5 fit in one row, grid on desktop */}
+      <div className="-mx-1 px-1 overflow-x-auto sm:overflow-visible">
+        <div className="flex sm:grid sm:grid-cols-5 gap-2 w-max sm:w-auto">
+          {(['new', 'shortlisted', 'interviewed', 'hired', 'rejected'] as const).map(k => (
+            <button
+              key={k}
+              onClick={() => setFilterStatus(filterStatus === k ? '' : k)}
+              className={`shrink-0 sm:shrink min-w-[112px] sm:min-w-0 rounded-xl border bg-white p-2.5 sm:p-3 text-left transition-colors ${filterStatus === k ? 'ring-2 ring-red-300 border-red-300' : 'hover:bg-gray-50'}`}
+            >
+              <p className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">{k}</p>
+              <p className="text-base sm:text-lg font-bold text-gray-900 mt-0.5">{stats[k] || 0}</p>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Search + filters */}
