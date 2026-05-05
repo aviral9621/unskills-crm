@@ -50,7 +50,7 @@ interface StudentData {
   dob: string | null; photo_url: string | null
   course_id: string; session: string | null; enrollment_date: string | null
   course?: { name: string; code: string; duration_label: string | null; duration_months: number | null; total_semesters: number | null; is_marksheet_eligible: boolean } | null
-  branch?: { name: string; b_code: string | null; code: string | null; address_line1: string | null; district: string | null; state: string | null; pincode: string | null; category: string | null } | null
+  branch?: { name: string; b_code: string | null; code: string | null; address_line1: string | null; district: string | null; state: string | null; pincode: string | null; category: string | null; center_logo_url: string | null } | null
 }
 
 interface SubjectDef {
@@ -70,6 +70,7 @@ interface MarksheetRecord {
   result: string | null
   issue_date: string | null
   created_at: string
+  is_final: boolean
   marks_data: MarksheetMarksData
   student?: { name: string; registration_no: string } | null
   course?: { name: string; code: string } | null
@@ -123,12 +124,16 @@ export default function MarksheetPage() {
   async function loadHistory() {
     setHistoryLoading(true)
     try {
-      const { data } = await supabase
+      let q = supabase
         .from('uce_marksheets')
-        .select('id, student_id, course_id, serial_no, total_obtained, total_max, percentage, grade, result, issue_date, created_at, marks_data, student:uce_students(name, registration_no), course:uce_courses(name, code)')
+        .select('id, student_id, course_id, serial_no, total_obtained, total_max, percentage, grade, result, issue_date, created_at, is_final, marks_data, student:uce_students!inner(name, registration_no, branch_id), course:uce_courses(name, code)')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(50)
+      if (!isSuperAdmin && (profile as { branch_id?: string })?.branch_id) {
+        q = q.eq('uce_students.branch_id', (profile as { branch_id?: string }).branch_id!)
+      }
+      const { data } = await q
       setHistory((data ?? []) as unknown as MarksheetRecord[])
     } catch { /* silent */ }
     finally { setHistoryLoading(false) }
@@ -150,7 +155,7 @@ export default function MarksheetPage() {
     try {
       const { data: sd, error } = await supabase
         .from('uce_students')
-        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches!uce_students_branch_id_fkey(name, b_code, code, address_line1, district, state, pincode, category)')
+        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches!uce_students_branch_id_fkey(name, b_code, code, address_line1, district, state, pincode, category, center_logo_url)')
         .eq('id', rec.student_id).single()
 
       if (error || !sd) { toast.error('Could not load student for edit'); return }
@@ -187,7 +192,7 @@ export default function MarksheetPage() {
     if (!query.trim()) return
     setLoading(true); resetStudentState()
     try {
-      const sel = 'id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches!uce_students_branch_id_fkey(name, b_code, code, address_line1, district, state, pincode, category)'
+      const sel = 'id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months, total_semesters, is_marksheet_eligible), branch:uce_branches!uce_students_branch_id_fkey(name, b_code, code, address_line1, district, state, pincode, category, center_logo_url)'
       const trimmed = query.trim()
       let data: Record<string, unknown> | null = null
 
@@ -362,6 +367,13 @@ export default function MarksheetPage() {
     return { totalObtained, totalMax, percentage }
   }, [rows])
 
+  const isFinalMarksheet = useMemo(() => {
+    if (!student) return false
+    const totalSems = student.course?.total_semesters ?? 1
+    if (totalSems <= 0) return true
+    return Array.from({ length: totalSems }, (_, i) => i + 1).every(n => selectedSemesters.has(n))
+  }, [student, selectedSemesters])
+
   async function currentYearMarksheetCount(): Promise<number> {
     const year = new Date().getFullYear()
     const { count } = await supabase
@@ -391,49 +403,22 @@ export default function MarksheetPage() {
     if (selectedSemesters.size === 0) { toast.error('Please select at least one semester'); return }
     if (rows.length === 0) { toast.error('No subjects available for the selected semesters'); return }
 
+    // Determine whether this covers all semesters of the course (final = downloadable)
+    const totalSems = student.course?.total_semesters ?? 1
+    const is_final = totalSems <= 0 || Array.from({ length: totalSems }, (_, i) => i + 1).every(n => selectedSemesters.has(n))
+
     setGenerating(true)
     try {
-      const [settings, logoDataUrl, certLogos] = await Promise.all([
-        getMarksheetSettings(),
-        toDataUrl('/MAIN LOGO FOR ALL CARDS.png').catch(() => ''),
-        loadCertLogos(),
-      ])
-      const photoDataUrl = student.photo_url ? await toDataUrl(student.photo_url).catch(() => '') : ''
-
-      const bands = parseGradingScheme(settings.grading_scheme_json)
-      const { grade, isPass } = resolveGrade(totals.percentage, bands)
-      const resultStr: 'pass' | 'fail' = isPass ? 'pass' : 'fail'
-
-      // When editing, preserve the original serial so the QR + existing
-      // verification links keep resolving to the same record.
-      const serial_no = editingRecord?.serial_no || (await buildSerialNo())
-      const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, serial_no))
       const br = student.branch
       const centerCode = br?.b_code || br?.code || ''
       const centerAddress = br ? `${br.address_line1 || ''}${br.district ? ', ' + br.district : ''}${br.state ? ', ' + br.state : ''}${br.pincode ? ' - ' + br.pincode : ''}`.replace(/^,\s*/, '') : ''
       const courseDuration = student.course?.duration_label || (student.course?.duration_months ? `${student.course.duration_months} Months` : '')
 
-      const blob = await buildMarksheetPdfBlob({
-        student: {
-          id: student.id, registration_no: student.registration_no, name: student.name,
-          father_name: student.father_name, dob: student.dob, photo_url: student.photo_url,
-          course_name: student.course ? `${student.course.name}${student.course.code ? ' (' + student.course.code + ')' : ''}` : '—',
-          course_duration: courseDuration,
-          session: student.session, enrollment_date: student.enrollment_date,
-        },
-        center: { name: br?.name || '—', code: centerCode, address: centerAddress || '—' },
-        rows,
-        roll_no: rollNo,
-        issue_date: issueDate,
-        serial_no,
-        totals,
-        finalGrade: grade,
-        result: resultStr === 'pass' ? 'Pass' : 'Fail',
-        gradingScheme: bands,
-        settings,
-        logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
-        branch_category: br?.category ?? undefined,
-      })
+      const bands = parseGradingScheme((await getMarksheetSettings()).grading_scheme_json)
+      const { grade, isPass } = resolveGrade(totals.percentage, bands)
+      const resultStr: 'pass' | 'fail' = isPass ? 'pass' : 'fail'
+
+      const serial_no = editingRecord?.serial_no || (await buildSerialNo())
 
       const marksData: MarksheetMarksData = {
         roll_no: rollNo,
@@ -452,6 +437,7 @@ export default function MarksheetPage() {
             grade,
             result: resultStr,
             issue_date: issueDate,
+            is_final,
           })
           .eq('id', editingRecord.id)
         if (updateError) { console.error(updateError); toast.error(`Update failed: ${updateError.message}`); return }
@@ -467,38 +453,78 @@ export default function MarksheetPage() {
           grade,
           result: resultStr,
           issue_date: issueDate,
+          is_final,
         })
         if (insertError) { console.error(insertError); toast.error(`Save failed: ${insertError.message}`); return }
 
-        // Auto-issue certificate (best-effort, non-blocking) — only on first creation
-        const autoCert = await autoIssueCertificateForMarksheet({
-          studentId: student.id,
-          courseId: student.course_id,
-          grade,
-          result: resultStr,
-          marksScored: Number(totals.percentage.toFixed(0)),
-          issuedBy: user?.id ?? null,
-          supabase,
-        })
-        if (autoCert.ok && !autoCert.skipped) {
-          toast.success(`Certificate auto-issued: ${autoCert.certificateNumber}`)
-        } else if (autoCert.skipped === 'already_exists') {
-          // silent — student already has a cert for this course
-        } else if (autoCert.reason) {
-          console.warn('[auto-cert]', autoCert.reason)
+        // Auto-issue certificate only when this is the final (all-semester) marksheet
+        if (is_final) {
+          const autoCert = await autoIssueCertificateForMarksheet({
+            studentId: student.id,
+            courseId: student.course_id,
+            grade,
+            result: resultStr,
+            marksScored: Number(totals.percentage.toFixed(0)),
+            issuedBy: user?.id ?? null,
+            supabase,
+          })
+          if (autoCert.ok && !autoCert.skipped) {
+            toast.success(`Certificate auto-issued: ${autoCert.certificateNumber}`)
+          } else if (autoCert.skipped === 'already_exists') {
+            // silent
+          } else if (autoCert.reason) {
+            console.warn('[auto-cert]', autoCert.reason)
+          }
         }
       }
-      const wasEditing = !!editingRecord
+
       loadHistory()
 
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Marksheet-${student.registration_no.replace(/\//g, '-')}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success(wasEditing ? 'Marksheet updated & re-downloaded!' : 'Marksheet downloaded!')
-      if (wasEditing) setEditingRecord(null)
+      if (is_final || editingRecord) {
+        // Build and download PDF only for final/complete marksheets (or when re-downloading an edit)
+        const [settings, logoDataUrl, certLogos] = await Promise.all([
+          getMarksheetSettings(),
+          toDataUrl('/MAIN LOGO FOR ALL CARDS.png').catch(() => ''),
+          loadCertLogos(),
+        ])
+        const photoDataUrl = student.photo_url ? await toDataUrl(student.photo_url).catch(() => '') : ''
+        const branchLogoDataUrl = br?.center_logo_url ? await toDataUrl(br.center_logo_url).catch(() => '') : ''
+        const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, serial_no))
+
+        const blob = await buildMarksheetPdfBlob({
+          student: {
+            id: student.id, registration_no: student.registration_no, name: student.name,
+            father_name: student.father_name, dob: student.dob, photo_url: student.photo_url,
+            course_name: student.course ? `${student.course.name}${student.course.code ? ' (' + student.course.code + ')' : ''}` : '—',
+            course_duration: courseDuration,
+            session: student.session, enrollment_date: student.enrollment_date,
+          },
+          center: { name: br?.name || '—', code: centerCode, address: centerAddress || '—' },
+          rows,
+          roll_no: rollNo,
+          issue_date: issueDate,
+          serial_no,
+          totals,
+          finalGrade: grade,
+          result: resultStr === 'pass' ? 'Pass' : 'Fail',
+          gradingScheme: bands,
+          settings,
+          logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
+          branch_category: br?.category ?? undefined,
+          branchLogoDataUrl,
+        })
+
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `Marksheet-${student.registration_no.replace(/\//g, '-')}.pdf`
+        a.click()
+        URL.revokeObjectURL(url)
+        toast.success(editingRecord ? 'Marksheet updated & re-downloaded!' : 'Marksheet saved & downloaded!')
+        if (editingRecord) setEditingRecord(null)
+      } else {
+        toast.success('Semester marks saved. Generate final marksheet when all semesters are complete to download the PDF.')
+      }
     } catch (err) { console.error(err); toast.error('Failed to generate marksheet') }
     finally { setGenerating(false) }
   }
@@ -508,7 +534,7 @@ export default function MarksheetPage() {
     try {
       const { data: sd } = await supabase
         .from('uce_students')
-        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months), branch:uce_branches!uce_students_branch_id_fkey(name, b_code, code, address_line1, district, state, pincode, category)')
+        .select('id, registration_no, name, father_name, dob, photo_url, course_id, session, enrollment_date, course:uce_courses(name, code, duration_label, duration_months), branch:uce_branches!uce_students_branch_id_fkey(name, b_code, code, address_line1, district, state, pincode, category, center_logo_url)')
         .eq('id', rec.student_id).single()
       if (!sd) { toast.error('Student not found'); return }
 
@@ -519,6 +545,7 @@ export default function MarksheetPage() {
       ])
       const sdc = sd as unknown as StudentData
       const photoDataUrl = sdc.photo_url ? await toDataUrl(sdc.photo_url).catch(() => '') : ''
+      const branchLogoDataUrl = sdc.branch?.center_logo_url ? await toDataUrl(sdc.branch.center_logo_url).catch(() => '') : ''
       const qrDataUrl = await buildQrDataUrl(marksheetVerifyUrl(settings.verify_base_url, rec.serial_no || sdc.registration_no))
       const bands = rec.marks_data.grading_scheme ?? parseGradingScheme(settings.grading_scheme_json)
       const br = sdc.branch
@@ -546,6 +573,7 @@ export default function MarksheetPage() {
         settings,
         logoDataUrl, certLogos, photoDataUrl, qrDataUrl,
         branch_category: br?.category ?? undefined,
+        branchLogoDataUrl,
       })
 
       const url = URL.createObjectURL(blob)
@@ -784,6 +812,12 @@ export default function MarksheetPage() {
             </div>
           )}
 
+          {!isFinalMarksheet && !editingRecord && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-start gap-2">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+              <span>Only Semester 1 is selected — marks will be <strong>saved but not downloaded</strong>. Select all semesters to generate the final downloadable marksheet.</span>
+            </div>
+          )}
           <button
             onClick={handleGenerate}
             disabled={generating || rows.length === 0}
@@ -791,10 +825,11 @@ export default function MarksheetPage() {
           >
             {generating
               ? <Loader2 size={18} className="animate-spin" />
-              : editingRecord ? <Pencil size={18} /> : <Download size={18} />}
+              : editingRecord ? <Pencil size={18} /> : (isFinalMarksheet ? <Download size={18} /> : <ScrollText size={18} />)}
             {generating
-              ? (editingRecord ? 'Updating…' : 'Generating…')
-              : editingRecord ? 'Update & Re-Download Marksheet (PDF)' : 'Save & Download Marksheet (PDF)'}
+              ? (editingRecord ? 'Updating…' : 'Saving…')
+              : editingRecord ? 'Update & Re-Download Marksheet (PDF)'
+              : isFinalMarksheet ? 'Save & Download Marksheet (PDF)' : 'Save Semester Marks (no PDF)'}
           </button>
         </>
       )}
@@ -824,7 +859,12 @@ export default function MarksheetPage() {
               return (
                 <div key={rec.id} className="flex flex-col sm:flex-row sm:items-center justify-between py-3 gap-2 sm:gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">{st?.name ?? '—'}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900 truncate">{st?.name ?? '—'}</p>
+                      {rec.is_final
+                        ? <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">Final</span>
+                        : <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">Sem 1 Only</span>}
+                    </div>
                     <p className="text-xs text-gray-400 truncate">
                       {st?.registration_no} &middot; {co?.name ?? '—'}
                       {rec.grade ? ` · ${rec.grade}` : ''}
@@ -842,14 +882,16 @@ export default function MarksheetPage() {
                       {loadingEdit === rec.id ? <Loader2 size={12} className="animate-spin" /> : <Pencil size={12} />}
                       {editingRecord?.id === rec.id ? 'Editing' : 'Edit'}
                     </button>
-                    <button
-                      onClick={() => handleDownloadHistory(rec)}
-                      disabled={downloading === rec.id}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 disabled:opacity-50"
-                    >
-                      {downloading === rec.id ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-                      Download
-                    </button>
+                    {rec.is_final && (
+                      <button
+                        onClick={() => handleDownloadHistory(rec)}
+                        disabled={downloading === rec.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 disabled:opacity-50"
+                      >
+                        {downloading === rec.id ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                        Download
+                      </button>
+                    )}
                     {isSuperAdmin && (
                       <button
                         onClick={() => handleDelete(rec.id)}

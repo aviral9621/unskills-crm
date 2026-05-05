@@ -49,6 +49,8 @@ export interface BuildMarksheetInput {
   photoDataUrl: string
   qrDataUrl: string
   branch_category?: string
+  /** Branch/center logo data URL — shown in the header right column. */
+  branchLogoDataUrl?: string
 }
 
 async function blobToDataUrl(blob: Blob): Promise<string> {
@@ -141,7 +143,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
   const {
     student, center, rows, roll_no, issue_date, serial_no,
     totals, finalGrade, gradingScheme, settings,
-    logoDataUrl, certLogos, photoDataUrl, qrDataUrl, branch_category,
+    logoDataUrl, certLogos, photoDataUrl, qrDataUrl, branch_category, branchLogoDataUrl,
   } = input
   const isBeautician = branch_category === 'beautician'
 
@@ -497,6 +499,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                 </Text>
               </View>
               <View style={s.rightCol}>
+                {branchLogoDataUrl ? <PdfImage src={branchLogoDataUrl} style={{ width: 76, height: 40, objectFit: 'contain', alignSelf: 'flex-end', marginBottom: 3 }} /> : null}
                 <Text style={s.regLine}>Reg. No.:</Text>
                 <Text style={s.regLine}>{serial_no || '—'}</Text>
               </View>

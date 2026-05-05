@@ -150,7 +150,10 @@ export default function SubjectPage() {
               <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-3.5 flex items-center gap-3">
                 <span className="text-xs text-gray-400 font-mono w-5 shrink-0">{idx + 1}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
+                    {s.code && <span className="text-[10px] font-mono text-gray-400 shrink-0 bg-gray-100 px-1.5 py-0.5 rounded">{s.code}</span>}
+                  </div>
                   <p className="text-xs text-gray-400">
                     {s.semester ? <span className="mr-1.5">Sem {s.semester} ·</span> : null}
                     T:{s.theory_max_marks} P:{s.practical_max_marks} = <span className="font-semibold text-gray-700">{s.total_max_marks}</span>
