@@ -188,7 +188,7 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
     subBullet: {
       fontFamily: 'DMSans', fontWeight: 700, color: colors.borderPrimary,
     },
-    rightCol: { width: 84, alignItems: 'flex-end', paddingTop: 2 },
+    rightCol: { width: 100, alignItems: 'flex-end', paddingTop: 2 },
     regLine: {
       fontSize: 7.8, color: colors.textPrimary, textAlign: 'right',
       fontFamily: 'DMSans', fontWeight: 700,
@@ -499,9 +499,10 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                 </Text>
               </View>
               <View style={s.rightCol}>
-                {branchLogoDataUrl ? <PdfImage src={branchLogoDataUrl} style={{ width: 76, height: 40, objectFit: 'contain', alignSelf: 'flex-end', marginBottom: 3 }} /> : null}
-                <Text style={s.regLine}>Reg. No.:</Text>
-                <Text style={s.regLine}>{serial_no || '—'}</Text>
+                {branchLogoDataUrl && !center.name.toLowerCase().replace(/\s+/g, '').includes('unskillcomputer')
+                  ? <PdfImage src={branchLogoDataUrl} style={{ width: 90, height: 40, objectFit: 'contain', alignSelf: 'flex-end', marginBottom: 3 }} />
+                  : null}
+                <Text style={s.regLine}>Reg. No.: {serial_no || '—'}</Text>
               </View>
             </View>
 
@@ -522,8 +523,23 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                 <View style={s.infoRow}>
                   <View style={[s.detailCell, s.detailCellDivider]}>
                     <Text>
+                      <Text style={s.detailLabel}>Candidate Name : </Text>
+                      <Text style={s.detailValue}>{student.name}</Text>
+                    </Text>
+                  </View>
+                  <View style={s.detailCell}>
+                    <Text>
                       <Text style={s.detailLabel}>Enrollment No : </Text>
                       <Text style={s.detailValue}>{student.registration_no}</Text>
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={s.infoRow}>
+                  <View style={[s.detailCell, s.detailCellDivider]}>
+                    <Text>
+                      <Text style={s.detailLabel}>Father&#39;s Name : </Text>
+                      <Text style={s.detailValue}>{student.father_name || '—'}</Text>
                     </Text>
                   </View>
                   <View style={s.detailCell}>
@@ -560,21 +576,6 @@ export async function buildMarksheetPdfBlob(input: BuildMarksheetInput): Promise
                     <Text>
                       <Text style={s.detailLabel}>Course Duration : </Text>
                       <Text style={s.detailValue}>{student.course_duration || '—'}</Text>
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={s.infoRow}>
-                  <View style={[s.detailCell, s.detailCellDivider]}>
-                    <Text>
-                      <Text style={s.detailLabel}>Student Name : </Text>
-                      <Text style={s.detailValue}>{student.name}</Text>
-                    </Text>
-                  </View>
-                  <View style={s.detailCell}>
-                    <Text>
-                      <Text style={s.detailLabel}>Father&#39;s Name : </Text>
-                      <Text style={s.detailValue}>{student.father_name || '—'}</Text>
                     </Text>
                   </View>
                 </View>
