@@ -98,9 +98,9 @@ const AdminJobsPage = lazy(() => import('./pages/admin/AdminJobsPage'))
 const AdminJobApplicationsPage = lazy(() => import('./pages/admin/AdminJobApplicationsPage'))
 const AdminJobApplicationsAllPage = lazy(() => import('./pages/admin/AdminJobApplicationsAllPage'))
 const PendingPaymentsPage = lazy(() => import('./pages/fees/PendingPaymentsPage'))
-const BatchEnrollmentPage = lazy(() => import('./pages/attendance/BatchEnrollmentPage'))
 const MarkAttendancePage = lazy(() => import('./pages/attendance/MarkAttendancePage'))
 const AttendanceReportsPage = lazy(() => import('./pages/attendance/AttendanceReportsPage'))
+const AssignBatchPage = lazy(() => import('./pages/students/AssignBatchPage'))
 const AdminNotificationsPage = lazy(() => import('./pages/admin/AdminNotificationsPage'))
 
 // Franchise pages — lazy
@@ -201,7 +201,8 @@ function AppRoutes() {
           <Route path="courses/:id/edit" element={<CourseFormPage />} />
           <Route path="courses/approvals" element={<CourseApprovalPage />} />
           <Route path="courses/subjects" element={<SubjectPage />} />
-          <Route path="courses/batches" element={<BatchPage />} />
+          <Route path="batches" element={<BatchPage />} />
+          <Route path="courses/batches" element={<Navigate to="/admin/batches" replace />} />
 
           <Route path="study-material" element={<MaterialListPage />} />
           <Route path="study-material/syllabus" element={<SyllabusPage />} />
@@ -233,9 +234,9 @@ function AppRoutes() {
           <Route path="staff/id-card" element={<StaffIdCardPage />} />
           <Route path="staff/id-card-settings" element={<StaffIdCardSettingsPage />} />
           <Route path="staff/attendance" element={<AttendancePage />} />
-          <Route path="attendance/batches" element={<BatchEnrollmentPage />} />
           <Route path="attendance/mark" element={<MarkAttendancePage />} />
           <Route path="attendance/reports" element={<AttendanceReportsPage />} />
+          <Route path="students/assign-batch" element={<AssignBatchPage />} />
           <Route path="notifications" element={<AdminNotificationsPage />} />
           <Route path="staff/advances" element={<AdvanceReportPage />} />
           <Route path="staff/salary-slips" element={<SalarySlipPage />} />
@@ -292,6 +293,7 @@ function AppRoutes() {
 
           <Route path="courses" element={<FCourseListPage />} />
           <Route path="courses/new" element={<FCourseFormPage />} />
+          <Route path="batches" element={<BatchPage />} />
 
           <Route path="fees/accounts" element={<FPaymentAccountsPage />} />
           <Route path="fees/collect" element={<FFeeCollectionPage />} />
@@ -322,9 +324,9 @@ function AppRoutes() {
           <Route path="reports/pending-fees" element={<FPendingFeesPage />} />
           <Route path="reports/wallet" element={<FWalletReportPage />} />
 
-          <Route path="attendance/batches" element={<BatchEnrollmentPage />} />
           <Route path="attendance/mark" element={<MarkAttendancePage />} />
           <Route path="attendance/reports" element={<AttendanceReportsPage />} />
+          <Route path="students/assign-batch" element={<AssignBatchPage />} />
           <Route path="notifications" element={<AdminNotificationsPage />} />
 
           <Route path="profile" element={<FProfilePage />} />

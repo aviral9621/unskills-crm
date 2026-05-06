@@ -40,6 +40,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
         children: [
           { label: 'All Students', path: '/admin/students', permission: 'student.view' },
           { label: 'Register Student', path: '/admin/students/register', permission: 'student.register' },
+          { label: 'Assign Batch', path: '/admin/students/assign-batch', permission: 'student.view' },
           { label: 'ID Card', path: '/admin/students/id-card', permission: 'student.idcard' },
           { label: 'Admit Card', path: '/admin/students/admit-card', permission: 'admitcard.view' },
         ],
@@ -50,9 +51,9 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
           { label: 'Programs', path: '/admin/courses/programs' },
           { label: 'All Courses', path: '/admin/courses' },
           { label: 'Subjects', path: '/admin/courses/subjects' },
-          { label: 'Batches', path: '/admin/courses/batches' },
         ],
       },
+      { label: 'Batches', icon: Users2, path: '/admin/batches', permission: 'course' },
       {
         label: 'Study Material', icon: FileText, permission: 'material',
         children: [
@@ -74,9 +75,8 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
       },
       { label: 'Marksheets', icon: ScrollText, path: '/admin/marksheets', permission: 'marksheet' },
       {
-        label: 'Attendance', icon: ClipboardList, permission: 'attendance',
+        label: 'Student Attendance', icon: ClipboardList, permission: 'attendance',
         children: [
-          { label: 'Batch Enrollment', path: '/admin/attendance/batches' },
           { label: 'Mark Attendance', path: '/admin/attendance/mark' },
           { label: 'Reports', path: '/admin/attendance/reports' },
         ],

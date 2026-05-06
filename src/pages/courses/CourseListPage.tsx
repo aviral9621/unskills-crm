@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { createColumnHelper } from '@tanstack/react-table'
 import {
-  BookOpen, Plus, Search, X, Pencil, Power, BookText, Layers,
+  BookOpen, Plus, Search, X, Pencil, Power, BookText,
   IndianRupee, Clock, Trash2, AlertTriangle, Loader2, ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -110,7 +110,6 @@ export default function CourseListPage() {
         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
           <button onClick={() => navigate(`/admin/courses/${c.id}/edit`)} title="Edit" className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><Pencil size={14} /></button>
           <button onClick={() => navigate(`/admin/courses/subjects?course=${c.id}`)} title="Subjects" className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50"><BookText size={14} /></button>
-          <button onClick={() => navigate(`/admin/courses/batches?course=${c.id}`)} title="Batches" className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50"><Layers size={14} /></button>
           <button onClick={() => toggleActive(c)} title={c.is_active ? 'Deactivate' : 'Activate'} className={`p-1.5 rounded-lg ${c.is_active ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-50' : 'text-green-400 hover:text-green-600 hover:bg-green-50'}`}><Power size={14} /></button>
           <button onClick={() => { setDelTarget(c); setDelConfirm('') }} title="Delete" className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
         </div>
@@ -225,7 +224,6 @@ export default function CourseListPage() {
             <div className="p-3 grid grid-cols-2 gap-2">
               <ActionBtn icon={<Pencil size={18} />} label="Edit Course" color="gray" onClick={() => { navigate(`/admin/courses/${actionCourse.id}/edit`); setActionCourse(null) }} />
               <ActionBtn icon={<BookText size={18} />} label="Subjects" color="blue" onClick={() => { navigate(`/admin/courses/subjects?course=${actionCourse.id}`); setActionCourse(null) }} />
-              <ActionBtn icon={<Layers size={18} />} label="Batches" color="purple" onClick={() => { navigate(`/admin/courses/batches?course=${actionCourse.id}`); setActionCourse(null) }} />
               <ActionBtn
                 icon={<Power size={18} />}
                 label={actionCourse.is_active ? 'Deactivate' : 'Activate'}

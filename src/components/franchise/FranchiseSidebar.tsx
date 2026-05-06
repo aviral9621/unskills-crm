@@ -33,6 +33,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
         children: [
           { label: 'All Students', path: '/franchise/students' },
           { label: 'Register Student', path: '/franchise/students/register' },
+          { label: 'Assign Batch', path: '/franchise/students/assign-batch' },
           { label: 'ID Cards', path: '/franchise/students/id-card' },
         ],
       },
@@ -43,15 +44,15 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
           { label: 'Add Course', path: '/franchise/courses/new' },
         ],
       },
+      { label: 'Batches', icon: ClipboardList, path: '/franchise/batches' },
       { label: 'Study Material', icon: FileText, path: '/franchise/study-material' },
       { label: 'Exam Forms', icon: ClipboardList, path: '/franchise/exam-forms' },
       { label: 'Marksheets', icon: ScrollText, path: '/franchise/marksheets' },
       { label: 'Certificates', icon: IdCard, path: '/franchise/certificates' },
       { label: 'Results', icon: ClipboardList, path: '/franchise/results' },
       {
-        label: 'Attendance', icon: ClipboardList,
+        label: 'Student Attendance', icon: ClipboardList,
         children: [
-          { label: 'Batch Enrollment', path: '/franchise/attendance/batches' },
           { label: 'Mark Attendance', path: '/franchise/attendance/mark' },
           { label: 'Reports', path: '/franchise/attendance/reports' },
         ],

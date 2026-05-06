@@ -14,21 +14,6 @@ export interface StudentAttendance {
   marked_at: string
 }
 
-export interface BatchStudent {
-  id: string
-  batch_id: string
-  student_id: string
-  enrolled_at: string
-  enrolled_by: string | null
-}
-
-export interface BatchTeacher {
-  id: string
-  batch_id: string
-  employee_id: string
-  assigned_at: string
-  assigned_by: string | null
-}
 
 export interface Profile {
   id: string
@@ -144,10 +129,14 @@ export interface Subject {
 
 export interface Batch {
   id: string
-  course_id: string
+  course_id: string | null
+  branch_id: string | null
+  teacher_id: string | null
   name: string
   start_date: string | null
   end_date: string | null
+  start_time: string | null
+  end_time: string | null
   max_students: number | null
   is_active: boolean
   created_at: string

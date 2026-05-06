@@ -1,196 +1,340 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { createColumnHelper } from '@tanstack/react-table'
-import { ArrowLeft, Plus, Pencil, Trash2, Layers, Loader2, Power, Users } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Users, Clock, Calendar, GraduationCap, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
-import { formatDate, cn } from '../../lib/utils'
-import type { Batch, Course } from '../../types'
-import DataTable from '../../components/DataTable'
+import { useAuth } from '../../contexts/AuthContext'
+import { formatDate } from '../../lib/utils'
 import Modal from '../../components/Modal'
-import FormField, { inputClass, selectClass } from '../../components/FormField'
-import StatusBadge from '../../components/StatusBadge'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import StatusBadge from '../../components/StatusBadge'
+import type { Batch } from '../../types'
 
-const colHelper = createColumnHelper<Batch>()
+interface Teacher { id: string; name: string; designation: string | null }
+interface BatchRow extends Batch {
+  teacher?: { id: string; name: string } | null
+  enrolled_count?: number
+}
+
+function fmtTime(t: string | null): string {
+  if (!t) return ''
+  const [h, m] = t.split(':')
+  const hour = parseInt(h, 10)
+  const ap = hour >= 12 ? 'PM' : 'AM'
+  const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour
+  return `${h12}:${m} ${ap}`
+}
 
 export default function BatchPage() {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const courseIdParam = searchParams.get('course')
+  const { profile } = useAuth()
+  const isSuperAdmin = profile?.role === 'super_admin'
+  const branchId = profile?.branch_id
 
-  const [courses, setCourses] = useState<Course[]>([])
-  const [selectedCourse, setSelectedCourse] = useState(courseIdParam || '')
-  const [courseName, setCourseName] = useState('')
-  const [batches, setBatches] = useState<Batch[]>([])
+  const [batches, setBatches] = useState<BatchRow[]>([])
+  const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
 
-  const [modalOpen, setModalOpen] = useState(false)
+  const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Batch | null>(null)
   const [saving, setSaving] = useState(false)
-  const [delTarget, setDelTarget] = useState<Batch | null>(null)
+  const [delTarget, setDelTarget] = useState<BatchRow | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const [bName, setBName] = useState('')
+  // Form fields
+  const [name, setName] = useState('')
+  const [startTime, setStartTime] = useState('')
+  const [endTime, setEndTime] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [maxStudents, setMaxStudents] = useState('')
+  const [teacherId, setTeacherId] = useState('')
+  const [active, setActive] = useState(true)
 
-  useEffect(() => { fetchCourses() }, [])
-  useEffect(() => { if (selectedCourse) fetchBatches() }, [selectedCourse])
+  useEffect(() => { loadAll() }, [])
 
-  async function fetchCourses() {
-    const { data } = await supabase.from('uce_courses').select('id, name, code').eq('is_active', true).order('name')
-    setCourses((data ?? []) as Course[])
-    if (courseIdParam) { const c = data?.find((x: { id: string }) => x.id === courseIdParam); if (c) setCourseName((c as { name: string }).name) }
+  async function loadAll() {
+    setLoading(true)
+    let bq = supabase.from('uce_batches')
+      .select('id, name, start_date, end_date, start_time, end_time, max_students, is_active, created_at, course_id, branch_id, teacher_id, teacher:uce_employees!uce_batches_teacher_id_fkey(id, name)')
+      .order('created_at', { ascending: false })
+    if (!isSuperAdmin && branchId) bq = bq.eq('branch_id', branchId)
+    const [bRes, tRes, cntRes] = await Promise.all([
+      bq,
+      (() => {
+        let tq = supabase.from('uce_employees').select('id, name, designation').eq('is_active', true).order('name')
+        if (!isSuperAdmin && branchId) tq = tq.eq('branch_id', branchId)
+        return tq
+      })(),
+      // count enrolled per batch
+      supabase.from('uce_students').select('batch_id').not('batch_id', 'is', null),
+    ])
+    const counts: Record<string, number> = {}
+    ;(cntRes.data ?? []).forEach((r: { batch_id: string | null }) => {
+      if (r.batch_id) counts[r.batch_id] = (counts[r.batch_id] || 0) + 1
+    })
+    const rows = ((bRes.data ?? []) as unknown as BatchRow[]).map(b => ({ ...b, enrolled_count: counts[b.id] || 0 }))
+    setBatches(rows)
+    setTeachers((tRes.data ?? []) as Teacher[])
     setLoading(false)
   }
 
-  async function fetchBatches() {
-    setLoading(true)
-    try {
-      const { data, error } = await supabase.from('uce_batches').select('*').eq('course_id', selectedCourse).order('created_at', { ascending: false })
-      if (error) throw error
-      setBatches(data ?? [])
-      const c = courses.find(x => x.id === selectedCourse); if (c) setCourseName(c.name)
-    } catch { toast.error('Failed to load batches') }
-    finally { setLoading(false) }
+  function openAdd() {
+    setEditing(null)
+    setName(''); setStartTime(''); setEndTime(''); setStartDate(''); setEndDate('')
+    setMaxStudents(''); setTeacherId(''); setActive(true)
+    setOpen(true)
   }
 
-  function openAdd() { setEditing(null); setBName(''); setStartDate(''); setEndDate(''); setMaxStudents(''); setModalOpen(true) }
-  function openEdit(b: Batch) { setEditing(b); setBName(b.name); setStartDate(b.start_date || ''); setEndDate(b.end_date || ''); setMaxStudents(b.max_students?.toString() || ''); setModalOpen(true) }
+  function openEdit(b: BatchRow) {
+    setEditing(b)
+    setName(b.name)
+    setStartTime(b.start_time?.slice(0, 5) || '')
+    setEndTime(b.end_time?.slice(0, 5) || '')
+    setStartDate(b.start_date || '')
+    setEndDate(b.end_date || '')
+    setMaxStudents(b.max_students?.toString() || '')
+    setTeacherId(b.teacher_id || '')
+    setActive(b.is_active ?? true)
+    setOpen(true)
+  }
 
   async function handleSave() {
-    if (!bName.trim()) { toast.error('Batch name is required'); return }
-    if (!selectedCourse) { toast.error('Select a course first'); return }
+    if (!name.trim()) { toast.error('Batch name is required'); return }
     if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
       toast.error('End date must be after start date'); return
+    }
+    if (startTime && endTime && endTime <= startTime) {
+      toast.error('End time must be after start time'); return
     }
     if (maxStudents && parseInt(maxStudents) < 1) {
       toast.error('Max students must be at least 1'); return
     }
     setSaving(true)
     try {
-      const payload = { course_id: selectedCourse, name: bName.trim(), start_date: startDate || null, end_date: endDate || null, max_students: maxStudents ? parseInt(maxStudents) : null }
+      const payload = {
+        name: name.trim(),
+        start_date: startDate || null,
+        end_date: endDate || null,
+        start_time: startTime || null,
+        end_time: endTime || null,
+        max_students: maxStudents ? parseInt(maxStudents) : null,
+        teacher_id: teacherId || null,
+        branch_id: branchId || null,
+        is_active: active,
+      }
       if (editing) {
         const { error } = await supabase.from('uce_batches').update(payload).eq('id', editing.id)
-        if (error) throw error; toast.success('Batch updated')
+        if (error) throw error
+        toast.success('Batch updated')
       } else {
         const { error } = await supabase.from('uce_batches').insert(payload)
-        if (error) throw error; toast.success('Batch created')
+        if (error) throw error
+        toast.success('Batch created')
       }
-      setModalOpen(false); fetchBatches()
-    } catch { toast.error('Failed to save') }
-    finally { setSaving(false) }
+      setOpen(false)
+      loadAll()
+    } catch (e) {
+      toast.error('Failed to save: ' + (e as Error).message)
+    } finally { setSaving(false) }
   }
 
   async function handleDelete() {
-    if (!delTarget) return; setDeleting(true)
+    if (!delTarget) return
+    setDeleting(true)
     try {
       const { error } = await supabase.from('uce_batches').delete().eq('id', delTarget.id)
-      if (error) throw error; toast.success('Batch deleted'); setBatches(p => p.filter(x => x.id !== delTarget.id))
-    } catch { toast.error('Failed to delete') }
-    finally { setDeleting(false); setDelTarget(null) }
+      if (error) throw error
+      toast.success('Batch deleted')
+      setDelTarget(null)
+      loadAll()
+    } catch (e) {
+      toast.error('Cannot delete: ' + (e as Error).message)
+    } finally { setDeleting(false) }
   }
 
-  async function toggleActive(b: Batch) {
-    const ns = !b.is_active
-    const { error } = await supabase.from('uce_batches').update({ is_active: ns }).eq('id', b.id)
-    if (error) { toast.error('Failed'); return }
-    toast.success(`Batch ${ns ? 'activated' : 'deactivated'}`)
-    setBatches(p => p.map(x => x.id === b.id ? { ...x, is_active: ns } : x))
-  }
-
-  const columns = useMemo(() => [
-    colHelper.accessor('name', { header: 'Batch Name', cell: i => <span className="text-sm font-medium text-gray-900">{i.getValue()}</span> }),
-    colHelper.accessor('start_date', { header: 'Start', cell: i => <span className="text-sm text-gray-600">{i.getValue() ? formatDate(i.getValue()!) : '—'}</span> }),
-    colHelper.accessor('end_date', { header: 'End', cell: i => <span className="text-sm text-gray-600">{i.getValue() ? formatDate(i.getValue()!) : '—'}</span> }),
-    colHelper.accessor('max_students', { header: 'Max Students', cell: i => <span className="text-sm text-gray-600">{i.getValue() || 'Unlimited'}</span> }),
-    colHelper.accessor('is_active', { header: 'Status', cell: i => <StatusBadge label={i.getValue() ? 'Active' : 'Inactive'} variant={i.getValue() ? 'success' : 'error'} /> }),
-    colHelper.display({ id: 'actions', header: '', enableSorting: false, cell: i => (
-      <div className="flex gap-1">
-        <button onClick={() => openEdit(i.row.original)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><Pencil size={14} /></button>
-        <button onClick={() => toggleActive(i.row.original)} className={`p-1.5 rounded-lg ${i.row.original.is_active ? 'text-red-400 hover:text-red-600 hover:bg-red-50' : 'text-green-400 hover:text-green-600 hover:bg-green-50'}`}><Power size={14} /></button>
-        <button onClick={() => setDelTarget(i.row.original)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
-      </div>
-    )}),
-  ], [])
+  const filtered = useMemo(() => {
+    if (!search) return batches
+    const q = search.toLowerCase()
+    return batches.filter(b =>
+      b.name.toLowerCase().includes(q) ||
+      b.teacher?.name?.toLowerCase().includes(q)
+    )
+  }, [batches, search])
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 sm:gap-3">
-        <button onClick={() => navigate('/admin/courses')} className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 shrink-0"><ArrowLeft size={18} className="text-gray-600" /></button>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-base sm:text-2xl font-bold text-gray-900 font-heading truncate">Batches{courseName ? ` — ${courseName}` : ''}</h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Manage course batches</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Batches</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{batches.length} total batches</p>
         </div>
-        {selectedCourse && <button onClick={openAdd} className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm shrink-0"><Plus size={16} /> Add</button>}
+        <button onClick={openAdd}
+          className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-red-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-red-700 shadow-sm">
+          <Plus size={16} /> Add New Batch
+        </button>
       </div>
 
-      {!courseIdParam && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-          <FormField label="Select Course" required>
-            <select value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)} className={selectClass}>
-              <option value="">Choose a course</option>{courses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
-            </select>
-          </FormField>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-md">
+          <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by batch or teacher…"
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="bg-white rounded-xl border p-12 text-center text-sm text-gray-400 flex items-center justify-center gap-2">
+          <Loader2 size={16} className="animate-spin" /> Loading…
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border p-12 text-center">
+          <Users size={36} className="mx-auto text-gray-300 mb-2" />
+          <p className="text-sm text-gray-400">No batches yet. Click "Add New Batch" to create one.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-600">Batch</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-600">Timing</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-600">Duration</th>
+                  <th className="text-left px-4 py-2.5 font-medium text-gray-600">Teacher</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-gray-600">Capacity</th>
+                  <th className="text-center px-4 py-2.5 font-medium text-gray-600">Status</th>
+                  <th className="text-right px-4 py-2.5 font-medium text-gray-600 w-24">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(b => {
+                  const cap = b.max_students || 0
+                  const used = b.enrolled_count || 0
+                  const full = cap > 0 && used >= cap
+                  const pct = cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0
+                  return (
+                    <tr key={b.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                      <td className="px-4 py-3 font-semibold text-gray-900">{b.name}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {b.start_time || b.end_time ? (
+                          <span className="inline-flex items-center gap-1 text-xs"><Clock size={12} />{fmtTime(b.start_time)} – {fmtTime(b.end_time)}</span>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 text-xs">
+                        {b.start_date || b.end_date ? (
+                          <span className="inline-flex items-center gap-1"><Calendar size={12} />{b.start_date ? formatDate(b.start_date) : '—'} → {b.end_date ? formatDate(b.end_date) : 'ongoing'}</span>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {b.teacher ? (
+                          <span className="inline-flex items-center gap-1 text-gray-700"><GraduationCap size={12} className="text-red-500" />{b.teacher.name}</span>
+                        ) : <span className="text-gray-300 text-xs">Not assigned</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex flex-col items-end">
+                          <span className={`text-xs font-bold ${full ? 'text-red-600' : 'text-gray-900'}`}>
+                            {used}{cap > 0 ? ` / ${cap}` : ''}
+                          </span>
+                          {cap > 0 && (
+                            <div className="h-1 w-20 bg-gray-100 rounded-full mt-1">
+                              <div className={`h-1 rounded-full ${full ? 'bg-red-500' : pct > 75 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <StatusBadge label={b.is_active ? 'Active' : 'Inactive'} variant={b.is_active ? 'success' : 'neutral'} />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex gap-1">
+                          <button onClick={() => openEdit(b)} className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50">
+                            <Pencil size={14} />
+                          </button>
+                          <button onClick={() => setDelTarget(b)} className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50">
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {selectedCourse && (
-        <>
-          <div className="md:hidden">
-            {loading ? <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="skeleton h-20 rounded-xl" />)}</div>
-            : batches.length === 0 ? <div className="bg-white rounded-xl border p-10 text-center"><Layers size={32} className="mx-auto text-gray-300 mb-2" /><p className="text-sm text-gray-400">No batches yet</p></div>
-            : <div className="space-y-2">{batches.map(b => (
-              <div key={b.id} className={cn('bg-white rounded-xl border border-gray-200 p-3.5', !b.is_active && 'opacity-60')}>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{b.name}</p>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
-                      {b.start_date && <span>{formatDate(b.start_date)}</span>}
-                      {b.start_date && b.end_date && <span>→</span>}
-                      {b.end_date && <span>{formatDate(b.end_date)}</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {b.max_students && <span className="text-xs text-gray-500 flex items-center gap-0.5"><Users size={11} />{b.max_students}</span>}
-                    <StatusBadge label={b.is_active ? 'Active' : 'Inactive'} variant={b.is_active ? 'success' : 'error'} />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-1 mt-2 pt-2 border-t border-gray-100">
-                  <button onClick={() => openEdit(b)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><Pencil size={14} /></button>
-                  <button onClick={() => toggleActive(b)} className={`p-1.5 rounded-lg ${b.is_active ? 'text-red-400 hover:text-red-600 hover:bg-red-50' : 'text-green-400 hover:text-green-600 hover:bg-green-50'}`}><Power size={14} /></button>
-                  <button onClick={() => setDelTarget(b)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"><Trash2 size={14} /></button>
-                </div>
-              </div>
-            ))}</div>}
+      {/* Add/Edit modal */}
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit Batch' : 'Add New Batch'} size="lg">
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">Batch Name *</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Morning Batch 1"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
           </div>
-          <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm p-4 lg:p-5">
-            <DataTable data={batches} columns={columns} loading={loading} emptyIcon={<Layers size={36} className="text-gray-300" />} emptyMessage="No batches yet" />
-          </div>
-        </>
-      )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Edit Batch' : 'Add Batch'} size="sm">
-        <div className="space-y-4">
-          <FormField label="Batch Name" required><input value={bName} onChange={e => setBName(e.target.value)} className={inputClass} placeholder="e.g., Morning 7AM-9AM" /></FormField>
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Start Date"><input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputClass} /></FormField>
-            <FormField label="End Date"><input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputClass} /></FormField>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Start Time</label>
+              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">End Time</label>
+              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
+            </div>
           </div>
-          <FormField label="Max Students" hint="Leave empty for unlimited"><input type="number" value={maxStudents} onChange={e => setMaxStudents(e.target.value)} className={inputClass} placeholder="e.g., 30" min={1} /></FormField>
-          <div className="flex gap-3 pt-2">
-            <button onClick={() => setModalOpen(false)} className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-            <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving && <Loader2 size={16} className="animate-spin" />}{saving ? 'Saving...' : editing ? 'Update' : 'Create'}
-            </button>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Start Date</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">End Date</label>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
+            </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Max Students (Capacity)</label>
+              <input type="number" min={1} value={maxStudents} onChange={e => setMaxStudents(e.target.value)} placeholder="e.g. 30"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Assign Teacher</label>
+              <select value={teacherId} onChange={e => setTeacherId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20 focus:outline-none">
+                <option value="">No teacher</option>
+                {teachers.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}{t.designation ? ` — ${t.designation}` : ''}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700 mt-2">
+            <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+            Active (available for student enrollment)
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-4">
+          <button onClick={() => setOpen(false)} className="px-4 py-2 rounded-lg text-sm border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button onClick={handleSave} disabled={saving}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+            {saving && <Loader2 size={14} className="animate-spin" />} {editing ? 'Save Changes' : 'Create Batch'}
+          </button>
         </div>
       </Modal>
 
-      <ConfirmDialog open={!!delTarget} onClose={() => setDelTarget(null)} onConfirm={handleDelete}
-        title="Delete Batch?" message={`"${delTarget?.name}" will be permanently removed.`} confirmText="Delete" variant="danger" loading={deleting} />
+      <ConfirmDialog open={!!delTarget} onClose={() => setDelTarget(null)} onConfirm={handleDelete} loading={deleting}
+        title="Delete batch?"
+        message={delTarget ? `Delete "${delTarget.name}"? Students enrolled in this batch will be unlinked, and all attendance records will be removed.` : ''} />
     </div>
   )
 }

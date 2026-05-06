@@ -88,6 +88,7 @@ export default function StudentRegisterPage() {
 
   const [courses, setCourses] = useState<Course[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
+  const [batchCounts, setBatchCounts] = useState<Record<string, number>>({})
   const [branch, setBranch] = useState<Branch | null>(null)
   const [branchesList, setBranchesList] = useState<Branch[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string>('')
@@ -134,7 +135,14 @@ export default function StudentRegisterPage() {
   const totalDeduction = certFee + (packageType === 'certificate_kit' ? kitAmount : 0)
 
   useEffect(() => { fetchInitial() }, [])
-  useEffect(() => { if (courseId) fetchBatches(courseId) }, [courseId])
+  useEffect(() => { fetchBatches() }, [])
+  useEffect(() => { if (courseId) {
+    const c = courses.find(x => x.id === courseId)
+    if (c) {
+      if (!isEdit) setValue('total_fee', c.total_fee)
+      setCertFee(c.certification_fee)
+    }
+  } }, [courseId, courses])
 
   async function fetchInitial() {
     setLoading(true)
@@ -254,14 +262,23 @@ export default function StudentRegisterPage() {
     }, 500)
   }
 
-  async function fetchBatches(cid: string) {
-    const { data } = await supabase.from('uce_batches').select('*').eq('course_id', cid).eq('is_active', true).order('name')
-    setBatches(data ?? [])
-    const c = courses.find(x => x.id === cid)
-    if (c) {
-      if (!isEdit) setValue('total_fee', c.total_fee)
-      setCertFee(c.certification_fee)
+  async function fetchBatches() {
+    let bq = supabase.from('uce_batches')
+      .select('*, teacher:uce_employees!uce_batches_teacher_id_fkey(name)')
+      .eq('is_active', true).order('name')
+    if (!isSuperAdmin && profile?.branch_id) {
+      bq = bq.or(`branch_id.eq.${profile.branch_id},branch_id.is.null`)
     }
+    const [bRes, cntRes] = await Promise.all([
+      bq,
+      supabase.from('uce_students').select('batch_id').not('batch_id', 'is', null),
+    ])
+    const counts: Record<string, number> = {}
+    ;(cntRes.data ?? []).forEach((r: { batch_id: string | null }) => {
+      if (r.batch_id) counts[r.batch_id] = (counts[r.batch_id] || 0) + 1
+    })
+    setBatches((bRes.data ?? []) as Batch[])
+    setBatchCounts(counts)
   }
 
   const stepFields: Record<number, (keyof FormData)[]> = {
@@ -311,6 +328,21 @@ export default function StudentRegisterPage() {
       toast.error(isSuperAdmin ? 'Please select a branch' : 'Your account is not attached to a branch — contact super admin')
       if (isSuperAdmin) setStep(4)
       return
+    }
+
+    // Final capacity guard — fetch live count to avoid race
+    if (form.batch_id) {
+      const b = batches.find(x => x.id === form.batch_id)
+      if (b?.max_students) {
+        const { count } = await supabase.from('uce_students')
+          .select('id', { count: 'exact', head: true })
+          .eq('batch_id', form.batch_id)
+          .neq('id', editId || '00000000-0000-0000-0000-000000000000')
+        if ((count ?? 0) >= b.max_students) {
+          toast.error(`No seats left in "${b.name}" — capacity ${b.max_students} reached. Choose a different batch or contact admin.`)
+          return
+        }
+      }
     }
 
     setSaving(true)
@@ -705,9 +737,25 @@ export default function StudentRegisterPage() {
               <FormField label="Batch">
                 <Select
                   value={watch('batch_id') || ''}
-                  onChange={v => setValue('batch_id', v, { shouldValidate: true })}
-                  options={batches.map(b => ({ value: b.id, label: b.name }))}
-                  placeholder={batches.length === 0 ? 'No batches for this course' : 'Select batch'}
+                  onChange={v => {
+                    const b = batches.find(x => x.id === v)
+                    if (b && b.max_students && b.id !== (isEdit ? watch('batch_id') : '')) {
+                      const used = batchCounts[v] || 0
+                      if (used >= b.max_students) {
+                        toast.error(`No seats left in "${b.name}" — capacity ${b.max_students} reached. Choose a different batch or contact admin.`)
+                        return
+                      }
+                    }
+                    setValue('batch_id', v, { shouldValidate: true })
+                  }}
+                  options={batches.map(b => {
+                    const used = batchCounts[b.id] || 0
+                    const cap = b.max_students || 0
+                    const full = cap > 0 && used >= cap
+                    const seats = cap > 0 ? ` — ${used}/${cap}${full ? ' FULL' : ''}` : ''
+                    return { value: b.id, label: `${b.name}${seats}` }
+                  })}
+                  placeholder={batches.length === 0 ? 'No batches available' : 'Select batch'}
                   disabled={batches.length === 0}
                 />
               </FormField>
