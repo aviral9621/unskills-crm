@@ -1,5 +1,34 @@
 // ── Auth & User Types ──
-export type UserRole = 'super_admin' | 'branch_admin' | 'branch_staff' | 'student'
+export type UserRole = 'super_admin' | 'branch_admin' | 'branch_staff' | 'teacher' | 'student'
+
+export type StudentAttendanceStatus = 'present' | 'absent' | 'leave'
+
+export interface StudentAttendance {
+  id: string
+  student_id: string
+  batch_id: string
+  date: string
+  status: StudentAttendanceStatus
+  leave_reason: string | null
+  marked_by: string | null
+  marked_at: string
+}
+
+export interface BatchStudent {
+  id: string
+  batch_id: string
+  student_id: string
+  enrolled_at: string
+  enrolled_by: string | null
+}
+
+export interface BatchTeacher {
+  id: string
+  batch_id: string
+  employee_id: string
+  assigned_at: string
+  assigned_by: string | null
+}
 
 export interface Profile {
   id: string

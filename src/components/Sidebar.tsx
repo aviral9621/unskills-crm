@@ -74,6 +74,14 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
       },
       { label: 'Marksheets', icon: ScrollText, path: '/admin/marksheets', permission: 'marksheet' },
       {
+        label: 'Attendance', icon: ClipboardList, permission: 'attendance',
+        children: [
+          { label: 'Batch Enrollment', path: '/admin/attendance/batches' },
+          { label: 'Mark Attendance', path: '/admin/attendance/mark' },
+          { label: 'Reports', path: '/admin/attendance/reports' },
+        ],
+      },
+      {
         label: 'Certificates', icon: Award, permission: 'certificate',
         children: [
           { label: 'All Certificates', path: '/admin/certificates' },
@@ -139,6 +147,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
       { label: 'Job Applications', icon: Users, path: '/admin/job-applications' },
       { label: 'Promotion Material', icon: Megaphone, path: '/admin/promotions' },
       { label: 'Announcements', icon: Bell, path: '/admin/announcements' },
+      { label: 'Notifications', icon: Bell, path: '/admin/notifications' },
       { label: 'Support Tickets', icon: LifeBuoy, path: '/admin/support/tickets' },
     ],
   },

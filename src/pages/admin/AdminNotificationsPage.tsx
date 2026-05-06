@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Bell, Briefcase, Megaphone, CheckCheck, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -14,16 +13,21 @@ interface Notification {
   payload: Record<string, unknown> | null
   status: string
   created_at: string
+  branch_id: string | null
+  recipient_role: string | null
 }
 
 const TEMPLATE_META: Record<string, { icon: typeof Bell; color: string; label: string }> = {
-  job_alert:        { icon: Briefcase, color: 'text-red-600 bg-red-50',         label: 'New Job' },
-  announcement:     { icon: Megaphone, color: 'text-blue-600 bg-blue-50',       label: 'Announcement' },
-  default:          { icon: Bell,      color: 'text-gray-600 bg-gray-100',      label: 'Notice' },
+  job_alert:    { icon: Briefcase, color: 'text-red-600 bg-red-50',   label: 'Job Alert' },
+  announcement: { icon: Megaphone, color: 'text-blue-600 bg-blue-50', label: 'Announcement' },
+  default:      { icon: Bell,      color: 'text-gray-600 bg-gray-100', label: 'Notice' },
 }
 
-export default function StudentNotificationsPage() {
-  const { user } = useAuth()
+export default function AdminNotificationsPage() {
+  const { profile } = useAuth()
+  const isSuperAdmin = profile?.role === 'super_admin'
+  const branchId = profile?.branch_id
+
   const [rows, setRows] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -31,29 +35,27 @@ export default function StudentNotificationsPage() {
   const [confirmSel, setConfirmSel] = useState(false)
 
   async function load() {
-    if (!user?.id) return
     setLoading(true)
-    const { data } = await supabase
-      .from('uce_notifications_log')
-      .select('id, channel, template, payload, status, created_at')
-      .eq('student_id', user.id)
+    let q = supabase.from('uce_notifications_log')
+      .select('id, channel, template, payload, status, created_at, branch_id, recipient_role')
       .eq('channel', 'inapp')
+      .in('recipient_role', ['super_admin', 'branch_admin', 'branch_staff'])
       .order('created_at', { ascending: false })
-      .limit(100)
+      .limit(200)
+    if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
+    const { data } = await q
     setRows((data ?? []) as Notification[])
-    setSelected(new Set())
     setLoading(false)
+    setSelected(new Set())
   }
 
-  useEffect(() => { load() /* eslint-disable-next-line */ }, [user?.id])
+  useEffect(() => { if (profile) load() /* eslint-disable-next-line */ }, [profile?.id])
 
   async function markAllRead() {
-    if (!user?.id) return
-    await supabase.from('uce_notifications_log')
-      .update({ status: 'read' })
-      .eq('student_id', user.id)
-      .eq('channel', 'inapp')
-      .neq('status', 'read')
+    let q = supabase.from('uce_notifications_log').update({ status: 'read' })
+      .eq('channel', 'inapp').in('recipient_role', ['super_admin', 'branch_admin', 'branch_staff']).neq('status', 'read')
+    if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
+    await q
     load()
   }
 
@@ -62,15 +64,16 @@ export default function StudentNotificationsPage() {
     if (ids.length === 0) return
     const { error } = await supabase.from('uce_notifications_log').delete().in('id', ids)
     if (error) { toast.error('Delete failed'); return }
-    toast.success(`Deleted ${ids.length}`)
+    toast.success(`Deleted ${ids.length} notification${ids.length > 1 ? 's' : ''}`)
     setConfirmSel(false)
     load()
   }
 
   async function deleteAll() {
-    if (!user?.id) return
-    const { error } = await supabase.from('uce_notifications_log').delete()
-      .eq('student_id', user.id).eq('channel', 'inapp')
+    let q = supabase.from('uce_notifications_log').delete()
+      .eq('channel', 'inapp').in('recipient_role', ['super_admin', 'branch_admin', 'branch_staff'])
+    if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
+    const { error } = await q
     if (error) { toast.error('Delete failed'); return }
     toast.success('All notifications cleared')
     setConfirmAll(false)
@@ -88,12 +91,15 @@ export default function StudentNotificationsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl sm:text-2xl font-bold font-heading">Notifications</h1>
+        <div>
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900 font-heading">Notifications</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{isSuperAdmin ? 'All branches' : 'Your branch'}</p>
+        </div>
         <div className="flex flex-wrap gap-2">
           {selected.size > 0 && (
             <button onClick={() => setConfirmSel(true)}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 text-red-700 hover:bg-red-100">
-              <Trash2 size={14} /> Delete ({selected.size})
+              <Trash2 size={14} /> Delete Selected ({selected.size})
             </button>
           )}
           {rows.some(r => r.status !== 'read') && (
@@ -117,7 +123,7 @@ export default function StudentNotificationsPage() {
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-xl border bg-white p-10 text-center text-sm text-gray-400">
-          <Bell size={28} className="mx-auto mb-2 text-gray-300" />No notifications yet.
+          <Bell size={28} className="mx-auto mb-2 text-gray-300" /> No notifications.
         </div>
       ) : (
         <>
@@ -135,7 +141,6 @@ export default function StudentNotificationsPage() {
               const payload = n.payload || {}
               const title = (payload as { title?: string }).title
               const message = (payload as { message?: string }).message
-              const jobId = (payload as { job_id?: string }).job_id
               return (
                 <div key={n.id}
                   className={`rounded-xl border bg-white p-3 flex items-start gap-3 ${isUnread ? 'border-l-4 border-l-red-500' : ''} ${checked ? 'ring-2 ring-red-200' : ''}`}>
@@ -153,11 +158,6 @@ export default function StudentNotificationsPage() {
                     {message && title && <p className="text-sm text-gray-600 line-clamp-2">{message}</p>}
                     <p className="text-[11px] text-gray-400 mt-1">{formatDateDDMMYYYY(n.created_at)}</p>
                   </div>
-                  {jobId && n.template === 'job_alert' && (
-                    <Link to="/student/jobs" className="text-xs font-semibold text-red-600 hover:underline shrink-0">
-                      View →
-                    </Link>
-                  )}
                 </div>
               )
             })}
@@ -166,9 +166,9 @@ export default function StudentNotificationsPage() {
       )}
 
       <ConfirmDialog open={confirmSel} onClose={() => setConfirmSel(false)} onConfirm={deleteSelected}
-        title="Delete selected?" message={`Delete ${selected.size} notification${selected.size > 1 ? 's' : ''}?`} />
+        title="Delete selected?" message={`Delete ${selected.size} notification${selected.size > 1 ? 's' : ''}? This cannot be undone.`} />
       <ConfirmDialog open={confirmAll} onClose={() => setConfirmAll(false)} onConfirm={deleteAll}
-        title="Delete all?" message="This will delete every notification. Cannot be undone." />
+        title="Delete all notifications?" message="This will permanently delete every notification visible here. Cannot be undone." />
     </div>
   )
 }

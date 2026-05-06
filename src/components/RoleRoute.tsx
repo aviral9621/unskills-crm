@@ -2,11 +2,12 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
-type Role = 'super_admin' | 'branch_admin' | 'branch_staff' | 'student'
+type Role = 'super_admin' | 'branch_admin' | 'branch_staff' | 'teacher' | 'student'
 
 function defaultHomeFor(role?: string): string {
   if (role === 'super_admin') return '/admin/dashboard'
   if (role === 'branch_admin' || role === 'branch_staff') return '/franchise/dashboard'
+  if (role === 'teacher') return '/teacher/attendance'
   if (role === 'student') return '/student/dashboard'
   return '/franchise/login'
 }

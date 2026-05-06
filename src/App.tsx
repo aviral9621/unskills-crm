@@ -7,6 +7,7 @@ import { ProtectedRoute, PublicRoute } from './components/RoleRoute'
 import AdminLayout from './layouts/AdminLayout'
 import FranchiseLayout from './layouts/FranchiseLayout'
 import StudentLayout from './layouts/StudentLayout'
+import TeacherLayout from './layouts/TeacherLayout'
 
 // Login pages stay eager — they are the entry points and must paint immediately.
 import LoginPage from './pages/LoginPage'
@@ -97,6 +98,10 @@ const AdminJobsPage = lazy(() => import('./pages/admin/AdminJobsPage'))
 const AdminJobApplicationsPage = lazy(() => import('./pages/admin/AdminJobApplicationsPage'))
 const AdminJobApplicationsAllPage = lazy(() => import('./pages/admin/AdminJobApplicationsAllPage'))
 const PendingPaymentsPage = lazy(() => import('./pages/fees/PendingPaymentsPage'))
+const BatchEnrollmentPage = lazy(() => import('./pages/attendance/BatchEnrollmentPage'))
+const MarkAttendancePage = lazy(() => import('./pages/attendance/MarkAttendancePage'))
+const AttendanceReportsPage = lazy(() => import('./pages/attendance/AttendanceReportsPage'))
+const AdminNotificationsPage = lazy(() => import('./pages/admin/AdminNotificationsPage'))
 
 // Franchise pages — lazy
 const FDashboardPage = lazy(() => import('./pages/franchise/FDashboardPage'))
@@ -139,6 +144,7 @@ const StudentProfilePage = lazy(() => import('./pages/student/StudentProfilePage
 const StudentTestsPage = lazy(() => import('./pages/student/StudentTestsPage'))
 const StudentTakeTestPage = lazy(() => import('./pages/student/StudentTakeTestPage'))
 const StudentAdmitCardPage = lazy(() => import('./pages/student/StudentAdmitCardPage'))
+const StudentAttendancePage = lazy(() => import('./pages/student/StudentAttendancePage'))
 const StudentExamFormFillPage = lazy(() => import('./pages/student/StudentExamFormFillPage'))
 const AnnouncementsPage = lazy(() => import('./pages/announcements/AnnouncementsPage'))
 
@@ -227,6 +233,10 @@ function AppRoutes() {
           <Route path="staff/id-card" element={<StaffIdCardPage />} />
           <Route path="staff/id-card-settings" element={<StaffIdCardSettingsPage />} />
           <Route path="staff/attendance" element={<AttendancePage />} />
+          <Route path="attendance/batches" element={<BatchEnrollmentPage />} />
+          <Route path="attendance/mark" element={<MarkAttendancePage />} />
+          <Route path="attendance/reports" element={<AttendanceReportsPage />} />
+          <Route path="notifications" element={<AdminNotificationsPage />} />
           <Route path="staff/advances" element={<AdvanceReportPage />} />
           <Route path="staff/salary-slips" element={<SalarySlipPage />} />
 
@@ -312,8 +322,21 @@ function AppRoutes() {
           <Route path="reports/pending-fees" element={<FPendingFeesPage />} />
           <Route path="reports/wallet" element={<FWalletReportPage />} />
 
+          <Route path="attendance/batches" element={<BatchEnrollmentPage />} />
+          <Route path="attendance/mark" element={<MarkAttendancePage />} />
+          <Route path="attendance/reports" element={<AttendanceReportsPage />} />
+          <Route path="notifications" element={<AdminNotificationsPage />} />
+
           <Route path="profile" element={<FProfilePage />} />
           <Route path="settings" element={<FSettingsPage />} />
+        </Route>
+
+        {/* Teacher panel */}
+        <Route path="/teacher" element={<ProtectedRoute allow={['teacher']}><TeacherLayout /></ProtectedRoute>}>
+          <Route index element={<Navigate to="attendance" replace />} />
+          <Route path="attendance" element={<MarkAttendancePage />} />
+          <Route path="reports" element={<AttendanceReportsPage />} />
+          <Route path="profile" element={<ProfilePage />} />
         </Route>
 
         {/* Student panel */}
@@ -331,6 +354,7 @@ function AppRoutes() {
           <Route path="exam-forms" element={<StudentExamFormPage />} />
           <Route path="exam-forms/:windowId/fill" element={<StudentExamFormFillPage />} />
           <Route path="admit-card" element={<StudentAdmitCardPage />} />
+          <Route path="attendance" element={<StudentAttendancePage />} />
           <Route path="results" element={<StudentResultsPage />} />
           <Route path="jobs" element={<StudentJobsPage />} />
           <Route path="notifications" element={<StudentNotificationsPage />} />

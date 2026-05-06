@@ -48,6 +48,14 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
       { label: 'Marksheets', icon: ScrollText, path: '/franchise/marksheets' },
       { label: 'Certificates', icon: IdCard, path: '/franchise/certificates' },
       { label: 'Results', icon: ClipboardList, path: '/franchise/results' },
+      {
+        label: 'Attendance', icon: ClipboardList,
+        children: [
+          { label: 'Batch Enrollment', path: '/franchise/attendance/batches' },
+          { label: 'Mark Attendance', path: '/franchise/attendance/mark' },
+          { label: 'Reports', path: '/franchise/attendance/reports' },
+        ],
+      },
     ],
   },
   {
@@ -70,6 +78,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
       { label: 'Jobs', icon: Briefcase, path: '/franchise/jobs' },
       { label: 'Promotions', icon: Megaphone, path: '/franchise/promotions' },
       { label: 'Announcements', icon: Bell, path: '/franchise/announcements' },
+      { label: 'Notifications', icon: Bell, path: '/franchise/notifications' },
     ],
   },
   {
