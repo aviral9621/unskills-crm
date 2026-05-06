@@ -1,4 +1,4 @@
-import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb, StandardFonts, degrees } from 'pdf-lib'
+import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb, degrees } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -63,41 +63,38 @@ export interface BuildRegCertInput {
   branch: RegCertBranch | null
   fees: RegCertFees
   qrDataUrl: string
-  /** Resolved branch logo (data URL). */
   branchLogoDataUrl: string
-  /** Quality Education seal (data URL). */
   sealDataUrl: string
-  /** Optional signatory image (data URL). */
   signatureDataUrl: string
-  /** Constant Head Office address line. */
   headOfficeAddress: string
-  /** Two contact numbers shown in the header band. */
   headOfficeContacts: string
-  /** Top brand title (always reads "UnSkills Computer Education" — institute brand, not branch). */
   brandTitle: string
-}
-
-// ─── Colors ───────────────────────────────────────────────────────────────────
-
-const C = {
-  navy:   rgb(0.043, 0.106, 0.247), // #0B1B3F  matches the reference border
-  gold:   rgb(0.722, 0.525, 0.043),
-  red:    rgb(0.784, 0.063, 0.180),
-  ink:    rgb(0.094, 0.094, 0.094),
-  muted:  rgb(0.39,  0.39,  0.39),
-  hairline: rgb(0.78, 0.78, 0.82),
-  panel:  rgb(0.972, 0.972, 0.978),
-  white:  rgb(1, 1, 1),
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const A4: [number, number] = [595.28, 841.89]   // A4 portrait
+const A4: [number, number] = [595.28, 841.89]
 const TEMPLATE_PATH = '/registration certificate .pdf'
 const SEAL_PATH = '/quality education.png'
 const FALLBACK_LOGO = '/MAIN LOGO FOR ALL CARDS.png'
+const NA = 'NA'
 
-// ─── Tiny helpers ─────────────────────────────────────────────────────────────
+// Brand palette (matches the reference UI guide)
+const C = {
+  navy:        rgb(0.027, 0.114, 0.286),  // #071D49 — institute brand navy
+  navyDeep:    rgb(0.043, 0.122, 0.302),  // #0B1F4D — title navy
+  gold:        rgb(0.831, 0.686, 0.235),  // #D4AF37
+  goldSoft:    rgb(0.784, 0.608, 0.235),  // #C89B3C — border gold
+  red:         rgb(0.722, 0.106, 0.094),  // #B91B18 — registration accent
+  ink:         rgb(0.133, 0.133, 0.133),  // #222222
+  inkSoft:     rgb(0.267, 0.267, 0.267),  // #444
+  hairline:    rgb(0.83, 0.83, 0.86),
+  panel:       rgb(0.978, 0.978, 0.984),  // very faint card fill
+  panelStrong: rgb(0.953, 0.953, 0.965),
+  white:       rgb(1, 1, 1),
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function fetchBytes(path: string): Promise<ArrayBuffer | null> {
   try {
@@ -118,18 +115,13 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   })
 }
 
-/**
- * Fetch any URL (http/https or relative) into a data URL. Falls back to the
- * existing Supabase image-proxy edge function if a CORS error is thrown by the
- * remote host (mirrors the pattern in lib/pdf/marksheet.tsx).
- */
 export async function toDataUrl(url: string): Promise<string> {
   if (!url) return ''
   if (url.startsWith('data:')) return url
   try {
     const res = await fetch(url, { mode: 'cors' })
     if (res.ok) return await blobToDataUrl(await res.blob())
-  } catch { /* fall through to proxy */ }
+  } catch { /* fall through */ }
   const supaUrl = (import.meta as { env?: { VITE_SUPABASE_URL?: string } }).env?.VITE_SUPABASE_URL
   if (supaUrl) {
     try {
@@ -147,14 +139,11 @@ async function embedAny(doc: PDFDocument, dataUrl: string): Promise<PDFImage | n
     if (dataUrl.includes('image/png')) return await doc.embedPng(dataUrl)
     if (dataUrl.includes('image/jp')) return await doc.embedJpg(dataUrl)
     try { return await doc.embedPng(dataUrl) } catch { return await doc.embedJpg(dataUrl) }
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return '—'
-  // dd-mm-yyyy to match the reference image (05-11-2011).
+  if (!iso) return NA
   const d = new Date(iso)
   if (isNaN(d.getTime())) return iso
   const dd = String(d.getDate()).padStart(2, '0')
@@ -164,9 +153,7 @@ function fmtDate(iso: string | null): string {
 }
 
 function fmtINR(n: number | null | undefined): string {
-  if (n === null || n === undefined || Number.isNaN(n)) return '—'
-  // pdf-lib's Standard fonts (Helvetica) are WinAnsi-only — the ₹ glyph (U+20B9)
-  // would throw "WinAnsi cannot encode". Use "Rs." which renders cleanly.
+  if (n === null || n === undefined || Number.isNaN(n)) return NA
   return `Rs. ${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
@@ -179,21 +166,26 @@ function formatBranchAddress(b: RegCertBranch | null | undefined): string {
   return joinAddress([b.address_line1, b.village, b.block, b.district, b.state, b.pincode])
 }
 
-// ─── Drawing primitives ───────────────────────────────────────────────────────
+function valueOrNA(v: string | null | undefined): string {
+  const s = (v ?? '').trim()
+  return s ? s : NA
+}
+
+function titleCase(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+}
 
 /**
- * Strip characters outside the WinAnsi range (Standard PDF fonts can't encode
- * them and would throw at draw time). We replace the rupee sign explicitly and
- * fall back to "?" for anything else exotic — far better than the entire PDF
- * failing to render because a student's name has a Devanagari character.
+ * pdf-lib's Standard fonts are WinAnsi-only, but we're embedding TTFs via
+ * fontkit which gives full Unicode. Most issues come from the rupee sign which
+ * is missing from many Latin-only fonts — convert it pre-emptively.
  */
-function sanitizeWinAnsi(s: string): string {
+function normalize(s: string): string {
   if (!s) return s
-  return s
-    .replace(/₹/g, 'Rs.')          // ₹ → Rs.
-    .replace(/[ऀ-ॿ]/g, '')    // strip Devanagari
-    .replace(/[^\x00-\xFF]/g, '?')      // any other non-Latin1 → ?
+  return s.replace(/₹\s*/g, 'Rs. ')
 }
+
+// ─── Drawing primitives ───────────────────────────────────────────────────────
 
 function drawText(
   page: PDFPage,
@@ -208,15 +200,15 @@ function drawText(
 ) {
   if (!text) return
   const { x, y, size, font, color = C.ink, align = 'left', maxWidth, letterSpacing = 0 } = opts
-  let str = sanitizeWinAnsi(text)
+  let str = normalize(text)
   if (maxWidth) {
     while (font.widthOfTextAtSize(str, size) > maxWidth && str.length > 1) {
       str = str.slice(0, -1)
     }
-    if (str !== text) str = str.slice(0, Math.max(1, str.length - 1)) + '…'
+    if (str.length < normalize(text).length) str = str.slice(0, Math.max(1, str.length - 1)) + '…'
   }
   if (letterSpacing > 0) {
-    const chars = str.split('')
+    const chars = Array.from(str)
     const totalW = chars.reduce((sum, ch) => sum + font.widthOfTextAtSize(ch, size) + letterSpacing, 0) - letterSpacing
     let cx = align === 'center' ? x - totalW / 2 : align === 'right' ? x - totalW : x
     for (const ch of chars) {
@@ -230,31 +222,30 @@ function drawText(
   page.drawText(str, { x: drawX, y, size, font, color })
 }
 
-function drawDivider(page: PDFPage, cx: number, y: number, halfLen: number) {
-  page.drawLine({ start: { x: cx - halfLen, y }, end: { x: cx - 8, y }, thickness: 0.7, color: C.gold })
-  page.drawRectangle({ x: cx - 3, y: y - 3, width: 6, height: 6, color: C.gold, rotate: degrees(45) })
-  page.drawLine({ start: { x: cx + 8, y }, end: { x: cx + halfLen, y }, thickness: 0.7, color: C.gold })
-}
-
-/**
- * Section pill — navy rounded ribbon with gold borders, used for STUDENT
- * INFORMATION / COURSE INFORMATION / FEE DETAILS headers.
- */
+/** Section pill — navy ribbon with gold chevron caps. */
 function drawSectionPill(page: PDFPage, cx: number, y: number, label: string, font: PDFFont) {
-  const pillW = 220, pillH = 22
+  const pillW = 240, pillH = 22
   const x = cx - pillW / 2
+  // Body
   page.drawRectangle({ x, y, width: pillW, height: pillH, color: C.navy })
-  // Gold side caps to evoke the chevron look in the reference
-  const cap = pillH
-  page.drawRectangle({ x: x - 4, y: y + 2, width: 4, height: pillH - 4, color: C.gold })
-  page.drawRectangle({ x: x + pillW, y: y + 2, width: 4, height: pillH - 4, color: C.gold })
-  page.drawLine({ start: { x, y: y + cap }, end: { x: x + pillW, y: y + cap }, thickness: 0.5, color: C.gold })
-  drawText(page, label, {
-    x: cx, y: y + 6, size: 10.5, font, color: C.white, align: 'center', letterSpacing: 1,
+  // Gold chevron caps (diamond shapes flanking the pill)
+  const capW = 14
+  page.drawRectangle({ x: x - capW, y: y + 4, width: capW, height: pillH - 8, color: C.gold })
+  page.drawRectangle({ x: x + pillW, y: y + 4, width: capW, height: pillH - 8, color: C.gold })
+  drawText(page, label.toUpperCase(), {
+    x: cx, y: y + 7, size: 11, font, color: C.white, align: 'center', letterSpacing: 1.2,
   })
 }
 
-// ─── Template / fonts ─────────────────────────────────────────────────────────
+/** Gold horizontal divider with a centred diamond. */
+function drawGoldDivider(page: PDFPage, cx: number, y: number, halfLen: number) {
+  page.drawLine({ start: { x: cx - halfLen, y }, end: { x: cx - 8, y }, thickness: 0.8, color: C.gold })
+  page.drawLine({ start: { x: cx + 8, y }, end: { x: cx + halfLen, y }, thickness: 0.8, color: C.gold })
+  // Diamond at the centre — drawn as a rotated 6×6 square.
+  page.drawRectangle({ x: cx - 3, y: y - 3, width: 6, height: 6, color: C.gold, rotate: degrees(45) })
+}
+
+// ─── Template + fonts ─────────────────────────────────────────────────────────
 
 async function makeDocWithTemplate(): Promise<PDFDocument> {
   const doc = await PDFDocument.create()
@@ -274,283 +265,418 @@ async function makeDocWithTemplate(): Promise<PDFDocument> {
         height: ts.height * scale,
       })
     }
-  } catch { /* leave blank — content still renders */ }
+  } catch { /* template optional */ }
   return doc
 }
 
 interface FontSet {
+  /** Cinzel Bold — main certificate title. */
+  serif: PDFFont
+  /** PlayfairDisplay italic — "This is to certify…" subtitle. */
+  serifItalic: PDFFont
+  /** Montserrat Bold — institute name + emphasis. */
+  brand: PDFFont
+  /** Montserrat SemiBold — section pills. */
+  pill: PDFFont
+  /** Poppins SemiBold — labels. */
+  label: PDFFont
+  /** Poppins Regular — values & body. */
   body: PDFFont
-  bodyBold: PDFFont
-  serifBold: PDFFont
-  serifItalicBold: PDFFont
+  /** Poppins Medium — sub-emphasis. */
+  bodyMedium: PDFFont
 }
 
 async function loadFonts(doc: PDFDocument): Promise<FontSet> {
   doc.registerFontkit(fontkit)
-  const body = await doc.embedFont(StandardFonts.Helvetica)
-  const bodyBold = await doc.embedFont(StandardFonts.HelveticaBold)
-  const serifBold = await doc.embedFont(StandardFonts.TimesRomanBold)
-  const serifItalicBold = await doc.embedFont(StandardFonts.TimesRomanBoldItalic)
-  return { body, bodyBold, serifBold, serifItalicBold }
+  async function tryEmbed(path: string): Promise<PDFFont | null> {
+    const bytes = await fetchBytes(path)
+    if (!bytes) return null
+    try { return await doc.embedFont(bytes, { features: { liga: false, dlig: false, clig: false } }) }
+    catch { return null }
+  }
+  const [
+    cinzelBold,
+    playfairItalic,
+    montserratBold,
+    montserratSemi,
+    poppinsSemi,
+    poppinsReg,
+    poppinsMed,
+  ] = await Promise.all([
+    tryEmbed('/fonts/Cinzel-Bold.ttf'),
+    tryEmbed('/fonts/PlayfairDisplay-Italic-VF.ttf'),
+    tryEmbed('/fonts/Montserrat-Bold.ttf'),
+    tryEmbed('/fonts/Montserrat-SemiBold.ttf'),
+    tryEmbed('/fonts/Poppins-SemiBold.ttf'),
+    tryEmbed('/fonts/Poppins-Regular.ttf'),
+    tryEmbed('/fonts/Poppins-Medium.ttf'),
+  ])
+
+  // Fall back to standard fonts if any TTF failed to load — better degraded
+  // typography than a broken document.
+  const { StandardFonts } = await import('pdf-lib')
+  const fallbackBold = await doc.embedFont(StandardFonts.HelveticaBold)
+  const fallbackReg  = await doc.embedFont(StandardFonts.Helvetica)
+  const fallbackItalic = await doc.embedFont(StandardFonts.TimesRomanItalic)
+  const fallbackSerifBold = await doc.embedFont(StandardFonts.TimesRomanBold)
+
+  return {
+    serif:       cinzelBold      ?? fallbackSerifBold,
+    serifItalic: playfairItalic  ?? fallbackItalic,
+    brand:       montserratBold  ?? fallbackBold,
+    pill:        montserratSemi  ?? fallbackBold,
+    label:       poppinsSemi     ?? fallbackBold,
+    body:        poppinsReg      ?? fallbackReg,
+    bodyMedium:  poppinsMed      ?? fallbackReg,
+  }
 }
 
-// ─── Layout ───────────────────────────────────────────────────────────────────
+// ─── Content layout ───────────────────────────────────────────────────────────
 
-/**
- * The supplied `registration certificate .pdf` template already paints the
- * navy + gold border. We draw all the content INSIDE the safe zone:
- *   x ∈ [50, W-50], y ∈ [40, H-40]
- *
- * The Y-coordinates below are picked to land neatly on top of the template's
- * decorative bands. If the template is ever swapped, only these constants need
- * to move.
- */
 async function paintContent(
   doc: PDFDocument,
   page: PDFPage,
-  fonts: FontSet,
+  f: FontSet,
   data: BuildRegCertInput,
 ) {
   const [W, H] = A4
   const cx = W / 2
+  const stu = data.student
 
-  // ─── Header band (navy backdrop matches the template) ────────────────────
-  // Logo circle (left, ~ x:60 y: H-110, d:80)
-  const logoImg = data.branchLogoDataUrl
-    ? await embedAny(doc, data.branchLogoDataUrl)
-    : null
+  // Safe content margins: leave 60pt on left/right, 50pt top, 40pt bottom so we
+  // never run into the navy + gold border the template paints.
+  const SAFE_X1 = 60
+  const SAFE_X2 = W - 60
+
+  // ─── 1. HEADER (3 columns: logo · institute info · reg no) ───────────────
+  const HEAD_TOP = H - 50          // top of the header band
+  const HEAD_BOT = H - 152         // bottom of the header band
+  const HEAD_HEIGHT = HEAD_TOP - HEAD_BOT
+
+  // Column boundaries
+  const COL1_X = SAFE_X1 + 5                    // logo column
+  const COL2_X = SAFE_X1 + 110                  // institute info column starts here
+  const COL3_X = SAFE_X2 - 130                  // reg no column starts here
+
+  // Vertical separators between columns
+  page.drawLine({ start: { x: COL2_X - 8, y: HEAD_BOT + 8 }, end: { x: COL2_X - 8, y: HEAD_TOP }, thickness: 0.6, color: C.hairline })
+  page.drawLine({ start: { x: COL3_X - 8, y: HEAD_BOT + 8 }, end: { x: COL3_X - 8, y: HEAD_TOP }, thickness: 0.6, color: C.hairline })
+
+  // 1a. Logo (left column, vertically centred)
+  const logoImg = data.branchLogoDataUrl ? await embedAny(doc, data.branchLogoDataUrl) : null
+  const logoCx = COL1_X + 40
+  const logoCy = HEAD_BOT + HEAD_HEIGHT / 2
   if (logoImg) {
-    // The template already has a gold ring; we draw a white circle inside,
-    // then the logo so transparency works.
     const r = 36
-    const lx = 92, ly = H - 95
-    page.drawCircle({ x: lx, y: ly, size: r, color: C.white })
-    const dim = r * 1.65
-    page.drawImage(logoImg, { x: lx - dim / 2, y: ly - dim / 2, width: dim, height: dim })
+    page.drawCircle({ x: logoCx, y: logoCy, size: r + 2, color: C.gold })            // gold ring
+    page.drawCircle({ x: logoCx, y: logoCy, size: r,     color: C.white })           // white inset
+    const dim = r * 1.55
+    page.drawImage(logoImg, { x: logoCx - dim / 2, y: logoCy - dim / 2, width: dim, height: dim })
   }
 
-  // Centre brand block
-  const brandY = H - 70
+  // 1b. Institute info (centre column)
   drawText(page, data.brandTitle.toUpperCase(), {
-    x: cx + 18, y: brandY, size: 17, font: fonts.bodyBold, color: C.navy, align: 'center', letterSpacing: 0.3,
+    x: COL2_X, y: HEAD_TOP - 22, size: 18, font: f.brand, color: C.navy,
+    maxWidth: COL3_X - COL2_X - 24, letterSpacing: 0.2,
   })
-  // 3-line address block (left-aligned within centre column)
-  const addrX = 175
-  const branchAddrLine = formatBranchAddress(data.branch) || data.headOfficeAddress
-  drawText(page, 'Head Office', { x: addrX, y: brandY - 16, size: 7.5, font: fonts.bodyBold, color: C.ink })
-  drawText(page, ':', { x: addrX + 60, y: brandY - 16, size: 7.5, font: fonts.body, color: C.ink })
-  drawText(page, data.headOfficeAddress, { x: addrX + 68, y: brandY - 16, size: 7.5, font: fonts.body, color: C.ink, maxWidth: 240 })
-
-  drawText(page, 'Branch Office', { x: addrX, y: brandY - 28, size: 7.5, font: fonts.bodyBold, color: C.ink })
-  drawText(page, ':', { x: addrX + 60, y: brandY - 28, size: 7.5, font: fonts.body, color: C.ink })
-  drawText(page, branchAddrLine, { x: addrX + 68, y: brandY - 28, size: 7.5, font: fonts.body, color: C.ink, maxWidth: 240 })
-
-  drawText(page, 'Contact No.', { x: addrX, y: brandY - 40, size: 7.5, font: fonts.bodyBold, color: C.ink })
-  drawText(page, ':', { x: addrX + 60, y: brandY - 40, size: 7.5, font: fonts.body, color: C.ink })
-  const contacts = data.branch?.director_phone
-    ? `${data.branch.director_phone}${data.headOfficeContacts ? `, ${data.headOfficeContacts}` : ''}`
+  // Address rows — label : value, label gold-bold, value black
+  const ADDR_LABEL_W = 78
+  const ADDR_X = COL2_X
+  const branchAddr = formatBranchAddress(data.branch) || data.headOfficeAddress
+  const headLines = wrapToLines(data.headOfficeAddress, f.body, 9, COL3_X - (ADDR_X + ADDR_LABEL_W + 8) - 4, 2)
+  const branchLines = wrapToLines(branchAddr, f.body, 9, COL3_X - (ADDR_X + ADDR_LABEL_W + 8) - 4, 2)
+  const phoneText = data.branch?.director_phone
+    ? `${data.branch.director_phone}, ${data.headOfficeContacts}`
     : data.headOfficeContacts
-  drawText(page, contacts, { x: addrX + 68, y: brandY - 40, size: 7.5, font: fonts.body, color: C.ink, maxWidth: 240 })
 
-  // Right meta — Registration No.
-  const metaX = W - 120
-  drawText(page, 'Registration No.', { x: metaX, y: brandY - 12, size: 9, font: fonts.bodyBold, color: C.ink, align: 'center' })
-  drawText(page, data.student.registration_no || '—', {
-    x: metaX, y: brandY - 28, size: 11.5, font: fonts.bodyBold, color: C.red, align: 'center',
+  // Render the two-line address block tightly (each label paints opposite the
+  // first wrapped line of its value).
+  let curY = HEAD_TOP - 46
+  curY = renderHeaderField(page, f, 'Head Office', headLines, ADDR_X, ADDR_LABEL_W, curY)
+  curY = renderHeaderField(page, f, 'Branch Office', branchLines, ADDR_X, ADDR_LABEL_W, curY)
+  curY = renderHeaderField(page, f, 'Contact No.', [phoneText], ADDR_X, ADDR_LABEL_W, curY)
+
+  // 1c. Registration No (right column)
+  drawText(page, 'Registration No.', {
+    x: COL3_X + 60, y: HEAD_TOP - 36, size: 11, font: f.label, color: C.ink, align: 'center',
+  })
+  drawText(page, valueOrNA(stu.registration_no), {
+    x: COL3_X + 60, y: HEAD_TOP - 56, size: 16, font: f.brand, color: C.red, align: 'center',
   })
 
-  // Divider with diamond, just under the header
-  drawDivider(page, cx, H - 145, 200)
+  // ─── 2. Title section ────────────────────────────────────────────────────
+  drawGoldDivider(page, cx, HEAD_BOT - 10, 230)
 
-  // ─── Title ───────────────────────────────────────────────────────────────
   drawText(page, 'REGISTRATION CERTIFICATE', {
-    x: cx, y: H - 195, size: 30, font: fonts.serifItalicBold, color: C.navy, align: 'center', letterSpacing: 0.5,
+    x: cx, y: HEAD_BOT - 60, size: 30, font: f.serif, color: C.navyDeep, align: 'center', letterSpacing: 1.2,
   })
+
   drawText(page, 'This is to certify that the following student has been registered with', {
-    x: cx, y: H - 220, size: 9.5, font: fonts.body, color: C.muted, align: 'center',
+    x: cx, y: HEAD_BOT - 92, size: 11, font: f.serifItalic, color: C.inkSoft, align: 'center',
   })
   drawText(page, data.brandTitle, {
-    x: cx, y: H - 234, size: 11, font: fonts.bodyBold, color: C.ink, align: 'center',
+    x: cx, y: HEAD_BOT - 108, size: 12, font: f.brand, color: C.ink, align: 'center',
   })
   drawText(page, 'for the selected course and academic session.', {
-    x: cx, y: H - 248, size: 9, font: fonts.body, color: C.muted, align: 'center',
+    x: cx, y: HEAD_BOT - 124, size: 11, font: f.serifItalic, color: C.inkSoft, align: 'center',
   })
 
-  // ─── STUDENT INFORMATION ─────────────────────────────────────────────────
-  const studentBoxTop = H - 270
-  drawSectionPill(page, cx, studentBoxTop - 14, 'STUDENT INFORMATION', fonts.bodyBold)
+  // ─── 3. STUDENT INFORMATION ──────────────────────────────────────────────
+  const STU_PILL_Y = HEAD_BOT - 154
+  drawSectionPill(page, cx, STU_PILL_Y, 'Student Information', f.pill)
 
-  const studentBoxY = studentBoxTop - 200
-  // Outer panel
+  // Card geometry
+  const STU_CARD_TOP = STU_PILL_Y - 8
+  const STU_CARD_H = 230
+  const STU_CARD_BOT = STU_CARD_TOP - STU_CARD_H
   page.drawRectangle({
-    x: 55, y: studentBoxY, width: W - 110, height: 192,
-    color: C.panel, borderColor: C.hairline, borderWidth: 0.6,
+    x: SAFE_X1, y: STU_CARD_BOT, width: SAFE_X2 - SAFE_X1, height: STU_CARD_H,
+    color: C.panel, borderColor: C.hairline, borderWidth: 0.7,
   })
 
-  // Photo box (right)
-  const photoX = W - 130, photoY = studentBoxY + 30
-  const photoW = 70, photoH = 90
+  // Photo (right side)
+  const PHOTO_W = 84, PHOTO_H = 108
+  const PHOTO_X = SAFE_X2 - PHOTO_W - 18
+  const PHOTO_Y = STU_CARD_TOP - 18 - PHOTO_H
   page.drawRectangle({
-    x: photoX, y: photoY, width: photoW, height: photoH,
-    color: C.white, borderColor: C.hairline, borderWidth: 0.6,
+    x: PHOTO_X, y: PHOTO_Y, width: PHOTO_W, height: PHOTO_H,
+    color: C.white, borderColor: C.hairline, borderWidth: 0.8,
   })
-  if (data.student.photo_url) {
-    const photoData = await toDataUrl(data.student.photo_url)
+  if (stu.photo_url) {
+    const photoData = await toDataUrl(stu.photo_url)
     const photoImg = await embedAny(doc, photoData)
     if (photoImg) {
-      page.drawImage(photoImg, { x: photoX + 1, y: photoY + 1, width: photoW - 2, height: photoH - 2 })
+      page.drawImage(photoImg, { x: PHOTO_X + 1, y: PHOTO_Y + 1, width: PHOTO_W - 2, height: PHOTO_H - 2 })
     } else {
-      drawText(page, 'PHOTO', { x: photoX + photoW / 2, y: photoY + photoH / 2 - 4, size: 8, font: fonts.body, color: C.muted, align: 'center' })
+      drawText(page, 'PHOTO', { x: PHOTO_X + PHOTO_W / 2, y: PHOTO_Y + PHOTO_H / 2 - 4, size: 8, font: f.label, color: C.hairline, align: 'center' })
     }
   } else {
-    drawText(page, 'PHOTO', { x: photoX + photoW / 2, y: photoY + photoH / 2 - 4, size: 8, font: fonts.body, color: C.muted, align: 'center' })
+    drawText(page, 'PHOTO', { x: PHOTO_X + PHOTO_W / 2, y: PHOTO_Y + PHOTO_H / 2 - 4, size: 8, font: f.label, color: C.hairline, align: 'center' })
   }
 
-  // Two-column field grid (left half single col, right half two-up)
-  const labelX = 70
-  const sepX = 175
-  const valueX = 180
-  const lineH = 17
-  const fieldsTop = studentBoxY + 175
+  // Field grid — split layout to mirror the reference exactly.
+  // Single-row fields span left + middle col; split rows show two label/value
+  // pairs (left half + right half). The right column ends before the photo
+  // (at PHOTO_X - 12) so values never collide with the photo.
+  const FIELD_LEFT  = SAFE_X1 + 14
+  const LBL1_X = FIELD_LEFT
+  const SEP1_X = FIELD_LEFT + 100
+  const VAL1_X = FIELD_LEFT + 108
+  const VAL1_W = (PHOTO_X - 12) - VAL1_X     // single-col rows extend to photo
+  const SPLIT_RIGHT_LBL = FIELD_LEFT + 248
+  const SPLIT_RIGHT_SEP = FIELD_LEFT + 318
+  const SPLIT_RIGHT_VAL = FIELD_LEFT + 326
+  const SPLIT_LEFT_VAL_W = SPLIT_RIGHT_LBL - VAL1_X - 8
+  const SPLIT_RIGHT_VAL_W = (PHOTO_X - 12) - SPLIT_RIGHT_VAL
 
-  function row(i: number, label: string, value: string, fullWidth = false): void {
-    const ly = fieldsTop - i * lineH
-    drawText(page, label, { x: labelX, y: ly, size: 8.5, font: fonts.bodyBold, color: C.ink })
-    drawText(page, ':', { x: sepX, y: ly, size: 8.5, font: fonts.body, color: C.ink })
-    drawText(page, value || '—', {
-      x: valueX, y: ly, size: 8.5, font: fonts.body, color: C.ink,
-      maxWidth: fullWidth ? W - 250 : 200,
-    })
+  const ROW_H = 17
+  const FIRST_ROW_Y = STU_CARD_TOP - 22
+
+  function row(i: number, label: string, value: string): void {
+    const ly = FIRST_ROW_Y - i * ROW_H
+    drawText(page, label,           { x: LBL1_X, y: ly, size: 9.5, font: f.label, color: C.ink })
+    drawText(page, ':',             { x: SEP1_X, y: ly, size: 9.5, font: f.body,  color: C.ink })
+    drawText(page, valueOrNA(value),{ x: VAL1_X, y: ly, size: 9.5, font: f.body,  color: C.ink, maxWidth: VAL1_W })
+  }
+  function splitRow(i: number, lLbl: string, lVal: string, rLbl: string, rVal: string): void {
+    const ly = FIRST_ROW_Y - i * ROW_H
+    drawText(page, lLbl,            { x: LBL1_X, y: ly, size: 9.5, font: f.label, color: C.ink })
+    drawText(page, ':',             { x: SEP1_X, y: ly, size: 9.5, font: f.body,  color: C.ink })
+    drawText(page, valueOrNA(lVal), { x: VAL1_X, y: ly, size: 9.5, font: f.body,  color: C.ink, maxWidth: SPLIT_LEFT_VAL_W })
+    drawText(page, rLbl,            { x: SPLIT_RIGHT_LBL, y: ly, size: 9.5, font: f.label, color: C.ink })
+    drawText(page, ':',             { x: SPLIT_RIGHT_SEP, y: ly, size: 9.5, font: f.body,  color: C.ink })
+    drawText(page, valueOrNA(rVal), { x: SPLIT_RIGHT_VAL, y: ly, size: 9.5, font: f.body,  color: C.ink, maxWidth: SPLIT_RIGHT_VAL_W })
   }
 
-  // Split row helper — value column on left + a second label/value to the right.
-  function splitRow(
-    i: number,
-    leftLabel: string, leftValue: string,
-    rightLabel: string, rightValue: string,
-  ): void {
-    const ly = fieldsTop - i * lineH
-    drawText(page, leftLabel, { x: labelX, y: ly, size: 8.5, font: fonts.bodyBold, color: C.ink })
-    drawText(page, ':', { x: sepX, y: ly, size: 8.5, font: fonts.body, color: C.ink })
-    drawText(page, leftValue || '—', { x: valueX, y: ly, size: 8.5, font: fonts.body, color: C.ink, maxWidth: 90 })
-
-    const r1 = 290, r2 = 360, r3 = 365
-    drawText(page, rightLabel, { x: r1, y: ly, size: 8.5, font: fonts.bodyBold, color: C.ink })
-    drawText(page, ':', { x: r2, y: ly, size: 8.5, font: fonts.body, color: C.ink })
-    drawText(page, rightValue || '—', { x: r3, y: ly, size: 8.5, font: fonts.body, color: C.ink, maxWidth: 100 })
-  }
-
-  const stu = data.student
   const studentAddress = joinAddress([stu.address, stu.village, stu.block])
+  const stateValue = stu.state ? titleCase(stu.state) : NA
+  const districtValue = stu.district ? titleCase(stu.district) : NA
+  const genderValue = stu.gender ? titleCase(stu.gender) : NA
+  const religionValue = stu.religion ? titleCase(stu.religion) : NA
+
   row(0, "Student's Name", stu.name)
-  row(1, "Father's Name", stu.father_name || '—')
-  row(2, "Mother's Name", stu.mother_name || '—')
-  row(3, 'Address', studentAddress, true)
-  splitRow(4, 'State', stu.state || 'Uttar Pradesh', 'District', stu.district || '—')
-  splitRow(5, 'Date of Birth', fmtDate(stu.dob), 'Gender', stu.gender || '—')
-  splitRow(6, 'Category', stu.category || '—', 'Religion', stu.religion || '—')
-  splitRow(7, 'Mobile No.', stu.phone || '—', 'Email', stu.email || '—')
-  row(8, 'Qualification', '—')
-  splitRow(9, 'Identity Type', stu.identity_type || 'Aadhar Card', 'ID Number', stu.aadhar_number || '—')
+  row(1, "Father's Name", stu.father_name || '')
+  row(2, "Mother's Name", stu.mother_name || '')
+  row(3, 'Address', studentAddress)
+  splitRow(4, 'State',         stateValue,                 'District',    districtValue)
+  splitRow(5, 'Date of Birth', fmtDate(stu.dob),           'Gender',      genderValue)
+  splitRow(6, 'Category',      stu.category || '',          'Religion',    religionValue)
+  splitRow(7, 'Mobile No.',    stu.phone || '',             'Email',       stu.email || '')
+  row(8, 'Qualification', '')
+  splitRow(9, 'Identity Type', stu.identity_type || 'Aadhar Card', 'ID Number', stu.aadhar_number || '')
   row(10, 'Admission Date', fmtDate(stu.admission_date || stu.enrollment_date))
 
-  // Horizontal divider before COURSE INFORMATION
-  page.drawLine({ start: { x: 55, y: studentBoxY }, end: { x: W - 55, y: studentBoxY }, thickness: 0.6, color: C.hairline })
-
-  // ─── COURSE INFORMATION ──────────────────────────────────────────────────
-  const courseY = studentBoxY - 36
-  drawSectionPill(page, cx, courseY, 'COURSE INFORMATION', fonts.bodyBold)
-  const courseTop = courseY - 22
+  // ─── 4. COURSE INFORMATION ───────────────────────────────────────────────
+  const COURSE_PILL_Y = STU_CARD_BOT - 26
+  drawSectionPill(page, cx, COURSE_PILL_Y, 'Course Information', f.pill)
+  const COURSE_CARD_TOP = COURSE_PILL_Y - 8
+  const COURSE_CARD_H = 78
+  const COURSE_CARD_BOT = COURSE_CARD_TOP - COURSE_CARD_H
   page.drawRectangle({
-    x: 55, y: courseTop - 60, width: W - 110, height: 60,
-    color: C.panel, borderColor: C.hairline, borderWidth: 0.6,
-  })
-  drawText(page, 'Course Name', { x: 70, y: courseTop - 18, size: 8.5, font: fonts.bodyBold, color: C.ink })
-  drawText(page, ':', { x: 175, y: courseTop - 18, size: 8.5, font: fonts.body, color: C.ink })
-  drawText(page, data.course?.name || '—', { x: 180, y: courseTop - 18, size: 8.5, font: fonts.body, color: C.ink, maxWidth: W - 250 })
-
-  drawText(page, 'Course Duration', { x: 70, y: courseTop - 35, size: 8.5, font: fonts.bodyBold, color: C.ink })
-  drawText(page, ':', { x: 175, y: courseTop - 35, size: 8.5, font: fonts.body, color: C.ink })
-  drawText(page, data.course?.duration_label || (data.course?.duration_months ? `${data.course.duration_months} Months` : '—'), {
-    x: 180, y: courseTop - 35, size: 8.5, font: fonts.body, color: C.ink,
+    x: SAFE_X1, y: COURSE_CARD_BOT, width: SAFE_X2 - SAFE_X1, height: COURSE_CARD_H,
+    color: C.panel, borderColor: C.hairline, borderWidth: 0.7,
   })
 
-  drawText(page, 'Session', { x: 70, y: courseTop - 52, size: 8.5, font: fonts.bodyBold, color: C.ink })
-  drawText(page, ':', { x: 175, y: courseTop - 52, size: 8.5, font: fonts.body, color: C.ink })
-  drawText(page, stu.session || '—', { x: 180, y: courseTop - 52, size: 8.5, font: fonts.body, color: C.ink })
+  const courseName = data.course?.name || ''
+  const courseDuration = data.course?.duration_label
+    || (data.course?.duration_months ? `${data.course.duration_months} Months` : '')
+  const courseRowY = COURSE_CARD_TOP - 22
+  // Course Name might be long — render it on a single row with wide maxWidth.
+  drawText(page, 'Course Name',     { x: LBL1_X, y: courseRowY,      size: 10, font: f.label, color: C.ink })
+  drawText(page, ':',               { x: SEP1_X, y: courseRowY,      size: 10, font: f.body,  color: C.ink })
+  drawText(page, valueOrNA(courseName), {
+    x: VAL1_X, y: courseRowY, size: 10, font: f.body, color: C.ink,
+    maxWidth: SAFE_X2 - VAL1_X - 14,
+  })
+  drawText(page, 'Course Duration', { x: LBL1_X, y: courseRowY - 22, size: 10, font: f.label, color: C.ink })
+  drawText(page, ':',               { x: SEP1_X, y: courseRowY - 22, size: 10, font: f.body,  color: C.ink })
+  drawText(page, valueOrNA(courseDuration), { x: VAL1_X, y: courseRowY - 22, size: 10, font: f.body, color: C.ink })
+  drawText(page, 'Session',         { x: LBL1_X, y: courseRowY - 44, size: 10, font: f.label, color: C.ink })
+  drawText(page, ':',               { x: SEP1_X, y: courseRowY - 44, size: 10, font: f.body,  color: C.ink })
+  drawText(page, valueOrNA(stu.session), { x: VAL1_X, y: courseRowY - 44, size: 10, font: f.body, color: C.ink })
 
-  // ─── FEE DETAILS ─────────────────────────────────────────────────────────
-  const feeY = courseTop - 60 - 30
-  drawSectionPill(page, cx, feeY, 'FEE DETAILS', fonts.bodyBold)
-  const feeTop = feeY - 22
-  const feeBoxH = 78
+  // ─── 5. FEE DETAILS ──────────────────────────────────────────────────────
+  const FEE_PILL_Y = COURSE_CARD_BOT - 24
+  drawSectionPill(page, cx, FEE_PILL_Y, 'Fee Details', f.pill)
+  const FEE_CARD_TOP = FEE_PILL_Y - 8
+  const FEE_CARD_H = 88
+  const FEE_CARD_BOT = FEE_CARD_TOP - FEE_CARD_H
   page.drawRectangle({
-    x: 55, y: feeTop - feeBoxH, width: W - 110, height: feeBoxH,
-    color: C.panel, borderColor: C.hairline, borderWidth: 0.6,
+    x: SAFE_X1, y: FEE_CARD_BOT, width: SAFE_X2 - SAFE_X1, height: FEE_CARD_H,
+    color: C.panel, borderColor: C.hairline, borderWidth: 0.7,
   })
-
-  // Two columns of 4 rows each
-  const colL = { label: 70, sep: 175, value: 180 }
-  const colR = { label: 320, sep: 425, value: 430 }
-  const fLineH = 16
-  const fy = feeTop - 14
-
-  function feeRow(i: number, c: { label: number; sep: number; value: number }, label: string, value: string) {
-    const ly = fy - i * fLineH
-    drawText(page, label, { x: c.label, y: ly, size: 8.5, font: fonts.bodyBold, color: C.ink })
-    drawText(page, ':', { x: c.sep, y: ly, size: 8.5, font: fonts.body, color: C.ink })
-    drawText(page, value || '—', { x: c.value, y: ly, size: 8.5, font: fonts.body, color: C.ink, maxWidth: 150 })
-  }
 
   const totalFee = stu.net_fee ?? stu.total_fee ?? 0
   const due = Math.max(totalFee - data.fees.amountPaid, 0)
-  const months = stu.installment_count ? `${stu.installment_count} Months` : '—'
+  const monthsLabel = stu.installment_count ? `${stu.installment_count} Months` : NA
 
-  feeRow(0, colL, 'Total Fees', fmtINR(totalFee))
-  feeRow(1, colL, 'Fee Start Date', fmtDate(stu.fee_start_month))
-  feeRow(2, colL, 'Total Installments', months)
-  feeRow(3, colL, 'Monthly Fee', fmtINR(stu.monthly_fee))
+  // 4×2 grid
+  const FEE_ROW_H = 18
+  const FEE_TOP_Y = FEE_CARD_TOP - 20
+  const FEE_LEFT_LBL_X = LBL1_X
+  const FEE_LEFT_SEP_X = SEP1_X
+  const FEE_LEFT_VAL_X = VAL1_X
+  const FEE_RIGHT_LBL_X = SPLIT_RIGHT_LBL
+  const FEE_RIGHT_SEP_X = SPLIT_RIGHT_SEP
+  const FEE_RIGHT_VAL_X = SPLIT_RIGHT_VAL
 
-  feeRow(0, colR, 'Amount Paid', fmtINR(data.fees.amountPaid))
-  feeRow(1, colR, 'Payment Date', fmtDate(data.fees.paymentDate))
-  feeRow(2, colR, 'Due Amount', fmtINR(due))
-  feeRow(3, colR, 'Next Installment Due', fmtDate(data.fees.nextInstallmentDue))
-
-  // ─── Footer ──────────────────────────────────────────────────────────────
-  const footerY = 70
-
-  // QR (left)
-  const qrImg = await embedAny(doc, data.qrDataUrl)
-  if (qrImg) {
-    page.drawImage(qrImg, { x: 70, y: footerY - 8, width: 60, height: 60 })
+  function feeRow(i: number, side: 'L' | 'R', label: string, value: string) {
+    const lblX = side === 'L' ? FEE_LEFT_LBL_X : FEE_RIGHT_LBL_X
+    const sepX = side === 'L' ? FEE_LEFT_SEP_X : FEE_RIGHT_SEP_X
+    const valX = side === 'L' ? FEE_LEFT_VAL_X : FEE_RIGHT_VAL_X
+    const ly = FEE_TOP_Y - i * FEE_ROW_H
+    drawText(page, label, { x: lblX, y: ly, size: 9.5, font: f.label, color: C.ink })
+    drawText(page, ':',   { x: sepX, y: ly, size: 9.5, font: f.body,  color: C.ink })
+    drawText(page, value, { x: valX, y: ly, size: 9.5, font: f.bodyMedium, color: C.ink, maxWidth: 150 })
   }
+
+  feeRow(0, 'L', 'Total Fees',         fmtINR(totalFee))
+  feeRow(1, 'L', 'Fee Start Date',     fmtDate(stu.fee_start_month))
+  feeRow(2, 'L', 'Total Installments', monthsLabel)
+  feeRow(3, 'L', 'Monthly Fee',        fmtINR(stu.monthly_fee))
+  feeRow(0, 'R', 'Amount Paid',        fmtINR(data.fees.amountPaid))
+  feeRow(1, 'R', 'Payment Date',       fmtDate(data.fees.paymentDate))
+  feeRow(2, 'R', 'Due Amount',         fmtINR(due))
+  feeRow(3, 'R', 'Next Installment Due', fmtDate(data.fees.nextInstallmentDue))
+
+  // ─── 6. FOOTER (3 columns: QR · seal · signature) ────────────────────────
+  // Footer sits inside the safe zone, well clear of the bottom border.
+  const FOOTER_TOP = FEE_CARD_BOT - 18
+  const FOOTER_BOT = 56                       // ≥ 30pt above the bottom border
+  const FOOTER_H = FOOTER_TOP - FOOTER_BOT
+
+  // Column 1: QR + caption (LEFT)
+  const QR_SIZE = 70
+  const QR_X = SAFE_X1 + 10
+  const QR_Y = FOOTER_BOT + (FOOTER_H - QR_SIZE) / 2
+  const qrImg = await embedAny(doc, data.qrDataUrl)
+  if (qrImg) page.drawImage(qrImg, { x: QR_X, y: QR_Y, width: QR_SIZE, height: QR_SIZE })
+
   drawText(page, 'This certificate is system generated', {
-    x: 100, y: footerY - 22, size: 7.2, font: fonts.body, color: C.muted, align: 'center',
+    x: QR_X + QR_SIZE + 6, y: QR_Y + 30, size: 7.5, font: f.body, color: C.inkSoft,
   })
   drawText(page, 'and does not require any signature.', {
-    x: 100, y: footerY - 32, size: 7.2, font: fonts.body, color: C.muted, align: 'center',
+    x: QR_X + QR_SIZE + 6, y: QR_Y + 18, size: 7.5, font: f.body, color: C.inkSoft,
   })
 
-  // Seal (centre)
+  // Column 2: Quality Education seal (CENTRE)
+  const SEAL_SIZE = 80
   const sealImg = await embedAny(doc, data.sealDataUrl)
   if (sealImg) {
-    const sd = 64
-    page.drawImage(sealImg, { x: cx - sd / 2, y: footerY - 12, width: sd, height: sd })
+    page.drawImage(sealImg, {
+      x: cx - SEAL_SIZE / 2,
+      y: FOOTER_BOT + (FOOTER_H - SEAL_SIZE) / 2,
+      width: SEAL_SIZE, height: SEAL_SIZE,
+    })
   }
 
-  // Signatory (right)
-  const sigCx = W - 130
+  // Column 3: Signature (RIGHT)
+  const SIG_BOX_W = 160
+  const SIG_RIGHT = SAFE_X2 - 10
+  const SIG_LEFT = SIG_RIGHT - SIG_BOX_W
+  const SIG_LINE_Y = FOOTER_BOT + 26
   const sigImg = await embedAny(doc, data.signatureDataUrl)
   if (sigImg) {
-    page.drawImage(sigImg, { x: sigCx - 55, y: footerY + 12, width: 110, height: 30 })
+    page.drawImage(sigImg, {
+      x: SIG_LEFT + 20, y: SIG_LINE_Y + 4,
+      width: SIG_BOX_W - 40, height: 26,
+    })
   }
-  page.drawLine({ start: { x: sigCx - 60, y: footerY + 8 }, end: { x: sigCx + 60, y: footerY + 8 }, thickness: 0.7, color: C.ink })
+  page.drawLine({
+    start: { x: SIG_LEFT + 8,  y: SIG_LINE_Y },
+    end:   { x: SIG_RIGHT - 8, y: SIG_LINE_Y },
+    thickness: 0.7, color: C.ink,
+  })
   drawText(page, 'Authorised Signatory', {
-    x: sigCx, y: footerY - 4, size: 9, font: fonts.bodyBold, color: C.ink, align: 'center',
+    x: (SIG_LEFT + SIG_RIGHT) / 2, y: SIG_LINE_Y - 12, size: 9.5, font: f.label, color: C.ink, align: 'center',
   })
   drawText(page, `( ${data.brandTitle} )`, {
-    x: sigCx, y: footerY - 16, size: 8, font: fonts.body, color: C.muted, align: 'center',
+    x: (SIG_LEFT + SIG_RIGHT) / 2, y: SIG_LINE_Y - 24, size: 8, font: f.body, color: C.inkSoft, align: 'center',
   })
+}
+
+/**
+ * Render a Head Office / Branch Office / Contact No. row in the header. Returns
+ * the next y position so subsequent rows can flow naturally below.
+ */
+function renderHeaderField(
+  page: PDFPage,
+  f: FontSet,
+  label: string,
+  valueLines: string[],
+  x: number,
+  labelW: number,
+  y: number,
+): number {
+  const SIZE = 9
+  drawText(page, label,     { x: x,            y, size: SIZE, font: f.label, color: C.ink })
+  drawText(page, ':',       { x: x + labelW,   y, size: SIZE, font: f.body,  color: C.ink })
+  let cy = y
+  for (const line of valueLines) {
+    drawText(page, line, { x: x + labelW + 8, y: cy, size: SIZE, font: f.body, color: C.ink })
+    cy -= SIZE * 1.35
+  }
+  return cy - 2
+}
+
+function wrapToLines(text: string, font: PDFFont, size: number, maxWidth: number, maxLines: number): string[] {
+  if (!text) return ['']
+  const norm = text
+  const words = norm.split(/\s+/)
+  const lines: string[] = []
+  let cur = ''
+  for (const w of words) {
+    const test = cur ? `${cur} ${w}` : w
+    if (font.widthOfTextAtSize(test, size) <= maxWidth) {
+      cur = test
+    } else {
+      if (cur) lines.push(cur)
+      cur = w
+    }
+    if (lines.length >= maxLines) break
+  }
+  if (cur && lines.length < maxLines) lines.push(cur)
+  return lines.length === 0 ? [''] : lines
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -561,8 +687,6 @@ export async function buildRegistrationCertificatePdf(input: BuildRegCertInput):
   const page = doc.getPages()[0]
   await paintContent(doc, page, fonts, input)
   const bytes = await doc.save()
-  // pdf-lib returns Uint8Array — wrap in a Blob for a stable download URL.
-  // Slice the buffer so we hand Blob a plain ArrayBuffer (TS lib types reject SharedArrayBuffer / Uint8Array<ArrayBufferLike>).
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
   return new Blob([buf], { type: 'application/pdf' })
 }
