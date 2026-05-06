@@ -13,6 +13,7 @@ const MOCK_SETTINGS: CertificateSettings = {
   sub_header_line_3: 'Regd. Under the Company Act 2013 Ministry of Corporate Affairs, Govt. of India',
   corporate_office_address: 'Corporate Office : B-7, Ground Floor, Sec-2, Noida, Gautam Buddha Nagar, UP - 201301',
   verification_url_base: 'https://unskillseducation.org/verify',
+  registration_verify_url: 'https://unskills-computer-education.vercel.app/student/registration-certificate',
   contact_email: 'info@unskillseducation.org',
   logo_url: null,
   training_center_logo_url: null,

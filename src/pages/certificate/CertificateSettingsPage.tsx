@@ -349,6 +349,17 @@ export default function CertificateSettingsPage() {
                 />
               </FormField>
             </div>
+            <FormField
+              label="Registration Certificate Verify URL"
+              hint="Public page used by the registration certificate QR. Encoded as {url}?reg={registration_no}."
+            >
+              <input
+                value={s.registration_verify_url ?? ''}
+                onChange={e => update('registration_verify_url', e.target.value)}
+                className={inputClass}
+                placeholder="https://your-site.com/student/registration-certificate"
+              />
+            </FormField>
           </SectionCard>
 
           <div className="flex justify-end">

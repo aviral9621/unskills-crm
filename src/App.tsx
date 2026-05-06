@@ -30,6 +30,7 @@ const StudentIdCardPage = lazy(() => import('./pages/students/StudentIdCardPage'
 const IdCardSettingsPage = lazy(() => import('./pages/students/IdCardSettingsPage'))
 const AdmitCardPage = lazy(() => import('./pages/students/AdmitCardPage'))
 const AdmitCardSettingsPage = lazy(() => import('./pages/students/AdmitCardSettingsPage'))
+const RegistrationCertificatePage = lazy(() => import('./pages/students/RegistrationCertificatePage'))
 const ProgramListPage = lazy(() => import('./pages/courses/ProgramListPage'))
 const CourseListPage = lazy(() => import('./pages/courses/CourseListPage'))
 const CourseFormPage = lazy(() => import('./pages/courses/CourseFormPage'))
@@ -186,6 +187,7 @@ function AppRoutes() {
           <Route path="students/id-card-settings" element={<IdCardSettingsPage />} />
           <Route path="students/admit-card" element={<AdmitCardPage />} />
           <Route path="students/admit-card-settings" element={<AdmitCardSettingsPage />} />
+          <Route path="students/registration-certificate" element={<RegistrationCertificatePage />} />
 
           <Route path="courses/programs" element={<ProgramListPage />} />
           <Route path="courses" element={<CourseListPage />} />

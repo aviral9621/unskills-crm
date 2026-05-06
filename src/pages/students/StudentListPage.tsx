@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { createColumnHelper, type SortingState } from '@tanstack/react-table'
 import {
   GraduationCap, Plus, Search, MoreVertical, Pencil,
-  X, Phone, BookOpen, CreditCard, ClipboardList, UserMinus, RotateCcw,
+  X, Phone, BookOpen, CreditCard, ClipboardList, FileBadge2, UserMinus, RotateCcw,
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -307,7 +307,10 @@ export default function StudentListPage() {
       },
     },
     { label: 'ID Card', icon: CreditCard, onClick: () => navigate(`${base}/students/id-card?student=${menuStudent.id}`) },
-    ...(base === '/admin' ? [{ label: 'Admit Card', icon: ClipboardList, onClick: () => navigate(`/admin/students/admit-card?student=${menuStudent.id}`) }] : []),
+    ...(base === '/admin' ? [
+      { label: 'Admit Card', icon: ClipboardList, onClick: () => navigate(`/admin/students/admit-card?student=${menuStudent.id}`) },
+      { label: 'Reg Cert', icon: FileBadge2, onClick: () => navigate(`/admin/students/registration-certificate?student=${menuStudent.id}`) },
+    ] : []),
   ] : []
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))

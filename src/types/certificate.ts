@@ -25,6 +25,7 @@ export interface CertificateSettings {
   sub_header_line_3: string | null
   corporate_office_address: string | null
   verification_url_base: string | null
+  registration_verify_url: string | null
   contact_email: string | null
   logo_url: string | null
   training_center_logo_url: string | null
