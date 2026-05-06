@@ -29,7 +29,9 @@ export const PROGRAM_CERTIFICATE_REGISTRY: ProgramCertificateConfig[] = [
   {
     programSlug: 'computer-software',
     programName: 'Computer Software Courses',
-    templatePath: '/certificates/computer-software-landscape.jpg',
+    // 2026-05 redesign — switched from the legacy JPG template to a fresh
+    // PDF supplied by the client (navy + red border, tech corner cuts).
+    templatePath: '/computer course certificate.pdf',
     orientation: 'landscape',
     generatorKey: 'computer-software-landscape',
   },

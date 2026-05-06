@@ -85,6 +85,16 @@ interface FontSet {
   /** Elegant serif italic for decorative certificate titles. */
   serifItalic: PDFFont
   serifBold: PDFFont
+  // Brand-system fonts — used by the computer-software certificate per the
+  // 2026-05 design guide. Falls back to bodyBold/body if a fetch fails.
+  montserratBold: PDFFont
+  montserratSemi: PDFFont
+  montserratMedium: PDFFont
+  montserratRegular: PDFFont
+  poppinsSemi: PDFFont
+  poppinsMedium: PDFFont
+  poppinsRegular: PDFFont
+  cinzelBold: PDFFont
 }
 
 async function fetchBytes(path: string): Promise<ArrayBuffer | null> {
@@ -126,7 +136,33 @@ async function loadFonts(pdfDoc: PDFDocument): Promise<FontSet> {
   const serifItalic = await pdfDoc.embedFont(StandardFonts.TimesRomanBoldItalic)
   const serifBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold)
 
-  return { body, bodyBold, script, display, serifItalic, serifBold }
+  // Brand-system custom fonts (Montserrat / Poppins / Cinzel). Loaded lazily;
+  // a network failure on any one falls back to a sensible Standard-14 face so
+  // the certificate still renders.
+  async function loadOpt(path: string, fallback: PDFFont): Promise<PDFFont> {
+    const bytes = await fetchBytes(path)
+    if (!bytes) return fallback
+    try { return await pdfDoc.embedFont(bytes, opts) } catch { return fallback }
+  }
+  const [
+    montserratBold, montserratSemi, montserratMedium, montserratRegular,
+    poppinsSemi, poppinsMedium, poppinsRegular, cinzelBold,
+  ] = await Promise.all([
+    loadOpt('/fonts/Montserrat-Bold.ttf', bodyBold),
+    loadOpt('/fonts/Montserrat-SemiBold.ttf', bodyBold),
+    loadOpt('/fonts/Montserrat-Medium.ttf', body),
+    loadOpt('/fonts/Montserrat-Regular.ttf', body),
+    loadOpt('/fonts/Poppins-SemiBold.ttf', bodyBold),
+    loadOpt('/fonts/Poppins-Medium.ttf', body),
+    loadOpt('/fonts/Poppins-Regular.ttf', body),
+    loadOpt('/fonts/Cinzel-Bold.ttf', serifBold),
+  ])
+
+  return {
+    body, bodyBold, script, display, serifItalic, serifBold,
+    montserratBold, montserratSemi, montserratMedium, montserratRegular,
+    poppinsSemi, poppinsMedium, poppinsRegular, cinzelBold,
+  }
 }
 
 // ─── Image helpers ────────────────────────────────────────────────────────────
@@ -329,184 +365,267 @@ async function drawComputerSoftwareContent(
   const { settings } = data
   const cx = W / 2
 
-  // 1. Top meta — inside the inner white zone.
+  // Computer-software brand palette per the 2026-05 design guide.
+  const C_NAVY = rgb(0.039, 0.106, 0.302)   // #0A1F4D — main navy
+  const C_DEEP = rgb(0.027, 0.106, 0.275)   // #071B46 — UN + recipient name
+  const C_RED  = rgb(0.882, 0.114, 0.180)   // #E11D2E — SKILLS accent
+  const C_BODY = rgb(0.122, 0.161, 0.216)   // #1F2937 — body text
+
+  // ── 1. TOP META — Poppins Medium, navy, inside the safe zone ──────────────
   drawText(page, 'Reg. by Govt. of India', {
-    x: 95, y: H - 88, size: 10, font: fonts.bodyBold,
+    x: 95, y: H - 78, size: 9, font: fonts.poppinsMedium, color: C_BODY,
   })
   const regNoValue = data.enrollmentNumber || settings.institute_reg_number || '—'
-  drawText(page, `Reg. No.-${regNoValue}`, {
-    x: W - 95, y: H - 88, size: 10, font: fonts.bodyBold, align: 'right',
+  drawText(page, `Reg. No. ${regNoValue}`, {
+    x: W - 95, y: H - 78, size: 9, font: fonts.poppinsMedium, color: C_BODY, align: 'right',
   })
 
-  // 2. Brand title — UN black, SKILLS red.
+  // ── 2. INSTITUTE NAME — Montserrat Bold, UN deep navy + SKILLS red ────────
+  // Sized so the masthead reads as the strongest element on the page without
+  // crowding the next line. Letter-spaced ~1.2 to match the design guide.
   drawBrandTitle(page, {
-    cx, y: H - 128, size: 26, font: fonts.display,
+    cx, y: H - 105, size: 28, font: fonts.montserratBold,
     leading: 'UN', accent: 'SKILLS', trailing: ' COMPUTER EDUCATION',
-    baseColor: C.black, accentColor: C.red,
+    baseColor: C_DEEP, accentColor: C_RED,
   })
 
-  // 3. Black ISO ribbon
+  // ── 3. ISO BADGE — rounded navy fill, white Montserrat SemiBold ───────────
   const isoText = 'An ISO 9001:2015 Certified Organization'
-  const isoSize = 11
-  const isoW = fonts.bodyBold.widthOfTextAtSize(isoText, isoSize) + 28
-  drawRect(page, cx - isoW / 2, H - 170, isoW, 18, C.black)
+  const isoSize = 10.5
+  const isoTextW = fonts.montserratSemi.widthOfTextAtSize(isoText, isoSize)
+  const isoPadX = 22, isoPadY = 6
+  const isoW = isoTextW + isoPadX * 2
+  const isoH = isoSize + isoPadY * 2
+  const isoX = cx - isoW / 2
+  const isoY = H - 138
+  // pdf-lib's drawRectangle with borderRadius isn't reliable across viewers,
+  // so emulate a pill by overlaying two circles and a centre rect.
+  page.drawRectangle({ x: isoX + isoH / 2, y: isoY, width: isoW - isoH, height: isoH, color: C_NAVY })
+  page.drawCircle({ x: isoX + isoH / 2, y: isoY + isoH / 2, size: isoH / 2, color: C_NAVY })
+  page.drawCircle({ x: isoX + isoW - isoH / 2, y: isoY + isoH / 2, size: isoH / 2, color: C_NAVY })
   drawText(page, isoText, {
-    x: cx, y: H - 165, size: isoSize, font: fonts.bodyBold, color: C.white, align: 'center',
+    x: cx, y: isoY + isoPadY + 1, size: isoSize, font: fonts.montserratSemi, color: C.white, align: 'center',
   })
 
-  // 4. Three sub-header lines
-  let subY = H - 188
+  // ── 4. SUB-HEADER LINES — Poppins Medium, neutral dark gray ───────────────
+  let subY = H - 158
   for (const line of [settings.sub_header_line_1, settings.sub_header_line_2, settings.sub_header_line_3]) {
     if (line) {
       drawText(page, line, {
-        x: cx, y: subY, size: 8, font: fonts.body, color: C.textDark, align: 'center',
+        x: cx, y: subY, size: 8.5, font: fonts.poppinsMedium, color: C_BODY, align: 'center',
       })
     }
     subY -= 11
   }
 
-  // 5. Branch logo (left) + student photo (right)
+  // ── 5. SIDE IMAGES — branch logo (left) + student photo (right) ───────────
+  // Sit alongside the certificate body so neither overlaps the central title.
   if (data.trainingCenterLogoUrl) {
     const logo = await embedAny(pdfDoc, data.trainingCenterLogoUrl)
-    if (logo) page.drawImage(logo, { x: 95, y: H - 305, width: 80, height: 80 })
+    if (logo) page.drawImage(logo, { x: 90, y: H - 295, width: 70, height: 70 })
   }
-  const photoW = 80, photoH = 95
-  const photoX = W - 95 - photoW
-  const photoY = H - 315
+  const photoW = 70, photoH = 84
+  const photoX = W - 90 - photoW
+  const photoY = H - 305
   if (data.studentPhotoUrl) {
     const photo = await embedAny(pdfDoc, data.studentPhotoUrl)
     if (photo) {
-      drawRect(page, photoX - 1, photoY - 1, photoW + 2, photoH + 2, C.white, C.navy, 1)
+      drawRect(page, photoX - 1, photoY - 1, photoW + 2, photoH + 2, C.white, C_NAVY, 0.8)
       page.drawImage(photo, { x: photoX, y: photoY, width: photoW, height: photoH })
     }
   }
 
-  // 6. Certificate title — bold caps, centered, navy.
+  // ── 6. CERTIFICATE TITLE — Cinzel Bold, deep navy, letter-spaced ─────────
+  const titleY = H - 215
   drawText(page, 'CERTIFICATE OF QUALIFICATION', {
-    x: cx, y: H - 240, size: 22, font: fonts.bodyBold, color: C.navy, align: 'center', letterSpacing: 0.8,
+    x: cx, y: titleY, size: 26, font: fonts.cinzelBold, color: C_NAVY, align: 'center', letterSpacing: 1.4,
   })
 
-  // 7. Body — 9-line block matching H&N layout.
-  let bodyY = H - 265
-  const bStep = 14
-  drawText(page, 'This is to certify that', { x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center' })
-  bodyY -= bStep
-  drawText(page, `Mr./Miss/Mrs  ${data.studentName.toUpperCase()}`, {
-    x: cx, y: bodyY, size: 13, font: fonts.bodyBold, color: C.navy, align: 'center',
+  // ── 6b. DECORATIVE DIVIDER — thin navy line + small red diamond ──────────
+  drawDivider(page, cx, titleY - 14, 110, C_NAVY, C_RED)
+
+  // ── 7. BODY — Poppins/Montserrat mix per the design guide ────────────────
+  let bodyY = H - 252
+  const bStep = 16
+
+  drawText(page, 'This is to certify that', {
+    x: cx, y: bodyY, size: 11, font: fonts.poppinsRegular, color: C_BODY, align: 'center',
   })
-  bodyY -= bStep
-  drawText(page, `${data.fatherPrefix}/ Mr. ${data.fatherName.toUpperCase()}`, {
-    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, align: 'center',
+  bodyY -= bStep + 4
+
+  // Salutation prefix not bold; recipient name UPPERCASE Montserrat Bold.
+  drawSalutationLine(page, {
+    cx, y: bodyY,
+    prefix: 'Mr./Miss/Mrs',
+    name: data.studentName.toUpperCase(),
+    prefixSize: 12, prefixFont: fonts.poppinsRegular, prefixColor: C_BODY,
+    nameSize: 18, nameFont: fonts.montserratBold, nameColor: C_DEEP,
+    gap: 8,
   })
-  bodyY -= bStep
+  bodyY -= 22
+
+  // Parent line — small Poppins italic-style. Standard fonts don't include
+  // SemiBold-Italic so we fall back to TimesRomanBoldItalic for the italic
+  // feel; the prefix stays Poppins Regular.
+  drawSalutationLine(page, {
+    cx, y: bodyY,
+    prefix: `${data.fatherPrefix}/ Mr.`,
+    name: data.fatherName.toUpperCase(),
+    prefixSize: 11, prefixFont: fonts.poppinsRegular, prefixColor: C_BODY,
+    nameSize: 12, nameFont: fonts.serifItalic, nameColor: C_DEEP,
+    gap: 6,
+  })
+  bodyY -= bStep + 2
+
   drawText(page, 'has successfully completed the', {
-    x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
+    x: cx, y: bodyY, size: 11, font: fonts.poppinsRegular, color: C_BODY, align: 'center',
   })
   bodyY -= bStep
-  drawText(page, `${data.courseCode} - ${data.courseName}`, {
-    x: cx, y: bodyY, size: 13, font: fonts.bodyBold, color: C.navy, align: 'center',
+
+  // Course title — Montserrat SemiBold, deep navy, max width 70% of page so
+  // long titles wrap cleanly instead of clipping.
+  const courseTitle = `${data.courseCode} – ${data.courseName}`
+  drawText(page, courseTitle, {
+    x: cx, y: bodyY, size: 13.5, font: fonts.montserratSemi, color: C_DEEP, align: 'center',
   })
   bodyY -= bStep
-  drawText(page, `his/her performance during the course has been ${data.performanceText || 'Excellent'}`, {
-    x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
+
+  drawText(page, `his/her performance during the course has been ${data.performanceText || 'Very Good'}`, {
+    x: cx, y: bodyY, size: 10.5, font: fonts.poppinsRegular, color: C_BODY, align: 'center',
   })
-  bodyY -= bStep
+  bodyY -= bStep - 2
   drawText(page, `He/She scored ${data.percentage} marks & secured the Grade "${data.grade}"`, {
-    x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
+    x: cx, y: bodyY, size: 10.5, font: fonts.poppinsRegular, color: C_BODY, align: 'center',
   })
-  bodyY -= bStep
+  bodyY -= bStep - 2
   drawText(page, 'We wish him/her for bright future', {
-    x: cx, y: bodyY, size: 10.5, font: fonts.body, align: 'center',
+    x: cx, y: bodyY, size: 10.5, font: fonts.poppinsRegular, color: C_BODY, align: 'center',
   })
   bodyY -= bStep
-  drawText(page, `Held at ${data.trainingCenterName}`, {
-    x: cx, y: bodyY, size: 11, font: fonts.bodyBold, align: 'center',
+  drawText(page, `Held at ${data.trainingCenterName}.`, {
+    x: cx, y: bodyY, size: 11, font: fonts.montserratSemi, color: C_DEEP, align: 'center',
   })
 
-  // 8. QR + navy "Certificate No." pill + "Date of Issue"
-  const qrSize = 52
-  const qrX = 100
-  const qrY = 130
-  const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
-  if (qr) {
-    drawRect(page, qrX - 1, qrY - 1, qrSize + 2, qrSize + 2, C.white, C.black, 0.5)
-    page.drawImage(qr, { x: qrX, y: qrY, width: qrSize, height: qrSize })
-  }
-  const pillX = qrX + qrSize + 8
-  const pillY = qrY + qrSize - 24
-  const pillW = 200
-  const pillH = 22
-  drawRect(page, pillX, pillY, pillW, pillH, C.navy)
-  drawText(page, `Certificate No. : ${data.certificateNumber}`, {
-    x: pillX + pillW / 2, y: pillY + 7, size: 10, font: fonts.bodyBold, color: C.white, align: 'center',
+  // ── 8. CERTIFICATE NUMBER (navy box) + DATE under it (bottom-left) ───────
+  const certLabel = `Certificate No. : ${data.certificateNumber}`
+  const certSize = 10.5
+  const certTextW = fonts.montserratSemi.widthOfTextAtSize(certLabel, certSize)
+  const certPad = 12
+  const certBoxW = certTextW + certPad * 2
+  const certBoxH = certSize + 12
+  const certBoxX = 90
+  const certBoxY = 145
+  drawRect(page, certBoxX, certBoxY, certBoxW, certBoxH, C_NAVY)
+  drawText(page, certLabel, {
+    x: certBoxX + certPad, y: certBoxY + 7, size: certSize, font: fonts.montserratSemi, color: C.white,
   })
   drawText(page, `Date of Issue : ${data.issueDate}`, {
-    x: pillX, y: pillY - 16, size: 10, font: fonts.bodyBold, color: C.textDark,
+    x: certBoxX, y: certBoxY - 16, size: 10, font: fonts.poppinsMedium, color: C_BODY,
   })
 
-  // 9. Badge row (bottom-center)
+  // QR — small, sits below the date so it doesn't crowd the cert box.
+  const qrSize = 50
+  const qrX = certBoxX
+  const qrY = 70
+  const qr = await embedAny(pdfDoc, data.qrCodeDataUrl)
+  if (qr) {
+    drawRect(page, qrX - 1, qrY - 1, qrSize + 2, qrSize + 2, C.white, C.black, 0.4)
+    page.drawImage(qr, { x: qrX, y: qrY, width: qrSize, height: qrSize })
+  }
+
+  // ── 9. BADGE ROW (bottom-centre, evenly spaced) ──────────────────────────
   const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
-  const visibleBadges = badges.slice(0, Math.min(4, badges.length))
+  const visibleBadges = badges.filter(Boolean).slice(0, 4) as PDFImage[]
   if (visibleBadges.length > 0) {
-    const badgeY = 135
-    const badgeH = 30
-    const badgeX0 = 360
-    const badgeX1 = W - 255
-    const badgeSp = (badgeX1 - badgeX0) / visibleBadges.length
+    const badgeRowY = 110
+    const badgeH = 32
+    const badgeX0 = certBoxX + certBoxW + 35
+    const badgeX1 = W - 240
+    const slotW = (badgeX1 - badgeX0) / visibleBadges.length
     for (let i = 0; i < visibleBadges.length; i++) {
       const img = visibleBadges[i]
-      if (!img) continue
       const ar = img.width / img.height
-      const w = Math.min(badgeH * ar, badgeSp - 6)
+      const w = Math.min(badgeH * ar, slotW - 8)
       const h = w / ar
-      const bx = badgeX0 + i * badgeSp + badgeSp / 2 - w / 2
-      const by = badgeY + (badgeH - h) / 2
+      const bx = badgeX0 + i * slotW + slotW / 2 - w / 2
+      const by = badgeRowY + (badgeH - h) / 2
       page.drawImage(img, { x: bx, y: by, width: w, height: h })
     }
   }
 
-  // 10. Signature (bottom-right)
+  // ── 10. SIGNATURE (bottom-right) ─────────────────────────────────────────
   const sigRight = W - 95
-  const sigLeft = sigRight - 150
+  const sigLeft = sigRight - 170
   if (settings.signature_image_url) {
     const sig = await embedAny(pdfDoc, settings.signature_image_url)
-    if (sig) page.drawImage(sig, { x: sigRight - 110, y: 175, width: 110, height: 30 })
+    if (sig) page.drawImage(sig, { x: sigRight - 120, y: 158, width: 120, height: 32 })
   } else if (settings.signatory_name) {
     drawText(page, settings.signatory_name, {
-      x: sigRight, y: 182, size: 18, font: fonts.script, color: C.textDark, align: 'right',
+      x: sigRight, y: 165, size: 17, font: fonts.script, color: C_BODY, align: 'right',
     })
   }
-  drawLine(page, sigLeft, 172, sigRight, 172, 0.8, C.black)
+  drawLine(page, sigLeft, 152, sigRight, 152, 0.8, C_NAVY)
   drawText(page, settings.signatory_designation || 'Chief Executive Officer', {
-    x: sigRight, y: 158, size: 10, font: fonts.bodyBold, align: 'right',
+    x: sigRight, y: 137, size: 11, font: fonts.montserratSemi, color: C_DEEP, align: 'right',
   })
   drawText(page, settings.signatory_company_line || 'UnSkills FuturePath Tech Pvt. Ltd.', {
-    x: sigRight, y: 145, size: 9, font: fonts.body, align: 'right',
+    x: sigRight, y: 122, size: 9, font: fonts.poppinsMedium, color: C_BODY, align: 'right',
   })
 
-  // 11. Footer — corporate address + mail above the blue bar; verify URL inside it.
+  // ── 11. FOOTER — corporate address + email centred at the bottom ─────────
   if (settings.corporate_office_address) {
     drawText(page, `Corporate Office : ${settings.corporate_office_address}`, {
-      x: cx, y: 100, size: 9.5, font: fonts.bodyBold, color: C.textDark, align: 'center',
+      x: cx, y: 60, size: 9, font: fonts.poppinsMedium, color: C_BODY, align: 'center',
     })
   }
   if (settings.contact_email) {
     drawText(page, `Mail us : ${settings.contact_email}`, {
-      x: cx, y: 82, size: 8.5, font: fonts.body, color: C.textDark, align: 'center',
+      x: cx, y: 46, size: 8.5, font: fonts.poppinsRegular, color: C_BODY, align: 'center',
     })
   }
   if (settings.verification_url_base) {
-    drawText(page, `To verify this certificate visit : ${settings.verification_url_base}`, {
-      x: cx, y: 44, size: 9, font: fonts.bodyBold, color: C.white, align: 'center',
+    drawText(page, `Verify : ${settings.verification_url_base}`, {
+      x: cx, y: 32, size: 8, font: fonts.poppinsRegular, color: C_BODY, align: 'center',
     })
   }
+}
+
+/**
+ * Draws "<prefix>  <NAME>" centred on a single baseline with two different
+ * fonts/sizes. Vertical baseline is normalised so the prefix sits comfortably
+ * with the (typically larger) name — no manual y-tweak per certificate.
+ */
+function drawSalutationLine(
+  page: PDFPage,
+  opts: {
+    cx: number; y: number
+    prefix: string; name: string
+    prefixSize: number; prefixFont: PDFFont; prefixColor: ReturnType<typeof rgb>
+    nameSize: number;   nameFont: PDFFont;   nameColor: ReturnType<typeof rgb>
+    gap?: number
+  },
+) {
+  const { cx, y, prefix, name, prefixSize, prefixFont, prefixColor, nameSize, nameFont, nameColor } = opts
+  const gap = opts.gap ?? 6
+  const wPrefix = prefixFont.widthOfTextAtSize(prefix, prefixSize)
+  const wName   = nameFont.widthOfTextAtSize(name, nameSize)
+  const total   = wPrefix + gap + wName
+  let x = cx - total / 2
+  // Lift the smaller prefix so its visual centre matches the name's.
+  const prefixOffset = (nameSize - prefixSize) * 0.3
+  page.drawText(prefix, { x, y: y + prefixOffset, size: prefixSize, font: prefixFont, color: prefixColor })
+  x += wPrefix + gap
+  page.drawText(name, { x, y, size: nameSize, font: nameFont, color: nameColor })
 }
 
 export async function generateComputerSoftwareLandscapeCertificate(
   data: LandscapeCertData,
 ): Promise<Uint8Array> {
+  // 2026-05 redesign: client supplied a fresh A4-landscape template PDF with a
+  // navy + red double border, angular tech corners and circuit/globe accents.
+  // Background painting is handled by makeDocWithTemplate (it accepts PDFs).
   const pdfDoc = await makeDocWithTemplate(
-    '/certificates/computer-software-landscape.jpg',
+    '/computer course certificate.pdf',
     A4_LANDSCAPE,
   )
   const fonts = await loadFonts(pdfDoc)
