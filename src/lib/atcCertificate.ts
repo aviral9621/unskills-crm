@@ -38,7 +38,7 @@ export async function loadAtcCertificateData(branchId: string): Promise<AtcCerti
   const { data: branch, error: branchErr } = await supabase
     .from('uce_branches')
     .select(
-      'id, name, director_name, address_line1, village, block, district, state, pincode, center_logo_url',
+      'id, name, category, director_name, director_image_url, address_line1, village, block, district, state, pincode, center_logo_url',
     )
     .eq('id', branchId)
     .single()
@@ -66,6 +66,8 @@ export async function loadAtcCertificateData(branchId: string): Promise<AtcCerti
     branchName: branch.name,
     branchAddress: composeBranchAddress(branch),
     branchLogoUrl: branch.center_logo_url,
+    branchCategory: (branch as { category?: string | null }).category ?? null,
+    directorImageUrl: (branch as { director_image_url?: string | null }).director_image_url ?? null,
     ownerName: cert.owner_name || branch.director_name || 'Branch Director',
     courseType: cert.course_type,
     issueDate: formatDateDDMMYYYY(cert.issue_date),

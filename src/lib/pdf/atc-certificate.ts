@@ -26,6 +26,10 @@ export interface AtcCertificateData {
   branchName: string
   branchAddress: string
   branchLogoUrl?: string | null
+  /** 'computer' | 'beautician' | 'both' — switches the masthead variant. */
+  branchCategory?: string | null
+  /** Optional director portrait shown on the right of the masthead. */
+  directorImageUrl?: string | null
   ownerName: string
   courseType: string
   issueDate: string        // DD-MM-YYYY
@@ -179,11 +183,21 @@ function drawLabelValue(
   page.drawText(value, { x, y, size, font: valueFont, color: valueColor })
 }
 
-/** Two-colour masthead: UN (black) + SKILLS (red) + ' COMPUTER EDUCATION' (black) + TM. */
-function drawMasthead(page: PDFPage, font: PDFFont, cx: number, y: number, size: number) {
+/**
+ * Two-colour masthead: UN (black) + SKILLS (red) + ' COMPUTER EDUCATION' /
+ * ' BEAUTICIAN ACADEMY' (black) + TM. Variant chosen by `restText` arg.
+ */
+function drawMasthead(
+  page: PDFPage,
+  font: PDFFont,
+  cx: number,
+  y: number,
+  size: number,
+  restText = ' COMPUTER EDUCATION',
+) {
   const un     = 'UN'
   const skills = 'SKILLS'
-  const rest   = ' COMPUTER EDUCATION'
+  const rest   = restText
   const tmSize = size * 0.35
   const wUn    = font.widthOfTextAtSize(un, size)
   const wSkills = font.widthOfTextAtSize(skills, size)
@@ -198,6 +212,32 @@ function drawMasthead(page: PDFPage, font: PDFFont, cx: number, y: number, size:
   page.drawText(rest,   { x, y, size, font, color: C.black })
   x += wRest
   page.drawText('TM',   { x, y: y + size * 0.55, size: tmSize, font, color: C.black })
+}
+
+/** Draw an image inscribed inside a circle (for masthead side badges). */
+function drawCircularImage(
+  page: PDFPage,
+  img: PDFImage,
+  centerX: number,
+  centerY: number,
+  radius: number,
+  borderColor: ReturnType<typeof rgb>,
+) {
+  page.drawCircle({
+    x: centerX, y: centerY, size: radius,
+    color: C.white,
+    borderColor,
+    borderWidth: 1.2,
+  })
+  const ar = img.width / img.height
+  const maxDim = radius * 1.6
+  const targetW = ar >= 1 ? maxDim : maxDim * ar
+  const targetH = ar >= 1 ? maxDim / ar : maxDim
+  page.drawImage(img, {
+    x: centerX - targetW / 2,
+    y: centerY - targetH / 2,
+    width: targetW, height: targetH,
+  })
 }
 
 /** Wrap centered text, returns baseline of last line. */
@@ -315,7 +355,30 @@ export async function generateAtcCertificate(data: AtcCertificateData): Promise<
   })
 
   // ── 2. BRAND MASTHEAD — Montserrat 700 (Bold), SKILLS in red ──────────────
-  drawMasthead(page, fonts.m700, cx, H - 105, 22)
+  // Beautician branches get a different rest-of-name variant. "both" stays on
+  // the canonical "COMPUTER EDUCATION" line (the default master brand).
+  const isBeautician = (data.branchCategory || '').toLowerCase() === 'beautician'
+  const mastheadRest = isBeautician ? ' BEAUTICIAN ACADEMY' : ' COMPUTER EDUCATION'
+  const mastheadY = H - 105
+  drawMasthead(page, fonts.m700, cx, mastheadY, 22, mastheadRest)
+
+  // ── 2b. SIDE BADGES — branch logo (left) and director portrait (right) ────
+  // Sit beside the masthead text, vertically aligned to the masthead baseline.
+  // Director image is optional — only renders when the branch has uploaded one.
+  const sideBadgeR  = 26
+  const sideBadgeCy = mastheadY + 8 // visual centre of the masthead line
+  const leftBadgeCx  = LEFT + sideBadgeR + 6
+  const rightBadgeCx = RIGHT - sideBadgeR - 6
+
+  const branchLogoSrc = data.branchLogoUrl || data.unskillsLogoUrl
+  if (branchLogoSrc) {
+    const img = await embedAny(doc, branchLogoSrc)
+    if (img) drawCircularImage(page, img, leftBadgeCx, sideBadgeCy, sideBadgeR, C.gold)
+  }
+  if (data.directorImageUrl) {
+    const dirImg = await embedAny(doc, data.directorImageUrl)
+    if (dirImg) drawCircularImage(page, dirImg, rightBadgeCx, sideBadgeCy, sideBadgeR, C.gold)
+  }
 
   // ── 3. SUB-HEADING LINES — Montserrat 400 (Regular) ───────────────────────
   drawText(page, 'A Unit of: UnSkills FuturePath Tech Pvt. Ltd.  |  Regd. by Govt. of India Reg. No. 220102', {
@@ -354,40 +417,13 @@ export async function generateAtcCertificate(data: AtcCertificateData): Promise<
     x: cx, y: H - 300, size: 9.5, font: fonts.m400, color: C.textDark, align: 'center',
   })
 
-  // ── 7.5 BRANCH LOGO — circular badge between sentence and branch name ─────
-  // Falls back to the UnSkills master logo if the branch hasn't uploaded its own.
-  const logoSrc = data.branchLogoUrl || data.unskillsLogoUrl
-  const logoCy  = H - 335
-  const logoR   = 22
-  if (logoSrc) {
-    const logoImg = await embedAny(doc, logoSrc)
-    if (logoImg) {
-      // White-filled circle with thin gold border — gives the "circular badge" look
-      // even when the source logo image has a non-transparent background.
-      page.drawCircle({
-        x: cx, y: logoCy, size: logoR,
-        color: C.white,
-        borderColor: C.gold,
-        borderWidth: 1.2,
-      })
-      // Inscribe the logo so its longest side ≈ 75% of the diameter, leaves a
-      // pleasant white margin inside the circle.
-      const ar = logoImg.width / logoImg.height
-      const maxDim = logoR * 1.5
-      const targetW = ar >= 1 ? maxDim : maxDim * ar
-      const targetH = ar >= 1 ? maxDim / ar : maxDim
-      page.drawImage(logoImg, {
-        x: cx - targetW / 2,
-        y: logoCy - targetH / 2,
-        width: targetW, height: targetH,
-      })
-    }
-  }
-
   // ── 8. ORGANISATION NAME — Montserrat 700 (Bold), red, wrapped ───────────
+  // Branch logo + director image are rendered next to the masthead at the top
+  // (section 2b above), so the area between the supporting sentence and the
+  // organisation name stays clean and the branch name sits closer to it.
   const bodyMaxW = W - 200
   const nameEndY = drawCenteredWrapped(page, data.branchName.toUpperCase(), {
-    cx, y: H - 378, maxWidth: bodyMaxW,
+    cx, y: H - 340, maxWidth: bodyMaxW,
     size: 16, font: fonts.m700, color: C.red, lineStep: 20,
   })
 
