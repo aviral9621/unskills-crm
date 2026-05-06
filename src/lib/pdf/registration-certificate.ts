@@ -243,14 +243,11 @@ async function makeDocWithTemplate(): Promise<PDFDocument> {
   try {
     const [embedded] = await doc.embedPdf(bytes, [0])
     if (embedded) {
-      const ts = embedded.size()
-      const scale = Math.max(W / ts.width, H / ts.height)
-      page.drawPage(embedded, {
-        x: (W - ts.width * scale) / 2,
-        y: (H - ts.height * scale) / 2,
-        width: ts.width * scale,
-        height: ts.height * scale,
-      })
+      // Stretch the template to the exact page rectangle. Previously we used
+      // Math.max(W/tw, H/th) which cropped the top + bottom edges whenever the
+      // source PDF wasn't a perfect A4. The decorative border isn't sensitive
+      // to a fraction-of-a-percent aspect change but IS sensitive to clipping.
+      page.drawPage(embedded, { x: 0, y: 0, width: W, height: H })
     }
   } catch { /* template optional */ }
   return doc
@@ -333,12 +330,12 @@ async function paintContent(doc: PDFDocument, page: PDFPage, f: FontSet, data: B
 
   // ───────── 1. HEADER ─────────────────────────────────────────────────────
   const HEAD_TOP = H - 30                       // 811.89
-  const HEAD_H   = 88
-  const HEAD_BOT = HEAD_TOP - HEAD_H            // 723.89
+  const HEAD_H   = 108
+  const HEAD_BOT = HEAD_TOP - HEAD_H            // 703.89
 
   // 1a. Logo (left). Soft gold ring around the brand mark.
   const LOGO_CX = SAFE_X1 + 38
-  const LOGO_CY = HEAD_TOP - HEAD_H / 2 - 4
+  const LOGO_CY = HEAD_TOP - HEAD_H / 2 - 2
   const logoImg = data.branchLogoDataUrl ? await embedAny(doc, data.branchLogoDataUrl) : null
   if (logoImg) {
     page.drawCircle({ x: LOGO_CX, y: LOGO_CY, size: 33, color: C.gold })
@@ -356,36 +353,34 @@ async function paintContent(doc: PDFDocument, page: PDFPage, f: FontSet, data: B
     align: 'center', letterSpacing: 0.3, maxWidth: HEADER_TEXT_X2 - HEADER_TEXT_X1 - 4,
   })
 
-  // 1c. Address rows + Registration No. — two columns under the banner
-  //     Left:  Head Office / Branch Office / Contact No.
-  //     Right: Registration No. + the registration number itself
-  const ADDR_X        = HEADER_TEXT_X1 + 18
-  const ADDR_LBL_W    = 70
+  // 1c. Address rows + Registration No. — two columns under the banner.
+  //     Head Office / Branch Office can wrap to 2 lines so long addresses
+  //     always render in full instead of being truncated with an ellipsis.
+  const ADDR_X        = HEADER_TEXT_X1 + 14
+  const ADDR_LBL_W    = 68
   const ADDR_VAL_X    = ADDR_X + ADDR_LBL_W + 6
-  const REGNO_BLOCK_X = SAFE_X2 - 96            // start of the right column
+  const REGNO_BLOCK_X = SAFE_X2 - 96
   const ADDR_VAL_W    = REGNO_BLOCK_X - 14 - ADDR_VAL_X
-  const ADDR_TOP_Y    = HEAD_TOP - 38
-  const ADDR_LH       = 13                      // line height
-  const ADDR_SIZE     = 8.5
-
-  function drawAddrRow(i: number, label: string, value: string) {
-    const ly = ADDR_TOP_Y - i * ADDR_LH
-    drawText(page, label,  { x: ADDR_X,         y: ly, size: ADDR_SIZE, font: f.label, color: C.ink })
-    drawText(page, ':',    { x: ADDR_X + ADDR_LBL_W, y: ly, size: ADDR_SIZE, font: f.body, color: C.ink })
-    drawText(page, value,  { x: ADDR_VAL_X,     y: ly, size: ADDR_SIZE, font: f.body, color: C.ink, maxWidth: ADDR_VAL_W })
-  }
+  const ADDR_TOP_Y    = HEAD_TOP - 40
+  const ADDR_LINE_H   = 10
+  const ADDR_ROW_GAP  = 3
+  const ADDR_SIZE     = 8
 
   const branchAddr = formatBranchAddress(data.branch) || data.headOfficeAddress
   const phoneText = data.branch?.director_phone
     ? `${data.branch.director_phone}, ${data.headOfficeContacts}`
     : data.headOfficeContacts
-  drawAddrRow(0, 'Head Office',   data.headOfficeAddress)
-  drawAddrRow(1, 'Branch Office', branchAddr)
-  drawAddrRow(2, 'Contact No.',   phoneText)
+
+  let addrCursorY = ADDR_TOP_Y
+  addrCursorY = drawWrappedAddrRow(page, f, 'Head Office',   data.headOfficeAddress, ADDR_X, ADDR_LBL_W, ADDR_VAL_X, ADDR_VAL_W, addrCursorY, ADDR_SIZE, ADDR_LINE_H)
+  addrCursorY -= ADDR_ROW_GAP
+  addrCursorY = drawWrappedAddrRow(page, f, 'Branch Office', branchAddr,             ADDR_X, ADDR_LBL_W, ADDR_VAL_X, ADDR_VAL_W, addrCursorY, ADDR_SIZE, ADDR_LINE_H)
+  addrCursorY -= ADDR_ROW_GAP
+  drawWrappedAddrRow(page, f, 'Contact No.',  phoneText,              ADDR_X, ADDR_LBL_W, ADDR_VAL_X, ADDR_VAL_W, addrCursorY, ADDR_SIZE, ADDR_LINE_H, 1)
 
   // Vertical separator between address rows and reg-no column
   page.drawLine({
-    start: { x: REGNO_BLOCK_X - 4, y: HEAD_BOT + 14 },
+    start: { x: REGNO_BLOCK_X - 4, y: HEAD_BOT + 10 },
     end:   { x: REGNO_BLOCK_X - 4, y: HEAD_TOP - 30 },
     thickness: 0.5, color: C.hairline,
   })
@@ -428,8 +423,9 @@ async function paintContent(doc: PDFDocument, page: PDFPage, f: FontSet, data: B
     color: C.panel, borderColor: C.hairline, borderWidth: 0.7,
   })
 
-  // Photo — smaller (60×80) so split-row right values get enough horizontal space
-  const PHOTO_W = 60, PHOTO_H = 80
+  // Photo — passport-ish ratio (35×45mm ≈ 99×127pt). 80×100 keeps the photo
+  // visually substantial without crowding the field grid.
+  const PHOTO_W = 80, PHOTO_H = 100
   const PHOTO_X = SAFE_X2 - PHOTO_W - 14
   const PHOTO_Y = STU_CARD_TOP - 14 - PHOTO_H
   page.drawRectangle({
@@ -572,45 +568,52 @@ async function paintContent(doc: PDFDocument, page: PDFPage, f: FontSet, data: B
   feeRow(3, 'R', 'Next Installment Due', fmtDate(data.fees.nextInstallmentDue))
 
   // ───────── 6. FOOTER ─────────────────────────────────────────────────────
-  // Comfortable gap above and below; nothing overlaps the bottom border.
-  const FOOTER_TOP = FEE_CARD_BOT - 22
-  const FOOTER_BOT = 42
-  const FOOTER_H   = FOOTER_TOP - FOOTER_BOT
+  // All three columns share a common BOTTOM baseline (FOOTER_BASE) so the
+  // QR + caption stack, the seal, and the signature stack all visually anchor
+  // to the same horizontal line. The seal is intentionally a touch larger so
+  // it reads as the visual centerpiece.
+  const FOOTER_BASE = 72                           // bottom y where all stacks land
 
-  // QR (left) — smaller, with caption flowing to the right.
-  const QR_SIZE = 56
-  const QR_X = SAFE_X1 + 8
-  const QR_Y = FOOTER_BOT + (FOOTER_H - QR_SIZE) / 2
+  // ── Left column: QR + caption stacked vertically ──
+  const QR_SIZE = 50
+  const QR_X = SAFE_X1 + 18
+  const CAP_LINE2_Y = FOOTER_BASE                  // 72
+  const CAP_LINE1_Y = CAP_LINE2_Y + 9              // 81
+  const QR_Y = CAP_LINE1_Y + 7                     // 88 — QR sits 7pt above the caption
   const qrImg = await embedAny(doc, data.qrDataUrl)
   if (qrImg) page.drawImage(qrImg, { x: QR_X, y: QR_Y, width: QR_SIZE, height: QR_SIZE })
-
+  // Caption sits BELOW the QR, centred horizontally on the QR
   drawText(page, 'This certificate is system generated', {
-    x: QR_X + QR_SIZE + 8, y: QR_Y + 28, size: 7, font: f.body, color: C.inkSoft,
+    x: QR_X + QR_SIZE / 2, y: CAP_LINE1_Y, size: 6.5, font: f.body, color: C.inkSoft, align: 'center',
   })
   drawText(page, 'and does not require any signature.', {
-    x: QR_X + QR_SIZE + 8, y: QR_Y + 18, size: 7, font: f.body, color: C.inkSoft,
+    x: QR_X + QR_SIZE / 2, y: CAP_LINE2_Y, size: 6.5, font: f.body, color: C.inkSoft, align: 'center',
   })
 
-  // Seal (centre)
-  const SEAL_SIZE = 70
+  // ── Centre column: Quality Education seal — slightly bigger ──
+  const SEAL_SIZE = 84
+  const SEAL_Y = FOOTER_BASE - 4                   // sits 4pt below the baseline
   const sealImg = await embedAny(doc, data.sealDataUrl)
   if (sealImg) {
     page.drawImage(sealImg, {
-      x: cx - SEAL_SIZE / 2,
-      y: FOOTER_BOT + (FOOTER_H - SEAL_SIZE) / 2,
+      x: cx - SEAL_SIZE / 2, y: SEAL_Y,
       width: SEAL_SIZE, height: SEAL_SIZE,
     })
   }
 
-  // Signature (right)
-  const SIG_RIGHT = SAFE_X2 - 8
-  const SIG_LEFT  = SIG_RIGHT - 150
-  const SIG_LINE_Y = FOOTER_BOT + 26
+  // ── Right column: signature image · line · "Authorised Signatory" · brand ──
+  const SIG_RIGHT = SAFE_X2 - 14
+  const SIG_LEFT  = SIG_RIGHT - 160
+  const SIG_BRAND_Y = FOOTER_BASE                  // 72 — aligns with QR caption line 2
+  const SIG_AUTH_Y  = SIG_BRAND_Y + 12             // 84
+  const SIG_LINE_Y  = SIG_AUTH_Y + 9               // 93 — line just above the labels
+  const SIG_IMG_BOTTOM = SIG_LINE_Y + 3            // 96 — image bottom 3pt above the line
+  const SIG_IMG_HEIGHT = 28
   const sigImg = await embedAny(doc, data.signatureDataUrl)
   if (sigImg) {
     page.drawImage(sigImg, {
-      x: SIG_LEFT + 22, y: SIG_LINE_Y + 4,
-      width: 106, height: 24,
+      x: SIG_LEFT + 28, y: SIG_IMG_BOTTOM,
+      width: 104, height: SIG_IMG_HEIGHT,
     })
   }
   page.drawLine({
@@ -619,11 +622,67 @@ async function paintContent(doc: PDFDocument, page: PDFPage, f: FontSet, data: B
     thickness: 0.7, color: C.ink,
   })
   drawText(page, 'Authorised Signatory', {
-    x: (SIG_LEFT + SIG_RIGHT) / 2, y: SIG_LINE_Y - 12, size: 9, font: f.label, color: C.ink, align: 'center',
+    x: (SIG_LEFT + SIG_RIGHT) / 2, y: SIG_AUTH_Y, size: 9, font: f.label, color: C.ink, align: 'center',
   })
   drawText(page, `( ${data.brandTitle} )`, {
-    x: (SIG_LEFT + SIG_RIGHT) / 2, y: SIG_LINE_Y - 22, size: 7.5, font: f.body, color: C.inkSoft, align: 'center',
+    x: (SIG_LEFT + SIG_RIGHT) / 2, y: SIG_BRAND_Y, size: 7.5, font: f.body, color: C.inkSoft, align: 'center',
   })
+}
+
+/**
+ * Draws a header address row that wraps its value to up to `maxLines` lines.
+ * Returns the y position immediately below the rendered block so callers can
+ * stack subsequent rows directly underneath.
+ */
+function drawWrappedAddrRow(
+  page: PDFPage,
+  f: FontSet,
+  label: string,
+  value: string,
+  labelX: number,
+  labelW: number,
+  valueX: number,
+  valueW: number,
+  topY: number,
+  size: number,
+  lineH: number,
+  maxLines = 2,
+): number {
+  drawText(page, label, { x: labelX,            y: topY, size, font: f.label, color: C.ink })
+  drawText(page, ':',   { x: labelX + labelW,   y: topY, size, font: f.body,  color: C.ink })
+
+  const text = value || NA
+  // Word-wrap the value into up to `maxLines` lines.
+  const norm = text.replace(/₹\s*/g, 'Rs. ')
+  const words = norm.split(/\s+/)
+  const lines: string[] = []
+  let cur = ''
+  for (const w of words) {
+    const test = cur ? `${cur} ${w}` : w
+    if (f.body.widthOfTextAtSize(test, size) <= valueW) {
+      cur = test
+    } else {
+      if (cur) lines.push(cur)
+      cur = w
+    }
+    if (lines.length >= maxLines) break
+  }
+  if (cur && lines.length < maxLines) lines.push(cur)
+
+  // If we still have leftover text, append "…" to the last visible line.
+  const consumed = lines.join(' ').length + (lines.length - 1)
+  if (consumed < norm.length && lines.length > 0) {
+    let last = lines[lines.length - 1]
+    while (f.body.widthOfTextAtSize(last + '…', size) > valueW && last.length > 1) last = last.slice(0, -1)
+    lines[lines.length - 1] = last + '…'
+  }
+
+  let cy = topY
+  for (const line of lines) {
+    page.drawText(line, { x: valueX, y: cy, size, font: f.body, color: C.ink })
+    cy -= lineH
+  }
+  return cy
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
