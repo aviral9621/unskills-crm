@@ -165,7 +165,9 @@ function fmtDate(iso: string | null): string {
 
 function fmtINR(n: number | null | undefined): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '—'
-  return `₹ ${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  // pdf-lib's Standard fonts (Helvetica) are WinAnsi-only — the ₹ glyph (U+20B9)
+  // would throw "WinAnsi cannot encode". Use "Rs." which renders cleanly.
+  return `Rs. ${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function joinAddress(parts: Array<string | null | undefined>): string {
@@ -178,6 +180,20 @@ function formatBranchAddress(b: RegCertBranch | null | undefined): string {
 }
 
 // ─── Drawing primitives ───────────────────────────────────────────────────────
+
+/**
+ * Strip characters outside the WinAnsi range (Standard PDF fonts can't encode
+ * them and would throw at draw time). We replace the rupee sign explicitly and
+ * fall back to "?" for anything else exotic — far better than the entire PDF
+ * failing to render because a student's name has a Devanagari character.
+ */
+function sanitizeWinAnsi(s: string): string {
+  if (!s) return s
+  return s
+    .replace(/₹/g, 'Rs.')          // ₹ → Rs.
+    .replace(/[ऀ-ॿ]/g, '')    // strip Devanagari
+    .replace(/[^\x00-\xFF]/g, '?')      // any other non-Latin1 → ?
+}
 
 function drawText(
   page: PDFPage,
@@ -192,7 +208,7 @@ function drawText(
 ) {
   if (!text) return
   const { x, y, size, font, color = C.ink, align = 'left', maxWidth, letterSpacing = 0 } = opts
-  let str = text
+  let str = sanitizeWinAnsi(text)
   if (maxWidth) {
     while (font.widthOfTextAtSize(str, size) > maxWidth && str.length > 1) {
       str = str.slice(0, -1)
