@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Download, Loader2, FileBadge2, Settings } from 'lucide-react'
+import { ArrowLeft, Download, Loader2, FileBadge2 } from 'lucide-react'
 import { toast } from 'sonner'
 import QRCode from 'qrcode'
 import { supabase } from '../../lib/supabase'
@@ -247,22 +247,14 @@ export default function RegistrationCertificatePage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate('/admin/certificates/settings')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-300 bg-white text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <Settings size={14} /> Settings
-          </button>
-          <button
-            onClick={handleDownload}
-            disabled={!pdfUrl || generating}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-          >
-            {generating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-            {generating ? 'Generating…' : 'Download PDF'}
-          </button>
-        </div>
+        <button
+          onClick={handleDownload}
+          disabled={!pdfUrl || generating}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+        >
+          {generating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+          {generating ? 'Generating…' : 'Download PDF'}
+        </button>
       </div>
 
       {loading ? (
@@ -276,12 +268,14 @@ export default function RegistrationCertificatePage() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           {pdfUrl ? (
+            // 100vh minus the header row + a little breathing room. Fits a full A4
+            // preview on desktop and stays usable on mobile.
             <iframe
               key={pdfUrl}
               title="Registration Certificate"
-              src={pdfUrl}
-              className="w-full"
-              style={{ height: '85vh', border: 'none' }}
+              src={`${pdfUrl}#toolbar=0&navpanes=0&view=FitH`}
+              className="block w-full bg-gray-100"
+              style={{ height: 'calc(100vh - 140px)', minHeight: 480, border: 'none' }}
             />
           ) : (
             <div className="flex flex-col items-center justify-center py-24 gap-3">
