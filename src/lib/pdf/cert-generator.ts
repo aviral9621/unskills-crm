@@ -325,6 +325,22 @@ async function makeDocWithTemplate(
   if (!templateBytes) return doc
   try {
     if (/\.pdf$/i.test(templatePath)) {
+      // Read the source page's MediaBox so we can compensate for templates
+      // whose MediaBox origin isn't (0,0) — e.g. the new computer-course
+      // template ships with MediaBox [0, 8.58, 842.25, 604.08]. pdf-lib's
+      // drawPage doesn't translate that origin to (x,y), so content lands
+      // 8.58pt above the destination y, which clips the top border and
+      // leaves a white gap at the bottom. Pre-shifting by (-mediaY, -mediaX)
+      // makes any template with a non-zero origin render correctly.
+      const srcDoc = await PDFDocument.load(templateBytes)
+      const srcPage = srcDoc.getPages()[0]
+      let mediaX = 0, mediaY = 0
+      try {
+        const mb = srcPage.node.MediaBox()
+        const arr = mb?.asRectangle?.()
+        if (arr) { mediaX = arr.x; mediaY = arr.y }
+      } catch { /* fall back to 0,0 */ }
+
       const [embedded] = await doc.embedPdf(templateBytes, [0])
       if (embedded) {
         const ts = embedded.size()
@@ -332,8 +348,8 @@ async function makeDocWithTemplate(
           ? Math.min(W / ts.width, H / ts.height)
           : Math.max(W / ts.width, H / ts.height)
         page.drawPage(embedded, {
-          x: (W - ts.width * scale) / 2 + xOff,
-          y: (H - ts.height * scale) / 2 + yOff,
+          x: (W - ts.width * scale) / 2 + xOff - mediaX * scale,
+          y: (H - ts.height * scale) / 2 + yOff - mediaY * scale,
           width: ts.width * scale,
           height: ts.height * scale,
         })
