@@ -303,10 +303,23 @@ const A4_PORTRAIT: [number, number] = [595.28, 841.89]
 async function makeDocWithTemplate(
   templatePath: string,
   size: [number, number],
+  /**
+   * Optional fit mode and offsets for templates whose source bounds don't
+   * exactly match A4 or whose visible content sits off-centre inside the
+   * source page. `fit: 'contain'` keeps the entire template visible (with
+   * possible white margins on the longer-aspect side) while `fit: 'cover'`
+   * fills the page (the default; may crop a hair on the longer side).
+   * `xOffset` / `yOffset` shift the painted template by ±N points to fix
+   * artwork that isn't centred inside its own bounding box.
+   */
+  opts: { fit?: 'cover' | 'contain'; xOffset?: number; yOffset?: number } = {},
 ): Promise<PDFDocument> {
   const doc = await PDFDocument.create()
   const page = doc.addPage(size)
   const [W, H] = size
+  const fit = opts.fit ?? 'cover'
+  const xOff = opts.xOffset ?? 0
+  const yOff = opts.yOffset ?? 0
 
   const templateBytes = await fetchBytes(templatePath)
   if (!templateBytes) return doc
@@ -315,10 +328,12 @@ async function makeDocWithTemplate(
       const [embedded] = await doc.embedPdf(templateBytes, [0])
       if (embedded) {
         const ts = embedded.size()
-        const scale = Math.max(W / ts.width, H / ts.height)
+        const scale = fit === 'contain'
+          ? Math.min(W / ts.width, H / ts.height)
+          : Math.max(W / ts.width, H / ts.height)
         page.drawPage(embedded, {
-          x: (W - ts.width * scale) / 2,
-          y: (H - ts.height * scale) / 2,
+          x: (W - ts.width * scale) / 2 + xOff,
+          y: (H - ts.height * scale) / 2 + yOff,
           width: ts.width * scale,
           height: ts.height * scale,
         })
@@ -330,10 +345,12 @@ async function makeDocWithTemplate(
         ? await doc.embedJpg(templateBytes)
         : await doc.embedPng(templateBytes)
       const { width: iw, height: ih } = img
-      const scale = Math.max(W / iw, H / ih)
+      const scale = fit === 'contain'
+        ? Math.min(W / iw, H / ih)
+        : Math.max(W / iw, H / ih)
       page.drawImage(img, {
-        x: (W - iw * scale) / 2,
-        y: (H - ih * scale) / 2,
+        x: (W - iw * scale) / 2 + xOff,
+        y: (H - ih * scale) / 2 + yOff,
         width: iw * scale,
         height: ih * scale,
       })
@@ -533,23 +550,25 @@ async function drawComputerSoftwareContent(
     page.drawImage(qr, { x: qrX, y: qrY, width: qrSize, height: qrSize })
   }
 
-  // ── 9. BADGE ROW (bottom-centre, evenly spaced) ──────────────────────────
+  // ── 9. BADGE ROW (bottom-centre — geometric page centre, not between
+  //      cert box and signature, so it reads as horizontally balanced) ─────
   const badges = await loadBadges(pdfDoc, data.certificationLogoUrls)
   const visibleBadges = badges.filter(Boolean).slice(0, 4) as PDFImage[]
   if (visibleBadges.length > 0) {
     const badgeRowY = 110
     const badgeH = 32
-    const badgeX0 = certBoxX + certBoxW + 35
-    const badgeX1 = W - 240
-    const slotW = (badgeX1 - badgeX0) / visibleBadges.length
+    const gap = 28
+    // First, lay out each badge at its natural aspect ratio so we know the
+    // total visual width, then offset by (W - total) / 2 to true-centre.
+    const widths = visibleBadges.map(img => badgeH * (img.width / img.height))
+    const totalW = widths.reduce((a, b) => a + b, 0) + gap * (visibleBadges.length - 1)
+    let cursor = (W - totalW) / 2
     for (let i = 0; i < visibleBadges.length; i++) {
       const img = visibleBadges[i]
-      const ar = img.width / img.height
-      const w = Math.min(badgeH * ar, slotW - 8)
-      const h = w / ar
-      const bx = badgeX0 + i * slotW + slotW / 2 - w / 2
-      const by = badgeRowY + (badgeH - h) / 2
-      page.drawImage(img, { x: bx, y: by, width: w, height: h })
+      const w = widths[i]
+      const h = badgeH
+      page.drawImage(img, { x: cursor, y: badgeRowY, width: w, height: h })
+      cursor += w + gap
     }
   }
 
@@ -624,9 +643,14 @@ export async function generateComputerSoftwareLandscapeCertificate(
   // 2026-05 redesign: client supplied a fresh A4-landscape template PDF with a
   // navy + red double border, angular tech corners and circuit/globe accents.
   // Background painting is handled by makeDocWithTemplate (it accepts PDFs).
+  // `fit: 'contain'` makes the whole template visible inside the A4 canvas
+  // (no top-edge cropping). The template ships with its own outer border so
+  // a hairline of white on the longest aspect side is acceptable; preferring
+  // crop-free is better than losing the top border.
   const pdfDoc = await makeDocWithTemplate(
     '/computer course certificate.pdf',
     A4_LANDSCAPE,
+    { fit: 'contain' },
   )
   const fonts = await loadFonts(pdfDoc)
   const page = pdfDoc.getPages()[0]
