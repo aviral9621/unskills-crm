@@ -21,7 +21,7 @@ interface Row {
 }
 
 function monthLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 export default function AdminFeesOverviewPage() {

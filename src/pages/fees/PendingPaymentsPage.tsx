@@ -37,7 +37,21 @@ export default function PendingPaymentsPage() {
       .select('id, amount, payment_date, payment_mode, student_reference, note, status, created_at, proof_path, branch_id, student:uce_students(id, name, registration_no), branch:uce_branches(name, code)')
       .eq('status', 'pending_confirmation')
       .order('created_at', { ascending: false })
-    if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
+    if (!isSuperAdmin && branchId) {
+      // Branch admin: only their own branch's pending submissions
+      q = q.eq('branch_id', branchId)
+    } else if (isSuperAdmin) {
+      // Super admin: only the main (headquarter) branch's submissions —
+      // each branch-admin reviews their own students' submissions in their
+      // own panel, so super-admin shouldn't second-review them.
+      const { data: mainBranches } = await supabase
+        .from('uce_branches').select('id').eq('is_main', true)
+      const mainIds = (mainBranches ?? []).map(b => b.id as string)
+      if (mainIds.length === 0) {
+        setRows([]); setLoading(false); return
+      }
+      q = q.in('branch_id', mainIds)
+    }
     const { data } = await q
     setRows((data ?? []) as unknown as Row[])
     setLoading(false)
@@ -78,7 +92,7 @@ export default function PendingPaymentsPage() {
       <div>
         <h1 className="text-xl sm:text-2xl font-bold font-heading">Pending Payments</h1>
         <p className="text-sm text-gray-500">
-          Student-submitted payments awaiting confirmation{isSuperAdmin ? '' : ' for your branch'}.
+          Student-submitted payments awaiting confirmation{isSuperAdmin ? ' for the headquarter branch' : ' for your branch'}.
           Approving auto-deletes the uploaded proof.
         </p>
       </div>

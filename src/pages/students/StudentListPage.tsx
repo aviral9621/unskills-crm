@@ -4,7 +4,7 @@ import { createColumnHelper, type SortingState } from '@tanstack/react-table'
 import {
   GraduationCap, Plus, Search, MoreVertical, Pencil,
   X, Phone, BookOpen, CreditCard, ClipboardList, FileBadge2, UserMinus, RotateCcw,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, IndianRupee,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase'
@@ -14,12 +14,15 @@ import DataTable from '../../components/DataTable'
 import StatusBadge from '../../components/StatusBadge'
 import ConfirmDialog from '../../components/ConfirmDialog'
 import Modal from '../../components/Modal'
+import MarkFeesPaidModal from '../../components/MarkFeesPaidModal'
 import { lockedStudentIds } from '../../lib/studentLock'
 import { Lock } from 'lucide-react'
 
 interface StudentRow {
   id: string; registration_no: string; name: string; phone: string
   total_fee: number; net_fee: number; is_active: boolean; created_at: string
+  branch_id: string
+  monthly_fee?: number | null
   course?: { name: string; program?: { slug: string; name: string } | null } | null
   branch?: { name: string } | null
   paid?: number; locked?: boolean
@@ -74,6 +77,7 @@ export default function StudentListPage() {
   const [dropTarget, setDropTarget] = useState<StudentRow | null>(null)
   const [dropReason, setDropReason] = useState('')
   const [dropping, setDropping] = useState(false)
+  const [feesTarget, setFeesTarget] = useState<StudentRow | null>(null)
 
   // Debounce search → reset to page 0 when query stabilises
   useEffect(() => {
@@ -105,7 +109,7 @@ export default function StudentListPage() {
         ? 'course:uce_courses!inner(name, program:uce_programs!inner(slug, name))'
         : 'course:uce_courses(name, program:uce_programs(slug, name))'
       const certSelect = wantCompletedFilter ? ', cert:uce_certificates!inner(status)' : ''
-      const select = `id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, ${courseSelect}, branch:uce_branches!uce_students_branch_id_fkey(name)${certSelect}`
+      const select = `id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, branch_id, monthly_fee, ${courseSelect}, branch:uce_branches!uce_students_branch_id_fkey(name)${certSelect}`
 
       let q = supabase.from('uce_students').select(select, { count: 'exact' })
       if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
@@ -306,8 +310,10 @@ export default function StudentListPage() {
         navigate(`${base}/students/register?edit=${menuStudent.id}`)
       },
     },
+    { label: 'Mark Fees Paid', icon: IndianRupee, onClick: () => setFeesTarget(menuStudent) },
     { label: 'ID Card', icon: CreditCard, onClick: () => navigate(`${base}/students/id-card?student=${menuStudent.id}`) },
     ...(base === '/admin' ? [
+      { label: 'Fee Plan', icon: IndianRupee, onClick: () => navigate(`/admin/fees/${menuStudent.id}`) },
       { label: 'Admit Card', icon: ClipboardList, onClick: () => navigate(`/admin/students/admit-card?student=${menuStudent.id}`) },
       { label: 'Reg Cert', icon: FileBadge2, onClick: () => navigate(`/admin/students/registration-certificate?student=${menuStudent.id}`) },
     ] : []),
@@ -468,6 +474,19 @@ export default function StudentListPage() {
         title="Reactivate Student?"
         message={`"${reactivateTarget?.name}" will be restored to the active list. Public verification will no longer show DROPPED.`}
         confirmText="Reactivate" variant="info" loading={toggling} />
+
+      <MarkFeesPaidModal
+        open={!!feesTarget}
+        onClose={() => setFeesTarget(null)}
+        onSaved={() => fetchStudents()}
+        student={feesTarget && {
+          id: feesTarget.id,
+          name: feesTarget.name,
+          registration_no: feesTarget.registration_no,
+          branch_id: feesTarget.branch_id,
+          monthly_fee: feesTarget.monthly_fee ?? null,
+        }}
+      />
     </div>
   )
 }

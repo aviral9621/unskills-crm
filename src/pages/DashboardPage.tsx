@@ -471,17 +471,38 @@ export default function DashboardPage() {
     const { data: expenseRows } = await expQ
     const expenses = (expenseRows ?? []).reduce((s, e) => s + (e.amount || 0), 0)
 
-    // Pending fees + discount in a single query (both off uce_students)
+    // Active students (for branch scope, and for total discount card)
     const studFeeQ = bf
-      ? supabase.from('uce_students').select('net_fee, discount').eq('branch_id', bf).eq('is_active', true)
-      : supabase.from('uce_students').select('net_fee, discount').eq('is_active', true)
+      ? supabase.from('uce_students').select('id, discount').eq('branch_id', bf).eq('is_active', true)
+      : supabase.from('uce_students').select('id, discount').eq('is_active', true)
     const { data: studFees } = await studFeeQ
-    const totalNetFee = (studFees ?? []).reduce((s, st) => s + (st.net_fee || 0), 0)
+    const studentIds = (studFees ?? []).map(s => s.id as string)
     const discountGiven = (studFees ?? []).reduce((s, st) => s + (st.discount || 0), 0)
 
-    const { data: allPayments } = await supabase.from('uce_student_fee_payments').select('amount')
-    const totalPaid = (allPayments ?? []).reduce((s, p) => s + (p.amount || 0), 0)
-    const pendingFees = Math.max(0, totalNetFee - totalPaid)
+    // Pending fees: month-wise prorated. Sum the expected_amount for installment
+    // months that are due as of today (month_for <= today), minus payments
+    // already received from those students. This keeps "pending" tracking the
+    // monthly billing cadence instead of the full course fee.
+    const todayIso = new Date().toISOString().slice(0, 10)
+    let dueToDate = 0
+    let totalPaid = 0
+    if (studentIds.length > 0) {
+      const { data: schedRows } = await supabase
+        .from('uce_student_fee_schedule')
+        .select('expected_amount, month_for, student_id')
+        .in('student_id', studentIds)
+        .lte('month_for', todayIso)
+      dueToDate = (schedRows ?? []).reduce((s, r) => s + Number(r.expected_amount || 0), 0)
+
+      const { data: payRows } = await supabase
+        .from('uce_student_fee_payments')
+        .select('amount, status, is_adjustment, student_id')
+        .in('student_id', studentIds)
+      totalPaid = (payRows ?? [])
+        .filter(p => !p.is_adjustment && p.status !== 'rejected')
+        .reduce((s, p) => s + Number(p.amount || 0), 0)
+    }
+    const pendingFees = Math.max(0, dueToDate - totalPaid)
 
     setOverview({
       totalStudents: totalStudents ?? 0,
@@ -496,11 +517,10 @@ export default function DashboardPage() {
       discountGiven,
     })
 
-    // Fee breakdown for donut
+    // Fee breakdown for donut (Pending = month-wise due-to-date - paid)
     setFeeBreakdown([
       { name: 'Collected', value: totalPaid || 1, color: CHART_COLORS.green },
       { name: 'Pending', value: pendingFees || 1, color: CHART_COLORS.amber },
-      { name: 'Overdue', value: Math.floor(pendingFees * 0.3) || 1, color: CHART_COLORS.primary },
     ])
   }
 
@@ -515,22 +535,52 @@ export default function DashboardPage() {
       .gte('created_at', todayStart)
     const todayCollection = (todayPayments ?? []).reduce((s, p) => s + (p.amount || 0), 0)
 
-    // Total pending (reuse from overview calculation or separate)
+    // Month-wise pending: schedule due to date - payments received
     const bf = !isSuperAdmin && branchId ? branchId : null
     const studQ = bf
-      ? supabase.from('uce_students').select('net_fee').eq('branch_id', bf).eq('is_active', true)
-      : supabase.from('uce_students').select('net_fee').eq('is_active', true)
-    const { data: studFees } = await studQ
-    const totalNet = (studFees ?? []).reduce((s, st) => s + (st.net_fee || 0), 0)
+      ? supabase.from('uce_students').select('id').eq('branch_id', bf).eq('is_active', true)
+      : supabase.from('uce_students').select('id').eq('is_active', true)
+    const { data: studs } = await studQ
+    const studentIds = (studs ?? []).map(s => s.id as string)
 
-    const { data: allPay } = await supabase.from('uce_student_fee_payments').select('amount')
-    const totalPaid = (allPay ?? []).reduce((s, p) => s + (p.amount || 0), 0)
-    const totalPending = Math.max(0, totalNet - totalPaid)
-    const overdueFees = Math.floor(totalPending * 0.3)  // estimate ~30% overdue
+    const todayIso = new Date().toISOString().slice(0, 10)
+    let dueToDate = 0
+    let totalPaid = 0
+    let overdueFees = 0
+    let todayDue = 0
+    if (studentIds.length > 0) {
+      const { data: schedRows } = await supabase
+        .from('uce_student_fee_schedule')
+        .select('id, expected_amount, month_for, student_id')
+        .in('student_id', studentIds)
+        .lte('month_for', todayIso)
+      dueToDate = (schedRows ?? []).reduce((s, r) => s + Number(r.expected_amount || 0), 0)
+
+      const { data: payRows } = await supabase
+        .from('uce_student_fee_payments')
+        .select('amount, status, is_adjustment, schedule_id, student_id')
+        .in('student_id', studentIds)
+      const validPays = (payRows ?? []).filter(p => !p.is_adjustment && p.status !== 'rejected')
+      totalPaid = validPays.reduce((s, p) => s + Number(p.amount || 0), 0)
+
+      // Overdue: schedule rows where month_for has passed and the row's
+      // own paid amount < expected. Sum the per-row remaining shortfall.
+      const paidBySched: Record<string, number> = {}
+      validPays.forEach(p => {
+        if (!p.schedule_id) return
+        paidBySched[p.schedule_id] = (paidBySched[p.schedule_id] || 0) + Number(p.amount || 0)
+      })
+      ;(schedRows ?? []).forEach(r => {
+        const remaining = Math.max(0, Number(r.expected_amount || 0) - (paidBySched[r.id as string] || 0))
+        overdueFees += remaining
+        if ((r.month_for as string) === todayIso) todayDue += remaining
+      })
+    }
+    const totalPending = Math.max(0, dueToDate - totalPaid)
 
     setFeeStats({
       todayCollection,
-      todayDue: Math.max(0, Math.floor(totalPending / 30)),  // approximate daily due
+      todayDue,
       overdueFees,
       totalPending,
     })
