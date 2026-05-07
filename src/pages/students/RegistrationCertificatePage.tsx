@@ -25,7 +25,7 @@ const HEAD_OFFICE_ADDRESS =
 const HEAD_OFFICE_CONTACTS = '8382898866, 9838382898'
 const BRAND_TITLE = 'UnSkills Computer Education'
 const DEFAULT_VERIFY_URL =
-  'https://unskills-computer-education.vercel.app/student/registration-certificate'
+  'https://unskillseducation.org/student/registration-certificate'
 
 export default function RegistrationCertificatePage() {
   const [params] = useSearchParams()

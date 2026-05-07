@@ -47,7 +47,7 @@ interface WithdrawalRow {
 export default function StudentReferEarnPage() {
   const { rec } = useStudentRecord()
   const [code, setCode] = useState<string>('')
-  const [shareBaseUrl, setShareBaseUrl] = useState<string>('https://unskills-computer-education.vercel.app')
+  const [shareBaseUrl, setShareBaseUrl] = useState<string>('https://unskillseducation.org')
   const [minWithdrawal, setMinWithdrawal] = useState<number>(500)
   const [referrals, setReferrals] = useState<ReferralRow[]>([])
   const [earnings, setEarnings] = useState<EarningRow[]>([])

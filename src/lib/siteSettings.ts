@@ -64,7 +64,7 @@ export const SITE_DEFAULTS: SiteSettings = {
   referral_l2_enabled:           'true',
   referral_min_withdrawal:       '500',
   referral_clawback_window_days: '7',
-  referral_share_base_url:       'https://unskills-computer-education.vercel.app',
+  referral_share_base_url:       'https://unskillseducation.org',
 }
 
 export async function getSiteSettings(): Promise<SiteSettings> {

@@ -542,7 +542,7 @@ function SettingsTab() {
         <input type="number" min={0} value={s.referral_clawback_window_days} onChange={e => up('referral_clawback_window_days', e.target.value)} className={`${inputClass} w-48`} />
       </FormField>
       <FormField label="Public Share Base URL" hint="Used for the share link in student panel">
-        <input value={s.referral_share_base_url} onChange={e => up('referral_share_base_url', e.target.value)} className={inputClass} placeholder="https://unskills-computer-education.vercel.app" />
+        <input value={s.referral_share_base_url} onChange={e => up('referral_share_base_url', e.target.value)} className={inputClass} placeholder="https://unskillseducation.org" />
       </FormField>
       <div className="flex gap-3 pt-1">
         <Toggle checked={s.referral_enabled === 'true'} onChange={v => up('referral_enabled', v ? 'true' : 'false')} label="Referral system enabled" />
