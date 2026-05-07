@@ -23,6 +23,7 @@ interface StudentRow {
   total_fee: number; net_fee: number; is_active: boolean; created_at: string
   branch_id: string
   monthly_fee?: number | null
+  course_completed_at?: string | null
   course?: { name: string; program?: { slug: string; name: string } | null } | null
   branch?: { name: string } | null
   paid?: number; locked?: boolean
@@ -108,15 +109,14 @@ export default function StudentListPage() {
       const courseSelect = wantProgramFilter
         ? 'course:uce_courses!inner(name, program:uce_programs!inner(slug, name))'
         : 'course:uce_courses(name, program:uce_programs(slug, name))'
-      const certSelect = wantCompletedFilter ? ', cert:uce_certificates!inner(status)' : ''
-      const select = `id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, branch_id, monthly_fee, ${courseSelect}, branch:uce_branches!uce_students_branch_id_fkey(name)${certSelect}`
+      const select = `id, registration_no, name, phone, total_fee, net_fee, is_active, created_at, branch_id, monthly_fee, course_completed_at, ${courseSelect}, branch:uce_branches!uce_students_branch_id_fkey(name)`
 
       let q = supabase.from('uce_students').select(select, { count: 'exact' })
       if (!isSuperAdmin && branchId) q = q.eq('branch_id', branchId)
 
       if (statusFilter === 'active') q = q.eq('is_active', true)
       else if (statusFilter === 'inactive') q = q.eq('is_active', false)
-      else if (wantCompletedFilter) q = q.eq('cert.status', 'active')
+      else if (wantCompletedFilter) q = q.not('course_completed_at', 'is', null)
 
       if (wantProgramFilter) q = q.eq('course.program.slug', programFilter)
 
@@ -169,11 +169,12 @@ export default function StudentListPage() {
       setStudents(rows.map(r => {
         const id = r.id as string
         const cert = certMap[id]
+        const row = r as unknown as StudentRow
         return {
-          ...(r as unknown as StudentRow),
+          ...row,
           paid: paidMap[id] || 0,
           locked: lockedSet.has(id),
-          completed: !!cert,
+          completed: !!row.course_completed_at || !!cert,
           certificate_number: cert?.certificate_number ?? null,
           issue_date: cert?.issue_date ?? null,
         }
@@ -484,7 +485,9 @@ export default function StudentListPage() {
           name: feesTarget.name,
           registration_no: feesTarget.registration_no,
           branch_id: feesTarget.branch_id,
+          net_fee: feesTarget.net_fee,
           monthly_fee: feesTarget.monthly_fee ?? null,
+          course_completed_at: feesTarget.course_completed_at ?? null,
         }}
       />
     </div>
