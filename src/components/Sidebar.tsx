@@ -134,6 +134,7 @@ const MENU_SECTIONS: { title: string; items: MenuItem[] }[] = [
           { label: 'Placements', path: '/admin/website/placements', permission: 'website.placements' },
           { label: 'Blog Categories', path: '/admin/website/blog/categories', permission: 'website.blog' },
           { label: 'Blogs', path: '/admin/website/blogs', permission: 'website.blog' },
+          { label: 'Homepage Popup', path: '/admin/website/homepage-popup', permission: 'website' },
         ],
       },
       { label: 'Referrals', icon: Users2, path: '/admin/referrals', permission: 'referral' },

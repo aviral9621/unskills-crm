@@ -80,6 +80,7 @@ const PlacementsPage = lazy(() => import('./pages/website/PlacementsPage'))
 const BlogCategoriesPage = lazy(() => import('./pages/website/blog/BlogCategoriesPage'))
 const BlogListPage = lazy(() => import('./pages/website/blog/BlogListPage'))
 const BlogFormPage = lazy(() => import('./pages/website/blog/BlogFormPage'))
+const HomepagePopupSettingsPage = lazy(() => import('./pages/website/HomepagePopupSettingsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const AdminPromotionsPage = lazy(() => import('./pages/admin/AdminPromotionsPage'))
@@ -265,6 +266,7 @@ function AppRoutes() {
           <Route path="website/blogs" element={<BlogListPage />} />
           <Route path="website/blogs/new" element={<BlogFormPage />} />
           <Route path="website/blogs/:id/edit" element={<BlogFormPage />} />
+          <Route path="website/homepage-popup" element={<HomepagePopupSettingsPage />} />
 
           <Route path="referrals" element={<AdminReferralsPage />} />
           <Route path="rewards" element={<AdminRewardsPage />} />

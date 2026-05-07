@@ -22,6 +22,7 @@ interface PaperFormData {
   available_from: string
   available_to: string
   is_mock_test: boolean
+  is_active: boolean
 }
 
 type CourseExt = Course & { total_semesters?: number | null }
@@ -44,7 +45,7 @@ export default function PaperSetFormPage() {
     course_id: '', semester: '', subject_id: '', category: '', paper_name: '', total_questions: '10',
     marks_per_question: '1', total_marks: '10', minus_marking: false,
     minus_marks: '0', time_limit_minutes: '30', available_from: '',
-    available_to: '', is_mock_test: false,
+    available_to: '', is_mock_test: false, is_active: true,
   })
 
   useEffect(() => { fetchCourses(); if (isEdit) loadPaper() }, [id])
@@ -92,6 +93,7 @@ export default function PaperSetFormPage() {
         available_from: data.available_from ? data.available_from.slice(0, 16) : '',
         available_to: data.available_to ? data.available_to.slice(0, 16) : '',
         is_mock_test: data.is_mock_test || false,
+        is_active: data.is_active !== false,
       })
     } catch { toast.error('Failed to load paper set') }
     finally { setLoading(false) }
@@ -139,6 +141,7 @@ export default function PaperSetFormPage() {
         available_from: form.available_from ? new Date(form.available_from).toISOString() : null,
         available_to: form.available_to ? new Date(form.available_to).toISOString() : null,
         is_mock_test: form.is_mock_test,
+        is_active: form.is_active,
       }
 
       if (isEdit) {
@@ -232,13 +235,40 @@ export default function PaperSetFormPage() {
             <input type="number" value={form.time_limit_minutes} onChange={e => update('time_limit_minutes', e.target.value)} className={inputClass} min={1} placeholder="30" />
           </FormField>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Available From">
-              <input type="datetime-local" value={form.available_from} onChange={e => update('available_from', e.target.value)} className={inputClass} />
-            </FormField>
-            <FormField label="Available Until">
-              <input type="datetime-local" value={form.available_to} onChange={e => update('available_to', e.target.value)} className={inputClass} />
-            </FormField>
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900">Visibility window</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Leave both dates blank to keep the paper available indefinitely from the moment it goes live.
+                </p>
+              </div>
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                <span className="text-xs font-medium text-gray-600">{form.is_active ? 'Live' : 'Off'}</span>
+                <span className="relative inline-block">
+                  <input
+                    type="checkbox"
+                    checked={form.is_active}
+                    onChange={e => update('is_active', e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <span className="block w-10 h-6 bg-gray-300 rounded-full peer-checked:bg-emerald-500 transition-colors" />
+                  <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
+                </span>
+              </label>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField label="Available From">
+                <input type="datetime-local" value={form.available_from} onChange={e => update('available_from', e.target.value)} className={inputClass} />
+              </FormField>
+              <FormField label="Available Until">
+                <input type="datetime-local" value={form.available_to} onChange={e => update('available_to', e.target.value)} className={inputClass} />
+              </FormField>
+            </div>
+            <p className="text-[11px] text-gray-500 leading-snug">
+              Students see this paper only when the toggle is <strong>Live</strong> and the current time is inside the window above
+              (an empty date means no limit on that side).
+            </p>
           </div>
 
           <div className="flex flex-col gap-3 bg-gray-50 rounded-xl p-4">
